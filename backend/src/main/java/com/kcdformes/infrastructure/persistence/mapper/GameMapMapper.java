@@ -1,7 +1,7 @@
 package com.kcdformes.infrastructure.persistence.mapper;
 
 import com.kcdformes.domain.model.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
 import java.util.*;

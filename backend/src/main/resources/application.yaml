@@ -35,3 +35,9 @@ logging:
     com.kcdformes: DEBUG
     org.springframework.security: INFO
     org.hibernate.SQL: DEBUG
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
