@@ -1,0 +1,57 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths: [backend/**]
+  pull_request:
+    branches: [main]
+    paths: [backend/**]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: kcdformes_test
+          POSTGRES_USER: kcd_user
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+
+      - name: Cache Maven
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Tests unitaires
+        working-directory: backend
+        run: ./mvnw test -Dspring.profiles.active=test
+
+      - name: Tests intégration
+        working-directory: backend
+        run: ./mvnw verify -Pintegration
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/kcdformes_test
+          SPRING_DATASOURCE_USERNAME: kcd_user
+          SPRING_DATASOURCE_PASSWORD: testpassword
+          JWT_SECRET: test_secret_key_at_least_32_chars_long
+          SERVER_PORT: 8080
