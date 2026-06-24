@@ -8,9 +8,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import java.util.UUID;
 
 import java.io.IOException;
 import java.util.List;
+
+
 
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -30,9 +33,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
             if (jwtTokenFactory.isTokenValid(token)) {
-                String username = jwtTokenFactory.extractUsername(token);
+                UUID playerId = jwtTokenFactory.extractPlayerId(token);
                 var auth = new UsernamePasswordAuthenticationToken(
-                        username, null, List.of());
+                        playerId.toString(), null, List.of());
                 SecurityContextHolder.getContext().setAuthentication(auth);
             }
         }
