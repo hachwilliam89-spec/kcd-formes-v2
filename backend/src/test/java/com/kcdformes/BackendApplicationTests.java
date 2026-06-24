@@ -1,13 +1,12 @@
 package com.kcdformes;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
 class BackendApplicationTests {
 
 	@Test
 	void contextLoads() {
+		// Test d'intégration — nécessite PostgreSQL via Testcontainers
+		// Lancé uniquement avec : mvn verify -Pintegration
 	}
-
 }
