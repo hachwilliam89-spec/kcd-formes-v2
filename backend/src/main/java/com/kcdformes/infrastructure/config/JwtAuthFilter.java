@@ -11,6 +11,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -30,9 +31,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
             if (jwtTokenFactory.isTokenValid(token)) {
+                // Le principal est le playerId (UUID) : auth.getName() doit renvoyer
+                // l'identifiant joueur attendu par les controllers (ex: GameController),
+                // pas le username. Le username reste accessible via getCredentials().
+                UUID playerId = jwtTokenFactory.extractPlayerId(token);
                 String username = jwtTokenFactory.extractUsername(token);
                 var auth = new UsernamePasswordAuthenticationToken(
-                        username, null, List.of());
+                        playerId, username, List.of());
                 SecurityContextHolder.getContext().setAuthentication(auth);
             }
         }
