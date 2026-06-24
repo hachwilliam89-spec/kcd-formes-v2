@@ -1,5 +1,4 @@
 import api from './api'
-import { useAuthStore } from '@/store/authStore'
 
 interface AuthResponse {
     token: string

@@ -19,7 +19,6 @@ import com.kcdformes.infrastructure.persistence.repository.PlayerRepositoryAdapt
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -90,6 +89,7 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
                 gameRepositoryAdapter, playerRepositoryAdapter, pathfindingService);
         return service.placeTower(castleCommand);
     }
+
     @Override
     public Wave startWave(StartWaveCommand command) {
         GameEntity game = gameJpaRepository.findById(command.gameId())

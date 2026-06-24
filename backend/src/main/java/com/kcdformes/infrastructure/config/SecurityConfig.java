@@ -8,6 +8,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -35,6 +36,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(authenticationEntryPoint()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/swagger-ui/**").permitAll()
@@ -49,7 +51,35 @@ public class SecurityConfig {
     }
 
     @Bean
+    public org.springframework.boot.web.servlet.FilterRegistrationBean<JwtAuthFilter> jwtFilterRegistration(JwtAuthFilter filter) {
+        org.springframework.boot.web.servlet.FilterRegistrationBean<JwtAuthFilter> registration =
+                new org.springframework.boot.web.servlet.FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    public org.springframework.security.core.userdetails.UserDetailsService userDetailsService() {
+        return username -> {
+            throw new org.springframework.security.core.userdetails.UsernameNotFoundException(username);
+        };
+    }
+
+    @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationEntryPoint authenticationEntryPoint() {
+        // Sans ce bean, Spring Security retombe sur Http403ForbiddenEntryPoint :
+        // une requête sans JWT (ou avec un JWT invalide) renvoie 403 au lieu de 401,
+        // ce qui est trompeur pour le client (403 = "interdit", 401 = "non authentifié").
+        return (request, response, authException) -> {
+            response.setStatus(org.springframework.http.HttpStatus.UNAUTHORIZED.value());
+            response.setContentType("application/json");
+            response.getWriter().write(
+                    "{\"error\":\"unauthorized\",\"message\":\"Authentification requise ou token invalide\"}");
+        };
     }
 }

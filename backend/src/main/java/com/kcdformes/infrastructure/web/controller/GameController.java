@@ -6,7 +6,6 @@ import com.kcdformes.domain.model.Wave;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase.PlaceTowerCommand;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase.StartWaveCommand;
 import com.kcdformes.domain.port.in.query.GetGameStateUseCase.GameStateResult;
-import com.kcdformes.infrastructure.config.JwtTokenFactory;
 import com.kcdformes.infrastructure.persistence.entity.GameEntity;
 import com.kcdformes.infrastructure.web.dto.*;
 import jakarta.validation.Valid;
@@ -22,11 +21,9 @@ import java.util.UUID;
 public class GameController {
 
     private final GameService gameService;
-    private final JwtTokenFactory jwtTokenFactory;
 
-    public GameController(GameService gameService, JwtTokenFactory jwtTokenFactory) {
+    public GameController(GameService gameService) {
         this.gameService = gameService;
-        this.jwtTokenFactory = jwtTokenFactory;
     }
 
     @PostMapping
@@ -68,8 +65,8 @@ public class GameController {
     }
 
     private UUID extractPlayerId(Authentication auth) {
-        // Le username dans le token est le username du joueur
-        // On récupère le playerId via le service auth
+        // JwtAuthFilter place le playerId (UUID) comme principal -> auth.getName()
+        // renvoie directement son UUID.toString().
         return UUID.fromString(auth.getName());
     }
 }

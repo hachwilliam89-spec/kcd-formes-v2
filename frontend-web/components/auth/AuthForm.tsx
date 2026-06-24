@@ -1,19 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { login, register } from '@/lib/auth'
-import { useAuthStore } from '@/store/authStore'
+import { useAuth } from '@/hooks/useAuth'
 
 type Mode = 'login' | 'register'
 
 export default function AuthForm() {
-    const router = useRouter()
-    const { setAuth } = useAuthStore()
+    const { handleLogin, handleRegister } = useAuth()
 
     const [mode, setMode] = useState<Mode>('login')
     const [username, setUsername] = useState('')
@@ -28,21 +25,13 @@ export default function AuthForm() {
         setLoading(true)
 
         try {
-            const data =
-                mode === 'login'
-                    ? await login(username, password)
-                    : await register(username, email, password)
-
-            setAuth(data.token, {
-                playerId: data.playerId,
-                username: data.username,
-            })
-
-            router.push('/game')
+            if (mode === 'login') {
+                await handleLogin(username, password)
+            } else {
+                await handleRegister(username, email, password)
+            }
         } catch (err: unknown) {
-            const message =
-                err instanceof Error ? err.message : 'Une erreur est survenue'
-            setError(message)
+            setError(err instanceof Error ? err.message : 'Une erreur est survenue')
         } finally {
             setLoading(false)
         }
@@ -94,38 +83,24 @@ export default function AuthForm() {
                         />
                     </div>
 
-                    {error && (
-                        <p className="text-sm text-red-500">{error}</p>
-                    )}
+                    {error && <p className="text-sm text-red-500">{error}</p>}
 
                     <Button type="submit" className="w-full" disabled={loading}>
-                        {loading
-                            ? 'Chargement...'
-                            : mode === 'login'
-                                ? 'Se connecter'
-                                : "S'inscrire"}
+                        {loading ? 'Chargement...' : mode === 'login' ? 'Se connecter' : "S'inscrire"}
                     </Button>
 
                     <p className="text-sm text-center text-muted-foreground">
                         {mode === 'login' ? (
                             <>
                                 Pas de compte ?{' '}
-                                <button
-                                    type="button"
-                                    className="underline"
-                                    onClick={() => setMode('register')}
-                                >
+                                <button type="button" className="underline" onClick={() => setMode('register')}>
                                     S&apos;inscrire
                                 </button>
                             </>
                         ) : (
                             <>
                                 Déjà un compte ?{' '}
-                                <button
-                                    type="button"
-                                    className="underline"
-                                    onClick={() => setMode('login')}
-                                >
+                                <button type="button" className="underline" onClick={() => setMode('login')}>
                                     Se connecter
                                 </button>
                             </>

@@ -2,7 +2,6 @@ package com.kcdformes.infrastructure.persistence.repository;
 
 import com.kcdformes.domain.model.GameMap;
 import com.kcdformes.domain.port.out.GameRepository;
-import com.kcdformes.infrastructure.persistence.entity.CastleEntity;
 import com.kcdformes.infrastructure.persistence.mapper.GameMapMapper;
 import org.springframework.stereotype.Component;
 
@@ -12,6 +11,10 @@ import java.util.UUID;
 /**
  * Adapter pattern — adapte le port out GameRepository vers la persistence JPA.
  * Le domaine ne connaît pas JPA, il ne voit que l'interface GameRepository.
+ *
+ * Note: la map de jeu est stockée sur le CastleEntity (colonne map_state),
+ * pas directement sur GameEntity — le "gameId" passé ici est donc en réalité
+ * l'id du castle associé à la partie (cf. GameService).
  */
 @Component
 public class GameRepositoryAdapter implements GameRepository {
