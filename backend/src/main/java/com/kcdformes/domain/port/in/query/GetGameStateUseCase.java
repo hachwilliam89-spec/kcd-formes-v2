@@ -1,0 +1,12 @@
+package com.kcdformes.domain.port.in.query;
+
+import com.kcdformes.domain.model.GameMap;
+
+import java.util.UUID;
+
+public interface GetGameStateUseCase {
+
+    record GameStateResult(UUID gameId, GameMap map, int waveNumber, int gold, String status) {}
+
+    GameStateResult getGameState(UUID gameId);
+}
