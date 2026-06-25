@@ -1,6 +1,7 @@
 package com.kcdformes.application.usecase;
 
 import com.kcdformes.domain.exception.InsufficientGoldException;
+import com.kcdformes.domain.exception.TowerNotUnlockedException;
 import com.kcdformes.domain.model.*;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase;
@@ -87,6 +88,14 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
     public Tower placeTower(PlaceTowerCommand command) {
         GameEntity game = gameJpaRepository.findById(command.gameId())
                 .orElseThrow(() -> new IllegalArgumentException("Game not found: " + command.gameId()));
+
+        // Déblocage par progression de compte (meilleure vague atteinte), indépendant
+        // de l'or de la partie en cours.
+        int requiredWave = command.towerType().unlockWave;
+        int bestWave = game.getPlayer().getBestWave();
+        if (requiredWave > bestWave) {
+            throw new TowerNotUnlockedException(command.towerType(), bestWave);
+        }
 
         int cost = command.towerType().baseCost;
         if (game.getGold() < cost) {
