@@ -16,12 +16,22 @@ interface GameMap {
     towers: Tower[]
 }
 
+interface WaveResult {
+    waveNumber: number
+    goldEarned: number
+    castleHp: number
+    castleMaxHp: number
+    gameStatus: string
+}
+
 interface GameState {
     gameId: string | null
     castleId: string | null
     status: string
     waveNumber: number
     gold: number
+    castleHp: number
+    castleMaxHp: number
     map: GameMap | null
 
     setGame: (game: {
@@ -30,11 +40,15 @@ interface GameState {
         status: string
         waveNumber: number
         gold: number
+        castleHp: number
+        castleMaxHp: number
         map: GameMap
     }) => void
 
     addTower: (tower: Tower) => void
-    incrementWave: () => void
+    spendGold: (amount: number) => void
+    setCastleHp: (hp: number) => void
+    applyWaveResult: (result: WaveResult) => void
     reset: () => void
 }
 
@@ -44,6 +58,8 @@ export const useGameStore = create<GameState>()((set) => ({
     status: '',
     waveNumber: 0,
     gold: 0,
+    castleHp: 100,
+    castleMaxHp: 100,
     map: null,
 
     setGame: (game) =>
@@ -53,6 +69,8 @@ export const useGameStore = create<GameState>()((set) => ({
             status: game.status,
             waveNumber: game.waveNumber,
             gold: game.gold,
+            castleHp: game.castleHp,
+            castleMaxHp: game.castleMaxHp,
             map: game.map,
         }),
 
@@ -63,8 +81,19 @@ export const useGameStore = create<GameState>()((set) => ({
                 : null,
         })),
 
-    incrementWave: () =>
-        set((state) => ({ waveNumber: state.waveNumber + 1 })),
+    spendGold: (amount) =>
+        set((state) => ({ gold: Math.max(0, state.gold - amount) })),
+
+    setCastleHp: (hp) => set({ castleHp: hp }),
+
+    applyWaveResult: (result) =>
+        set((state) => ({
+            waveNumber: result.waveNumber,
+            gold: state.gold + result.goldEarned,
+            castleHp: result.castleHp,
+            castleMaxHp: result.castleMaxHp,
+            status: result.gameStatus,
+        })),
 
     reset: () =>
         set({
@@ -73,6 +102,8 @@ export const useGameStore = create<GameState>()((set) => ({
             status: '',
             waveNumber: 0,
             gold: 0,
+            castleHp: 100,
+            castleMaxHp: 100,
             map: null,
         }),
 }))

@@ -6,7 +6,10 @@ import api from '@/lib/api'
 export function useGame() {
     const router = useRouter()
     const { player } = useAuthStore()
-    const { gameId, map, waveNumber, gold, setGame, addTower, incrementWave, reset } = useGameStore()
+    const {
+        gameId, map, waveNumber, gold, castleHp, castleMaxHp, status,
+        setGame, addTower, spendGold, applyWaveResult, reset,
+    } = useGameStore()
 
     async function createGame() {
         const { data } = await api.post('/api/v1/games', {
@@ -16,7 +19,7 @@ export function useGame() {
         return data
     }
 
-    async function placeTower(towerType: string, x: number, y: number) {
+    async function placeTower(towerType: string, x: number, y: number, cost: number) {
         if (!gameId) throw new Error('Aucune partie en cours')
         const { data } = await api.post(`/api/v1/games/${gameId}/towers`, {
             towerType,
@@ -24,13 +27,20 @@ export function useGame() {
             y,
         })
         addTower(data)
+        spendGold(cost)
         return data
     }
 
     async function startWave() {
         if (!gameId) throw new Error('Aucune partie en cours')
         const { data } = await api.post(`/api/v1/games/${gameId}/waves/start`)
-        incrementWave()
+        applyWaveResult({
+            waveNumber: data.number,
+            goldEarned: data.goldEarned,
+            castleHp: data.castleHp,
+            castleMaxHp: data.castleMaxHp,
+            gameStatus: data.gameStatus,
+        })
         return data
     }
 
@@ -44,6 +54,9 @@ export function useGame() {
         map,
         waveNumber,
         gold,
+        castleHp,
+        castleMaxHp,
+        status,
         createGame,
         placeTower,
         startWave,

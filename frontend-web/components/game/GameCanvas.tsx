@@ -1,15 +1,26 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import Phaser from 'phaser'
-import { GameScene, TowerData } from './GameScene'
+import { GameScene, TowerData, TickSnapshot } from './GameScene'
 
 interface GameCanvasProps {
     towers: TowerData[]
     onCellClick: (x: number, y: number) => void
 }
 
-export default function GameCanvas({ towers, onCellClick }: GameCanvasProps) {
+export interface GameCanvasHandle {
+    playWave: (
+        ticks: TickSnapshot[],
+        onTick?: (castleHp: number) => void,
+        onComplete?: () => void
+    ) => void
+}
+
+const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCanvas(
+    { towers, onCellClick },
+    ref
+) {
     const gameRef = useRef<Phaser.Game | null>(null)
     const sceneRef = useRef<GameScene | null>(null)
 
@@ -44,5 +55,13 @@ export default function GameCanvas({ towers, onCellClick }: GameCanvasProps) {
         }
     }, [towers])
 
+    useImperativeHandle(ref, () => ({
+        playWave: (ticks, onTick, onComplete) => {
+            sceneRef.current?.playWave(ticks, onTick, onComplete)
+        },
+    }))
+
     return <div id="phaser-container" />
-}
+})
+
+export default GameCanvas
