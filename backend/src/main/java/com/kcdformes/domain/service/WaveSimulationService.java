@@ -30,7 +30,7 @@ import java.util.UUID;
 public class WaveSimulationService {
 
     /** Garde-fou pour éviter une boucle infinie en cas de configuration anormale. */
-    private static final int MAX_TICKS = 600;
+    private static final int MAX_TICKS = 1500;
 
     private final PathfindingService pathfindingService;
 
@@ -87,6 +87,10 @@ public class WaveSimulationService {
                 if (enemy.isDead() || escaped.contains(enemy.getId())) {
                     continue;
                 }
+                if (tick <= enemy.getSpawnDelayTicks()) {
+                    // Pas encore apparu : reste invisible et immobile au point de spawn.
+                    continue;
+                }
 
                 double p = progress.get(enemy.getId()) + enemy.getType().speed;
                 progress.put(enemy.getId(), p);
@@ -116,7 +120,7 @@ public class WaveSimulationService {
                     continue;
                 }
 
-                Enemy target = findClosestTarget(tower, wave.getEnemies(), escaped);
+                Enemy target = findClosestTarget(tower, wave.getEnemies(), escaped, tick);
                 if (target == null) {
                     cooldowns.put(tower.getId(), 0.0);
                     continue;
@@ -131,8 +135,10 @@ public class WaveSimulationService {
                 cooldowns.put(tower.getId(), 1.0 / tower.getType().attackSpeed);
             }
 
+            final int currentTick = tick;
             List<EnemySnapshot> snapshot = wave.getEnemies().stream()
                     .filter(enemy -> !escaped.contains(enemy.getId()))
+                    .filter(enemy -> currentTick > enemy.getSpawnDelayTicks())
                     .map(enemy -> new EnemySnapshot(
                             enemy.getId(), enemy.getType().name(),
                             enemy.getX(), enemy.getY(),
@@ -156,12 +162,15 @@ public class WaveSimulationService {
         return new SimulationResult(ticks, wave.getGoldEarned(), castleDamageTaken);
     }
 
-    private Enemy findClosestTarget(Tower tower, List<Enemy> enemies, Set<UUID> escaped) {
+    private Enemy findClosestTarget(Tower tower, List<Enemy> enemies, Set<UUID> escaped, int tick) {
         Enemy best = null;
         double bestDistSq = Double.MAX_VALUE;
 
         for (Enemy enemy : enemies) {
             if (enemy.isDead() || escaped.contains(enemy.getId())) {
+                continue;
+            }
+            if (tick <= enemy.getSpawnDelayTicks()) {
                 continue;
             }
             if (!tower.canTarget(enemy)) {

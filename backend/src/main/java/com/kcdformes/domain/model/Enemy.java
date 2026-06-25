@@ -10,14 +10,21 @@ public class Enemy {
     private double x;
     private double y;
     private boolean alive;
+    /** Nombre de ticks à attendre avant que cet ennemi n'apparaisse et ne commence à avancer. */
+    private final int spawnDelayTicks;
 
     public Enemy(EnemyType type, double startX, double startY) {
+        this(type, startX, startY, 0);
+    }
+
+    public Enemy(EnemyType type, double startX, double startY, int spawnDelayTicks) {
         this.id = UUID.randomUUID();
         this.type = type;
         this.currentHp = type.baseHp;
         this.x = startX;
         this.y = startY;
         this.alive = true;
+        this.spawnDelayTicks = spawnDelayTicks;
     }
 
     public void takeDamage(int damage) {
@@ -33,6 +40,7 @@ public class Enemy {
     public boolean isAlive() { return alive; }
     public boolean isDead() { return !alive; }
     public int getGoldReward() { return type.goldReward; }
+    public int getSpawnDelayTicks() { return spawnDelayTicks; }
 
     public UUID getId() { return id; }
     public EnemyType getType() { return type; }
