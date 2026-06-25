@@ -8,6 +8,10 @@ interface Tower {
     level: number
     damage: number
     range: number
+    // Profil de dégâts renvoyé par le backend (voir TowerResponse côté Java) —
+    // utilisé par GameScene pour distinguer visuellement zone/mono-cible/continu.
+    damageType: 'SINGLE_TARGET' | 'AOE' | 'CONTINUOUS'
+    splashRadius: number
 }
 
 interface GameMap {

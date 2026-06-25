@@ -10,6 +10,11 @@ export interface TowerData {
     type: 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA'
     x: number
     y: number
+    // Renvoyés par le backend (TowerResponse) — pilotent le rendu visuel des
+    // effets de combat (voir drawEffects) sans dupliquer côté frontend la
+    // logique de profil de dégâts définie dans TowerType côté Java.
+    damageType?: 'SINGLE_TARGET' | 'AOE' | 'CONTINUOUS'
+    splashRadius?: number
 }
 
 export interface EnemySnapshot {
@@ -56,8 +61,15 @@ export class GameScene extends Phaser.Scene {
     private gridGraphics!: Phaser.GameObjects.Graphics
     private towersGraphics!: Phaser.GameObjects.Graphics
     private enemiesGraphics!: Phaser.GameObjects.Graphics
+    // Calque dédié aux effets de combat (rayon continu, cercle de zone, tir
+    // mono-cible) — séparé de enemiesGraphics pour pouvoir le vider/redessiner
+    // indépendamment à chaque tick sans repasser par drawEnemies.
+    private effectsGraphics!: Phaser.GameObjects.Graphics
     private onCellClick?: (x: number, y: number) => void
     private waveTimer?: Phaser.Time.TimerEvent
+    // Indexées par id pour retrouver rapidement la tour à l'origine d'un
+    // DamageEvent pendant playWave (position + profil de dégâts).
+    private towersById = new Map<string, TowerData>()
 
     constructor() {
         super({ key: 'GameScene' })
@@ -71,6 +83,7 @@ export class GameScene extends Phaser.Scene {
         this.gridGraphics = this.add.graphics()
         this.towersGraphics = this.add.graphics()
         this.enemiesGraphics = this.add.graphics()
+        this.effectsGraphics = this.add.graphics()
 
         this.drawGrid()
         this.drawPath()
@@ -107,6 +120,9 @@ export class GameScene extends Phaser.Scene {
     drawTowers(towers: TowerData[]) {
         if (!this.towersGraphics) return
         this.towersGraphics.clear()
+
+        this.towersById.clear()
+        towers.forEach((tower) => this.towersById.set(tower.id, tower))
 
         towers.forEach((tower) => {
             const color = TOWER_COLORS[tower.type] ?? 0xffffff
@@ -148,6 +164,7 @@ export class GameScene extends Phaser.Scene {
         const renderTick = () => {
             if (index >= ticks.length) {
                 this.enemiesGraphics.clear()
+                this.effectsGraphics.clear()
                 this.waveTimer?.remove()
                 this.waveTimer = undefined
                 onComplete?.()
@@ -156,6 +173,7 @@ export class GameScene extends Phaser.Scene {
 
             const tick = ticks[index]
             this.drawEnemies(tick.enemies)
+            this.drawEffects(tick.damageEvents, tick.enemies)
             onTick?.(tick.castleHp)
             index++
         }
@@ -193,6 +211,51 @@ export class GameScene extends Phaser.Scene {
             this.enemiesGraphics.fillRect(barX, barY, barWidth, 4)
             this.enemiesGraphics.fillStyle(hpRatio > 0.3 ? 0x22c55e : 0xef4444, 1)
             this.enemiesGraphics.fillRect(barX, barY, barWidth * hpRatio, 4)
+        })
+    }
+
+    /**
+     * Matérialise visuellement chaque attaque du tick : un trait pour le
+     * mono-cible, un cercle sur la cible pour la zone (rayon = splashRadius),
+     * un trait épais et persistant pour le continu (redessiné chaque tick
+     * tant que la tour reste en train de toucher sa cible — c'est ce qui lui
+     * donne son aspect "rayon" plutôt qu'un tir isolé). Sans ça, la zone et
+     * le continu sont indistinguables du mono-cible à l'écran : seule la
+     * barre de vie de l'ennemi bouge, sans indice sur la cause.
+     */
+    private drawEffects(damageEvents: DamageEvent[], enemies: EnemySnapshot[]) {
+        this.effectsGraphics.clear()
+        if (damageEvents.length === 0) return
+
+        const enemyById = new Map(enemies.map((e) => [e.id, e]))
+
+        damageEvents.forEach((event) => {
+            const tower = this.towersById.get(event.towerId)
+            const enemy = enemyById.get(event.enemyId)
+            if (!tower || !enemy) return
+
+            const damageType = tower.damageType ?? 'SINGLE_TARGET'
+            const color = TOWER_COLORS[tower.type] ?? 0xffffff
+            const towerPx = tower.x * CELL_SIZE + CELL_SIZE / 2
+            const towerPy = tower.y * CELL_SIZE + CELL_SIZE / 2
+            const targetPx = enemy.x * CELL_SIZE + CELL_SIZE / 2
+            const targetPy = enemy.y * CELL_SIZE + CELL_SIZE / 2
+
+            if (damageType === 'CONTINUOUS') {
+                this.effectsGraphics.lineStyle(3, color, 0.85)
+                this.effectsGraphics.lineBetween(towerPx, towerPy, targetPx, targetPy)
+            } else if (damageType === 'AOE') {
+                const radiusPx = Math.max(tower.splashRadius ?? 0, 0.5) * CELL_SIZE
+                this.effectsGraphics.lineStyle(2, color, 0.7)
+                this.effectsGraphics.lineBetween(towerPx, towerPy, targetPx, targetPy)
+                this.effectsGraphics.fillStyle(color, 0.22)
+                this.effectsGraphics.fillCircle(targetPx, targetPy, radiusPx)
+                this.effectsGraphics.lineStyle(2, color, 0.8)
+                this.effectsGraphics.strokeCircle(targetPx, targetPy, radiusPx)
+            } else {
+                this.effectsGraphics.lineStyle(1.5, color, 0.6)
+                this.effectsGraphics.lineBetween(towerPx, towerPy, targetPx, targetPy)
+            }
         })
     }
 
