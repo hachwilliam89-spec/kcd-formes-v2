@@ -1,6 +1,7 @@
 package com.kcdformes.application.usecase;
 
 import com.kcdformes.domain.exception.InsufficientGoldException;
+import com.kcdformes.domain.exception.TowerNotUnlockedException;
 import com.kcdformes.domain.model.*;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase;
@@ -26,8 +27,13 @@ import java.util.UUID;
 @Service
 public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGameStateUseCase {
 
-    /** Or accordé à chaque nouvelle partie. Pas de report d'une partie à l'autre. */
-    private static final int STARTING_GOLD = 200;
+    /**
+     * Or accordé à chaque nouvelle partie. Pas de report d'une partie à l'autre.
+     * Volontairement serré (juste de quoi poser 1-2 tours d'entrée de gamme) :
+     * un capital de départ trop généreux permettait de saturer le chemin dès le
+     * début et de tenir indéfiniment sans jamais avoir à réinvestir l'or gagné.
+     */
+    private static final int STARTING_GOLD = 100;
 
     private final GameJpaRepository gameJpaRepository;
     private final CastleJpaRepository castleJpaRepository;
@@ -88,6 +94,14 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         GameEntity game = gameJpaRepository.findById(command.gameId())
                 .orElseThrow(() -> new IllegalArgumentException("Game not found: " + command.gameId()));
 
+        // Déblocage par progression de compte (meilleure vague atteinte), indépendant
+        // de l'or de la partie en cours.
+        int requiredWave = command.towerType().unlockWave;
+        int bestWave = game.getPlayer().getBestWave();
+        if (requiredWave > bestWave) {
+            throw new TowerNotUnlockedException(command.towerType(), bestWave);
+        }
+
         int cost = command.towerType().baseCost;
         if (game.getGold() < cost) {
             throw new InsufficientGoldException(cost, game.getGold());
@@ -142,16 +156,18 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         game.setWaveNumber(nextWave);
         game.setGoldEarned(game.getGoldEarned() + result.goldEarned());
 
+        // Progression de compte : seul le meilleur score (vague la plus loin jamais
+        // atteinte) est conservé — jamais l'or. Mis à jour dès qu'une vague est
+        // atteinte (pas seulement à la défaite), pour que les déblocages liés au
+        // bestWave (ex. tours) s'appliquent immédiatement, en cours de partie.
+        PlayerEntity player = game.getPlayer();
+        if (nextWave > player.getBestWave()) {
+            player.setBestWave(nextWave);
+            playerJpaRepository.save(player);
+        }
+
         if (castle.isDestroyed()) {
             game.setStatus("DEFEAT");
-
-            // Progression de compte : seul le meilleur score (vague la plus loin
-            // atteinte) est conservé — jamais l'or. Base des futurs déblocages.
-            PlayerEntity player = game.getPlayer();
-            if (nextWave > player.getBestWave()) {
-                player.setBestWave(nextWave);
-                playerJpaRepository.save(player);
-            }
         }
         gameJpaRepository.save(game);
 

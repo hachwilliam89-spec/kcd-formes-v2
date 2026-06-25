@@ -14,6 +14,15 @@ public class WaveFactory {
     /** Écart (en ticks) entre l'apparition de deux ennemis consécutifs d'une même vague. */
     private static final int SPAWN_INTERVAL_TICKS = 4;
 
+    /**
+     * Montée en puissance des PV par vague (+50 % par vague par rapport à la vague 1).
+     * Sans ce facteur, seul le nombre d'ennemis augmente : des tours suffisamment
+     * placées dès les premières vagues tuent alors tout indéfiniment, quelle que
+     * soit la vague atteinte (plus aucun ennemi ne passe jamais). Relevé de 0.35 à
+     * 0.5 : encore trop facile en test local après la première passe.
+     */
+    private static final double HP_SCALING_PER_WAVE = 0.5;
+
     public Wave createWave(int waveNumber, Position spawnPosition) {
         List<Enemy> enemies = generateEnemies(waveNumber, spawnPosition);
         return new Wave(waveNumber, enemies);
@@ -25,24 +34,34 @@ public class WaveFactory {
 
         int goblinCount = 3 + waveNumber * 2;
         for (int i = 0; i < goblinCount; i++) {
-            enemies.add(new Enemy(EnemyType.GOBLIN, spawn.x(), spawn.y(), spawnIndex++ * SPAWN_INTERVAL_TICKS));
+            enemies.add(spawnEnemy(EnemyType.GOBLIN, spawn, waveNumber, spawnIndex++));
         }
 
         if (waveNumber >= 3) {
             int orcCount = waveNumber - 2;
             for (int i = 0; i < orcCount; i++) {
-                enemies.add(new Enemy(EnemyType.ORC, spawn.x(), spawn.y(), spawnIndex++ * SPAWN_INTERVAL_TICKS));
+                enemies.add(spawnEnemy(EnemyType.ORC, spawn, waveNumber, spawnIndex++));
             }
         }
 
         if (waveNumber >= 6) {
-            enemies.add(new Enemy(EnemyType.TROLL, spawn.x(), spawn.y(), spawnIndex++ * SPAWN_INTERVAL_TICKS));
+            enemies.add(spawnEnemy(EnemyType.TROLL, spawn, waveNumber, spawnIndex++));
         }
 
         if (waveNumber >= 10 && waveNumber % 5 == 0) {
-            enemies.add(new Enemy(EnemyType.DARK_KNIGHT, spawn.x(), spawn.y(), spawnIndex++ * SPAWN_INTERVAL_TICKS));
+            enemies.add(spawnEnemy(EnemyType.DARK_KNIGHT, spawn, waveNumber, spawnIndex++));
         }
 
         return enemies;
+    }
+
+    private Enemy spawnEnemy(EnemyType type, Position spawn, int waveNumber, int spawnIndex) {
+        int hp = scaledHp(type, waveNumber);
+        return new Enemy(type, spawn.x(), spawn.y(), spawnIndex * SPAWN_INTERVAL_TICKS, hp);
+    }
+
+    private int scaledHp(EnemyType type, int waveNumber) {
+        double multiplier = 1 + (waveNumber - 1) * HP_SCALING_PER_WAVE;
+        return (int) Math.round(type.baseHp * multiplier);
     }
 }

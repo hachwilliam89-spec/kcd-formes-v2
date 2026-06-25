@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 interface Tower {
     id: string
-    type: 'ARCHER' | 'MAGE' | 'CATAPULT'
+    type: 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA'
     x: number
     y: number
     level: number

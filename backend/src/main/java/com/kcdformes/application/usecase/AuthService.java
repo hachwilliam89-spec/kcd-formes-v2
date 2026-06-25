@@ -5,10 +5,13 @@ import com.kcdformes.infrastructure.persistence.entity.PlayerEntity;
 import com.kcdformes.infrastructure.persistence.repository.PlayerJpaRepository;
 import com.kcdformes.infrastructure.web.dto.AuthResponse;
 import com.kcdformes.infrastructure.web.dto.LoginRequest;
+import com.kcdformes.infrastructure.web.dto.PlayerProfileResponse;
 import com.kcdformes.infrastructure.web.dto.RegisterRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -57,5 +60,12 @@ public class AuthService {
 
         String token = jwtTokenFactory.generateToken(player.getId(), player.getUsername());
         return new AuthResponse(token, player.getId(), player.getUsername());
+    }
+
+    @Transactional(readOnly = true)
+    public PlayerProfileResponse getProfile(UUID playerId) {
+        PlayerEntity player = playerRepository.findById(playerId)
+                .orElseThrow(() -> new IllegalArgumentException("Player not found: " + playerId));
+        return new PlayerProfileResponse(player.getId(), player.getUsername(), player.getElo(), player.getBestWave());
     }
 }

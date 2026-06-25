@@ -142,7 +142,7 @@ public class WaveSimulationService {
                     .map(enemy -> new EnemySnapshot(
                             enemy.getId(), enemy.getType().name(),
                             enemy.getX(), enemy.getY(),
-                            enemy.getCurrentHp(), enemy.getType().baseHp))
+                            enemy.getCurrentHp(), enemy.getMaxHp()))
                     .toList();
 
             ticks.add(new TickSnapshot(tick, snapshot, damageEvents, deaths, reached, castle.getHp()));

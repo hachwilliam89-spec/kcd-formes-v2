@@ -2,6 +2,7 @@ package com.kcdformes.infrastructure.web.controller;
 import com.kcdformes.domain.exception.CellOccupiedException;
 import com.kcdformes.domain.exception.InsufficientGoldException;
 import com.kcdformes.domain.exception.InvalidPositionException;
+import com.kcdformes.domain.exception.TowerNotUnlockedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -26,6 +27,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InsufficientGoldException.class)
     public ResponseEntity<Map<String, String>> handleInsufficientGold(InsufficientGoldException ex) {
         return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(TowerNotUnlockedException.class)
+    public ResponseEntity<Map<String, String>> handleTowerNotUnlocked(TowerNotUnlockedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", ex.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

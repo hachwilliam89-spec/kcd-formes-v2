@@ -7,7 +7,7 @@ const TICK_DELAY_MS = 120
 
 export interface TowerData {
     id: string
-    type: 'ARCHER' | 'MAGE' | 'CATAPULT'
+    type: 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA'
     x: number
     y: number
 }
@@ -41,6 +41,7 @@ const TOWER_COLORS: Record<string, number> = {
     ARCHER: 0x22c55e,   // vert
     MAGE: 0x8b5cf6,     // violet
     CATAPULT: 0xf97316, // orange
+    BALLISTA: 0x94a3b8, // gris-bleu
 }
 
 // Couleurs par type d'ennemi

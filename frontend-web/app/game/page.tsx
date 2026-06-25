@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { TowerData } from '@/components/game/GameScene'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
+import api from '@/lib/api'
 
 const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
     ssr: false,
@@ -20,12 +21,14 @@ const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
     ),
 })
 
-type TowerType = 'ARCHER' | 'MAGE' | 'CATAPULT'
+type TowerType = 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA'
 
-const TOWER_INFO: Record<TowerType, { label: string; cost: number; color: string }> = {
-    ARCHER:   { label: 'Archer',    cost: 50,  color: 'bg-green-600' },
-    MAGE:     { label: 'Mage',      cost: 100, color: 'bg-purple-600' },
-    CATAPULT: { label: 'Catapulte', cost: 150, color: 'bg-orange-600' },
+const TOWER_INFO: Record<TowerType, { label: string; cost: number; color: string; unlockWave: number }> = {
+    ARCHER:   { label: 'Archer',    cost: 50,  color: 'bg-green-600',  unlockWave: 0 },
+    MAGE:     { label: 'Mage',      cost: 100, color: 'bg-purple-600', unlockWave: 0 },
+    CATAPULT: { label: 'Catapulte', cost: 150, color: 'bg-orange-600', unlockWave: 0 },
+    // Débloquée par la progression de compte (meilleure vague atteinte), pas par l'or.
+    BALLISTA: { label: 'Baliste',   cost: 200, color: 'bg-slate-400',  unlockWave: 10 },
 }
 
 export default function GamePage() {
@@ -44,12 +47,35 @@ export default function GamePage() {
     const [combatRunning, setCombatRunning] = useState(false)
     const [liveCastleHp, setLiveCastleHp] = useState(castleHp)
     const [message, setMessage] = useState<string | null>(null)
-
-    const isGameOver = status === 'DEFEAT'
+    const [bestWave, setBestWave] = useState(0)
+    const [isGameOver, setIsGameOver] = useState(false)
 
     useEffect(() => {
         if (!isAuthenticated) router.push('/')
     }, [isAuthenticated, router])
+
+    // Reprise d'une partie déjà perdue (ex. rechargement de page) : pas d'animation
+    // à attendre, on peut refléter l'état tout de suite. Ne dépend que de gameId
+    // (chargement de la partie), pas de status à chaque mise à jour : sinon le
+    // bandeau "Château détruit" apparaîtrait dès la réponse de l'API de la vague,
+    // avant que l'animation de combat n'ait fini de se jouer à l'écran.
+    useEffect(() => {
+        if (gameId && status === 'DEFEAT') setIsGameOver(true)
+    }, [gameId])
+
+    async function refreshBestWave() {
+        try {
+            const { data } = await api.get('/api/v1/players/me')
+            setBestWave(data.bestWave)
+        } catch {
+            // best-effort : un échec ne doit pas bloquer le jeu, juste retarder l'affichage du déblocage.
+        }
+    }
+
+    useEffect(() => {
+        if (!isAuthenticated) return
+        refreshBestWave()
+    }, [isAuthenticated])
 
     useEffect(() => {
         if (isAuthenticated && !gameId) {
@@ -85,7 +111,9 @@ export default function GamePage() {
                 () => {
                     setCombatRunning(false)
                     setLoading(false)
+                    refreshBestWave()
                     if (data.gameStatus === 'DEFEAT') {
+                        setIsGameOver(true)
                         setMessage(`Le château est tombé à la vague ${data.number}. Partie terminée.`)
                     } else if (data.status === 'VICTORY') {
                         setMessage(`Vague ${data.number} repoussée — +${data.goldEarned} or !`)
@@ -147,21 +175,26 @@ export default function GamePage() {
                             <h3 className="text-sm font-semibold mb-3 text-slate-300">Tours</h3>
                             <div className="flex flex-col gap-2">
                                 {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(
-                                    ([type, info]) => (
-                                        <button
-                                            key={type}
-                                            onClick={() => setSelectedTower(type)}
-                                            disabled={isGameOver || combatRunning}
-                                            className={`p-2 rounded text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                                                selectedTower === type
-                                                    ? `${info.color} text-white ring-2 ring-white`
-                                                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                                            }`}
-                                        >
-                                            {info.label}
-                                            <span className="block text-xs opacity-75">{info.cost} or</span>
-                                        </button>
-                                    )
+                                    ([type, info]) => {
+                                        const locked = bestWave < info.unlockWave
+                                        return (
+                                            <button
+                                                key={type}
+                                                onClick={() => !locked && setSelectedTower(type)}
+                                                disabled={isGameOver || combatRunning || locked}
+                                                className={`p-2 rounded text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                                                    selectedTower === type
+                                                        ? `${info.color} text-white ring-2 ring-white`
+                                                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                                }`}
+                                            >
+                                                {locked ? `🔒 ${info.label}` : info.label}
+                                                <span className="block text-xs opacity-75">
+                                                    {locked ? `Vague ${info.unlockWave} requise` : `${info.cost} or`}
+                                                </span>
+                                            </button>
+                                        )
+                                    }
                                 )}
                             </div>
                         </CardContent>

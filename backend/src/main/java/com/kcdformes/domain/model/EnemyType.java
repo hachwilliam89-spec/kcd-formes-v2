@@ -1,10 +1,12 @@
 package com.kcdformes.domain.model;
 
 public enum EnemyType {
-    GOBLIN(30, 0.3, 10, 5),
-    ORC(80, 0.16, 25, 10),
-    TROLL(200, 0.1, 60, 20),
-    DARK_KNIGHT(150, 0.2, 80, 15);
+    // PV de base +25 % (passe d'équilibrage) : ce socle se cumule avec le scaling
+    // par vague de WaveFactory, qui ne touche que la progression, pas le départ.
+    GOBLIN(38, 0.3, 10, 5),
+    ORC(100, 0.16, 25, 10),
+    TROLL(250, 0.1, 60, 20),
+    DARK_KNIGHT(188, 0.2, 80, 15);
 
     public final int baseHp;
     public final double speed;
