@@ -6,6 +6,7 @@ public class Enemy {
 
     private final UUID id;
     private final EnemyType type;
+    private final int maxHp;
     private int currentHp;
     private double x;
     private double y;
@@ -18,9 +19,19 @@ public class Enemy {
     }
 
     public Enemy(EnemyType type, double startX, double startY, int spawnDelayTicks) {
+        this(type, startX, startY, spawnDelayTicks, type.baseHp);
+    }
+
+    /**
+     * @param hp PV de cet ennemi, potentiellement mis à l'échelle par le numéro de vague
+     *           (voir WaveFactory) — distinct de EnemyType.baseHp qui reste la valeur de
+     *           référence à la vague 1.
+     */
+    public Enemy(EnemyType type, double startX, double startY, int spawnDelayTicks, int hp) {
         this.id = UUID.randomUUID();
         this.type = type;
-        this.currentHp = type.baseHp;
+        this.maxHp = hp;
+        this.currentHp = hp;
         this.x = startX;
         this.y = startY;
         this.alive = true;
@@ -44,6 +55,7 @@ public class Enemy {
 
     public UUID getId() { return id; }
     public EnemyType getType() { return type; }
+    public int getMaxHp() { return maxHp; }
     public int getCurrentHp() { return currentHp; }
     public double getX() { return x; }
     public double getY() { return y; }
