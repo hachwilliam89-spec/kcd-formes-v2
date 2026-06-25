@@ -39,15 +39,21 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
             scene: scene,
         })
 
-        setTimeout(() => {
-            scene.setOnCellClick(onCellClick)
-        }, 500)
-
         return () => {
             gameRef.current?.destroy(true)
             gameRef.current = null
         }
     }, [])
+
+    // Ré-attache le callback à chaque changement : sinon le scene Phaser garde
+    // pour toujours la closure du tout premier rendu (donc le tower type
+    // sélectionné au montage, ex. 'ARCHER'), peu importe ce que l'utilisateur
+    // choisit ensuite dans le panneau — d'où des tours posées avec le mauvais
+    // type/coût/portée à chaque clic sur la grille.
+    useEffect(() => {
+        if (!sceneRef.current) return
+        sceneRef.current.setOnCellClick(onCellClick)
+    }, [onCellClick])
 
     useEffect(() => {
         if (sceneRef.current) {
