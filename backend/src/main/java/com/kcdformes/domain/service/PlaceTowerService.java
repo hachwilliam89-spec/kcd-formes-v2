@@ -36,10 +36,10 @@ public class PlaceTowerService implements PlaceTowerUseCase {
         GameMap map = gameRepository.findMapByGameId(gameId)
                 .orElseThrow(() -> new IllegalArgumentException("Game not found: " + gameId));
 
-        // Récupère le joueur et vérifie l'or
-        // Note: le gameId permettra de retrouver le playerId via la couche infrastructure
-        // Pour l'instant on passe par une convention simplifiée
-        // TODO: enrichir avec PlayerRepository quand la couche persistence sera en place
+        // Note: la vérification/débit de l'or du joueur est gérée en amont par
+        // GameService.placeTower (couche application), qui a accès au PlayerEntity
+        // lié à la partie. Ce service ne s'occupe que de la validation géométrique
+        // du placement (cellule libre, dans les limites, ne bloque pas le chemin).
 
         // Vérifie que le placement ne bloque pas le chemin
         Tower tower = new Tower(type, x, y);

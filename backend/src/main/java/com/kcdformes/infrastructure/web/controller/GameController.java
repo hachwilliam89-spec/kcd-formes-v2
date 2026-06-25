@@ -2,9 +2,9 @@ package com.kcdformes.infrastructure.web.controller;
 
 import com.kcdformes.application.usecase.GameService;
 import com.kcdformes.domain.model.Tower;
-import com.kcdformes.domain.model.Wave;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase.PlaceTowerCommand;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase.StartWaveCommand;
+import com.kcdformes.domain.port.in.command.StartWaveUseCase.StartWaveResult;
 import com.kcdformes.domain.port.in.query.GetGameStateUseCase.GameStateResult;
 import com.kcdformes.infrastructure.persistence.entity.GameEntity;
 import com.kcdformes.infrastructure.web.dto.*;
@@ -34,18 +34,13 @@ public class GameController {
         GameEntity game = gameService.createGame(playerId, request.castleName());
         GameStateResult state = gameService.getGameState(game.getId());
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(GameResponse.from(game, state.map()));
+                .body(GameResponse.from(game, state.map(), state));
     }
 
     @GetMapping("/{gameId}")
     public ResponseEntity<GameResponse> getGame(@PathVariable UUID gameId, Authentication auth) {
         GameStateResult state = gameService.getGameState(gameId);
-        GameEntity game = new GameEntity();
-        game.setId(gameId);
-        game.setStatus(state.status());
-        game.setWaveNumber(state.waveNumber());
-        game.setGoldEarned(state.gold());
-        return ResponseEntity.ok(GameResponse.from(game, state.map()));
+        return ResponseEntity.ok(GameResponse.from(state));
     }
 
     @PostMapping("/{gameId}/towers")
@@ -60,8 +55,8 @@ public class GameController {
 
     @PostMapping("/{gameId}/waves/start")
     public ResponseEntity<WaveResponse> startWave(@PathVariable UUID gameId, Authentication auth) {
-        Wave wave = gameService.startWave(new StartWaveCommand(gameId));
-        return ResponseEntity.ok(WaveResponse.from(wave));
+        StartWaveResult result = gameService.startWave(new StartWaveCommand(gameId));
+        return ResponseEntity.ok(WaveResponse.from(result));
     }
 
     private UUID extractPlayerId(Authentication auth) {
