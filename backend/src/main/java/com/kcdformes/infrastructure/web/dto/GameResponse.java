@@ -29,7 +29,7 @@ public record GameResponse(
      */
     public static GameResponse from(GameEntity game, GameMap map, GameStateResult state) {
         return build(game.getId(), state.castleId(), game.getStatus(), game.getWaveNumber(),
-                game.getGoldEarned(), state.castleHp(), state.castleMaxHp(), map);
+                game.getGold(), state.castleHp(), state.castleMaxHp(), map);
     }
 
     /**

@@ -5,9 +5,8 @@ import java.util.UUID;
 
 public interface PlayerRepository {
 
-    record PlayerData(UUID id, String username, int gold, int elo) {}
+    record PlayerData(UUID id, String username, int elo) {}
 
     Optional<PlayerData> findById(UUID id);
-    void updateGold(UUID playerId, int newGold);
     void updateElo(UUID playerId, int newElo);
 }

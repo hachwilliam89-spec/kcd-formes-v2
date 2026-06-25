@@ -29,6 +29,10 @@ public class GameEntity {
     @Column(name = "gold_earned", nullable = false)
     private int goldEarned = 0;
 
+    /** Solde d'or de cette partie (or par run, sans report entre parties). */
+    @Column(nullable = false)
+    private int gold = 0;
+
     @Column(name = "started_at", nullable = false, updatable = false)
     private OffsetDateTime startedAt = OffsetDateTime.now();
 
@@ -53,6 +57,9 @@ public class GameEntity {
 
     public int getGoldEarned() { return goldEarned; }
     public void setGoldEarned(int goldEarned) { this.goldEarned = goldEarned; }
+
+    public int getGold() { return gold; }
+    public void setGold(int gold) { this.gold = gold; }
 
     public OffsetDateTime getStartedAt() { return startedAt; }
     public OffsetDateTime getEndedAt() { return endedAt; }

@@ -13,9 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AuthService {
 
-    /** Or accordé à un nouveau joueur pour pouvoir poser ses premières tours. */
-    private static final int STARTING_GOLD = 200;
-
     private final PlayerJpaRepository playerRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenFactory jwtTokenFactory;
@@ -41,7 +38,8 @@ public class AuthService {
         player.setUsername(request.username());
         player.setEmail(request.email());
         player.setPasswordHash(passwordEncoder.encode(request.password()));
-        player.setGold(STARTING_GOLD);
+        // L'or n'est plus accordé au compte : chaque partie reçoit son propre solde
+        // de départ à la création (voir GameService.STARTING_GOLD).
 
         player = playerRepository.save(player);
 

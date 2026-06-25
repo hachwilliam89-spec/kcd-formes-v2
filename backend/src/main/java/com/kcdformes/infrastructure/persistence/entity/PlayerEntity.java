@@ -22,13 +22,14 @@ public class PlayerEntity {
     private String passwordHash;
 
     @Column(nullable = false)
-    private int gold = 0;
-
-    @Column(nullable = false)
     private int gems = 0;
 
     @Column(nullable = false)
     private int elo = 1000;
+
+    /** Progression méta : la vague la plus loin jamais atteinte (score, base des déblocages). */
+    @Column(name = "best_wave", nullable = false)
+    private int bestWave = 0;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
@@ -46,14 +47,14 @@ public class PlayerEntity {
     public String getPasswordHash() { return passwordHash; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
 
-    public int getGold() { return gold; }
-    public void setGold(int gold) { this.gold = gold; }
-
     public int getGems() { return gems; }
     public void setGems(int gems) { this.gems = gems; }
 
     public int getElo() { return elo; }
     public void setElo(int elo) { this.elo = elo; }
+
+    public int getBestWave() { return bestWave; }
+    public void setBestWave(int bestWave) { this.bestWave = bestWave; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
 }

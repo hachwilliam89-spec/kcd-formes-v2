@@ -5,7 +5,6 @@ import com.kcdformes.domain.model.*;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase;
 import com.kcdformes.domain.port.in.query.GetGameStateUseCase;
-import com.kcdformes.domain.port.out.PlayerRepository.PlayerData;
 import com.kcdformes.domain.service.PathfindingService;
 import com.kcdformes.domain.service.PlaceTowerService;
 import com.kcdformes.domain.service.WaveFactory;
@@ -26,6 +25,9 @@ import java.util.UUID;
 
 @Service
 public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGameStateUseCase {
+
+    /** Or accordé à chaque nouvelle partie. Pas de report d'une partie à l'autre. */
+    private static final int STARTING_GOLD = 200;
 
     private final GameJpaRepository gameJpaRepository;
     private final CastleJpaRepository castleJpaRepository;
@@ -76,6 +78,7 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         game.setPlayer(player);
         game.setCastle(castle);
         game.setStatus("IN_PROGRESS");
+        game.setGold(STARTING_GOLD);
         return gameJpaRepository.save(game);
     }
 
@@ -85,13 +88,9 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         GameEntity game = gameJpaRepository.findById(command.gameId())
                 .orElseThrow(() -> new IllegalArgumentException("Game not found: " + command.gameId()));
 
-        UUID playerId = game.getPlayer().getId();
         int cost = command.towerType().baseCost;
-        PlayerData player = playerRepositoryAdapter.findById(playerId)
-                .orElseThrow(() -> new IllegalArgumentException("Player not found: " + playerId));
-
-        if (player.gold() < cost) {
-            throw new InsufficientGoldException(cost, player.gold());
+        if (game.getGold() < cost) {
+            throw new InsufficientGoldException(cost, game.getGold());
         }
 
         PlaceTowerCommand castleCommand = new PlaceTowerCommand(
@@ -105,8 +104,10 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
                 gameRepositoryAdapter, playerRepositoryAdapter, pathfindingService);
         Tower tower = service.placeTower(castleCommand);
 
-        // Le placement n'a pas levé d'exception : on débite le coût de la tour.
-        playerRepositoryAdapter.updateGold(playerId, player.gold() - cost);
+        // Le placement n'a pas levé d'exception : on débite le coût de la tour
+        // du solde de la partie en cours (l'or ne vit plus au niveau du compte).
+        game.setGold(game.getGold() - cost);
+        gameJpaRepository.save(game);
 
         return tower;
     }
@@ -131,18 +132,26 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
 
         WaveSimulationService.SimulationResult result = waveSimulationService.simulate(map, wave, castle);
 
-        // Persiste les effets de la vague : vie du château, or du joueur, statut de partie.
+        // Persiste les effets de la vague : vie du château, or de la partie, statut.
         castleEntity.setHp(castle.getHp());
         castleJpaRepository.save(castleEntity);
 
-        PlayerEntity player = game.getPlayer();
-        player.setGold(player.getGold() + result.goldEarned());
-        playerJpaRepository.save(player);
-
+        // L'or gagné alimente le solde de cette partie, pas un solde de compte :
+        // chaque run repart à zéro, aucun report entre parties.
+        game.setGold(game.getGold() + result.goldEarned());
         game.setWaveNumber(nextWave);
         game.setGoldEarned(game.getGoldEarned() + result.goldEarned());
+
         if (castle.isDestroyed()) {
             game.setStatus("DEFEAT");
+
+            // Progression de compte : seul le meilleur score (vague la plus loin
+            // atteinte) est conservé — jamais l'or. Base des futurs déblocages.
+            PlayerEntity player = game.getPlayer();
+            if (nextWave > player.getBestWave()) {
+                player.setBestWave(nextWave);
+                playerJpaRepository.save(player);
+            }
         }
         gameJpaRepository.save(game);
 
@@ -172,7 +181,7 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
                 game.getCastle().getId(),
                 map,
                 game.getWaveNumber(),
-                game.getGoldEarned(),
+                game.getGold(),
                 game.getStatus(),
                 game.getCastle().getHp(),
                 100

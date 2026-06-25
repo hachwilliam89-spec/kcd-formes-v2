@@ -21,15 +21,7 @@ public class PlayerRepositoryAdapter implements PlayerRepository {
     @Override
     public Optional<PlayerData> findById(UUID id) {
         return playerJpaRepository.findById(id)
-                .map(p -> new PlayerData(p.getId(), p.getUsername(), p.getGold(), p.getElo()));
-    }
-
-    @Override
-    public void updateGold(UUID playerId, int newGold) {
-        playerJpaRepository.findById(playerId).ifPresent(p -> {
-            p.setGold(newGold);
-            playerJpaRepository.save(p);
-        });
+                .map(p -> new PlayerData(p.getId(), p.getUsername(), p.getElo()));
     }
 
     @Override
