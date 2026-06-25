@@ -48,12 +48,20 @@ export default function GamePage() {
     const [liveCastleHp, setLiveCastleHp] = useState(castleHp)
     const [message, setMessage] = useState<string | null>(null)
     const [bestWave, setBestWave] = useState(0)
-
-    const isGameOver = status === 'DEFEAT'
+    const [isGameOver, setIsGameOver] = useState(false)
 
     useEffect(() => {
         if (!isAuthenticated) router.push('/')
     }, [isAuthenticated, router])
+
+    // Reprise d'une partie déjà perdue (ex. rechargement de page) : pas d'animation
+    // à attendre, on peut refléter l'état tout de suite. Ne dépend que de gameId
+    // (chargement de la partie), pas de status à chaque mise à jour : sinon le
+    // bandeau "Château détruit" apparaîtrait dès la réponse de l'API de la vague,
+    // avant que l'animation de combat n'ait fini de se jouer à l'écran.
+    useEffect(() => {
+        if (gameId && status === 'DEFEAT') setIsGameOver(true)
+    }, [gameId])
 
     async function refreshBestWave() {
         try {
@@ -105,6 +113,7 @@ export default function GamePage() {
                     setLoading(false)
                     refreshBestWave()
                     if (data.gameStatus === 'DEFEAT') {
+                        setIsGameOver(true)
                         setMessage(`Le château est tombé à la vague ${data.number}. Partie terminée.`)
                     } else if (data.status === 'VICTORY') {
                         setMessage(`Vague ${data.number} repoussée — +${data.goldEarned} or !`)
