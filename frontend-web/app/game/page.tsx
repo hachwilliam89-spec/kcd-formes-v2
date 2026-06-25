@@ -55,11 +55,18 @@ export default function GamePage() {
         if (!isAuthenticated) router.push('/')
     }, [isAuthenticated, router])
 
+    async function refreshBestWave() {
+        try {
+            const { data } = await api.get('/api/v1/players/me')
+            setBestWave(data.bestWave)
+        } catch {
+            // best-effort : un échec ne doit pas bloquer le jeu, juste retarder l'affichage du déblocage.
+        }
+    }
+
     useEffect(() => {
         if (!isAuthenticated) return
-        api.get('/api/v1/players/me')
-            .then(({ data }) => setBestWave(data.bestWave))
-            .catch(() => {})
+        refreshBestWave()
     }, [isAuthenticated])
 
     useEffect(() => {
@@ -96,6 +103,7 @@ export default function GamePage() {
                 () => {
                     setCombatRunning(false)
                     setLoading(false)
+                    refreshBestWave()
                     if (data.gameStatus === 'DEFEAT') {
                         setMessage(`Le château est tombé à la vague ${data.number}. Partie terminée.`)
                     } else if (data.status === 'VICTORY') {

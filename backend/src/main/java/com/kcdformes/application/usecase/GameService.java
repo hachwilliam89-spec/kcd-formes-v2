@@ -151,16 +151,18 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         game.setWaveNumber(nextWave);
         game.setGoldEarned(game.getGoldEarned() + result.goldEarned());
 
+        // Progression de compte : seul le meilleur score (vague la plus loin jamais
+        // atteinte) est conservé — jamais l'or. Mis à jour dès qu'une vague est
+        // atteinte (pas seulement à la défaite), pour que les déblocages liés au
+        // bestWave (ex. tours) s'appliquent immédiatement, en cours de partie.
+        PlayerEntity player = game.getPlayer();
+        if (nextWave > player.getBestWave()) {
+            player.setBestWave(nextWave);
+            playerJpaRepository.save(player);
+        }
+
         if (castle.isDestroyed()) {
             game.setStatus("DEFEAT");
-
-            // Progression de compte : seul le meilleur score (vague la plus loin
-            // atteinte) est conservé — jamais l'or. Base des futurs déblocages.
-            PlayerEntity player = game.getPlayer();
-            if (nextWave > player.getBestWave()) {
-                player.setBestWave(nextWave);
-                playerJpaRepository.save(player);
-            }
         }
         gameJpaRepository.save(game);
 
