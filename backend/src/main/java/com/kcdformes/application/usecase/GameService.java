@@ -27,8 +27,13 @@ import java.util.UUID;
 @Service
 public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGameStateUseCase {
 
-    /** Or accordé à chaque nouvelle partie. Pas de report d'une partie à l'autre. */
-    private static final int STARTING_GOLD = 200;
+    /**
+     * Or accordé à chaque nouvelle partie. Pas de report d'une partie à l'autre.
+     * Volontairement serré (juste de quoi poser 1-2 tours d'entrée de gamme) :
+     * un capital de départ trop généreux permettait de saturer le chemin dès le
+     * début et de tenir indéfiniment sans jamais avoir à réinvestir l'or gagné.
+     */
+    private static final int STARTING_GOLD = 100;
 
     private final GameJpaRepository gameJpaRepository;
     private final CastleJpaRepository castleJpaRepository;

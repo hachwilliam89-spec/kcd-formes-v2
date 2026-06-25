@@ -15,12 +15,12 @@ public class WaveFactory {
     private static final int SPAWN_INTERVAL_TICKS = 4;
 
     /**
-     * Montée en puissance des PV par vague (+15 % par vague par rapport à la vague 1).
+     * Montée en puissance des PV par vague (+35 % par vague par rapport à la vague 1).
      * Sans ce facteur, seul le nombre d'ennemis augmente : des tours suffisamment
      * placées dès les premières vagues tuent alors tout indéfiniment, quelle que
      * soit la vague atteinte (plus aucun ennemi ne passe jamais).
      */
-    private static final double HP_SCALING_PER_WAVE = 0.15;
+    private static final double HP_SCALING_PER_WAVE = 0.35;
 
     public Wave createWave(int waveNumber, Position spawnPosition) {
         List<Enemy> enemies = generateEnemies(waveNumber, spawnPosition);

@@ -1,12 +1,16 @@
 package com.kcdformes.domain.model;
 
 public enum TowerType {
-    ARCHER(15, 3.0, 50, 1.2, 0),
-    MAGE(30, 2.5, 100, 0.8, 0),
-    CATAPULT(50, 4.0, 150, 0.4, 0),
+    // Cadences réduites par rapport à la version initiale : les ennemis restent
+    // longtemps à portée d'une tour fixe (ils sont lents), donc une cadence trop
+    // élevée cumule un dégât largement supérieur à leurs PV avant qu'ils ne
+    // sortent de portée — une seule tour suffisait alors à tenir indéfiniment.
+    ARCHER(15, 3.0, 50, 0.7, 0),
+    MAGE(30, 2.5, 100, 0.5, 0),
+    CATAPULT(50, 4.0, 150, 0.35, 0),
     // Tour débloquée par la progression de compte (meilleure vague atteinte),
     // pas par l'or de la partie en cours : voir GameService.placeTower().
-    BALLISTA(80, 5.0, 200, 0.3, 10);
+    BALLISTA(80, 5.0, 200, 0.25, 10);
 
     public final int baseDamage;
     public final double baseRange;
