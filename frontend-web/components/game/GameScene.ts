@@ -217,14 +217,19 @@ export class GameScene extends Phaser.Scene {
     }
 
     private drawPath() {
-        // Chemin de spawn à destination — ligne y=7 en surbrillance
+        // Chemin de spawn à destination — bande sur les lignes y=6 à y=8 (3 cases
+        // de haut, centrée sur y=7) : élargie par rapport à la case unique
+        // d'origine pour accueillir visuellement les ennemis qui avancent
+        // maintenant de front sur plusieurs files (voir Enemy.laneOffset côté
+        // backend, décalages ±0.8 case).
         this.gridGraphics.fillStyle(0x1e293b, 0.6) // slate-800
         this.gridGraphics.fillRect(
-            0, 7 * CELL_SIZE,
-            GRID_WIDTH * CELL_SIZE, CELL_SIZE
+            0, 6 * CELL_SIZE,
+            GRID_WIDTH * CELL_SIZE, CELL_SIZE * 3
         )
 
-        // Marqueur spawn (gauche)
+        // Marqueur spawn (gauche) — reste centré sur la case y=7, seule la
+        // bande de fond est élargie.
         this.gridGraphics.fillStyle(0xef4444, 0.8) // rouge
         this.gridGraphics.fillRect(0, 7 * CELL_SIZE, CELL_SIZE, CELL_SIZE)
 

@@ -13,6 +13,12 @@ public class Enemy {
     private boolean alive;
     /** Nombre de ticks à attendre avant que cet ennemi n'apparaisse et ne commence à avancer. */
     private final int spawnDelayTicks;
+    /**
+     * Décalage perpendiculaire au chemin (en cases), appliqué pendant le déplacement
+     * (voir WaveSimulationService) pour que les ennemis ne soient plus tous alignés
+     * en file unique sur un couloir élargi — voir WaveFactory pour l'attribution.
+     */
+    private final double laneOffset;
 
     public Enemy(EnemyType type, double startX, double startY) {
         this(type, startX, startY, 0);
@@ -28,6 +34,10 @@ public class Enemy {
      *           référence à la vague 1.
      */
     public Enemy(EnemyType type, double startX, double startY, int spawnDelayTicks, int hp) {
+        this(type, startX, startY, spawnDelayTicks, hp, 0.0);
+    }
+
+    public Enemy(EnemyType type, double startX, double startY, int spawnDelayTicks, int hp, double laneOffset) {
         this.id = UUID.randomUUID();
         this.type = type;
         this.maxHp = hp;
@@ -36,6 +46,7 @@ public class Enemy {
         this.y = startY;
         this.alive = true;
         this.spawnDelayTicks = spawnDelayTicks;
+        this.laneOffset = laneOffset;
     }
 
     public void takeDamage(int damage) {
@@ -59,4 +70,5 @@ public class Enemy {
     public int getCurrentHp() { return currentHp; }
     public double getX() { return x; }
     public double getY() { return y; }
+    public double getLaneOffset() { return laneOffset; }
 }

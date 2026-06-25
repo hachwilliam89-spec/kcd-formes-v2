@@ -1,6 +1,7 @@
 package com.kcdformes.domain.service;
 
 import com.kcdformes.domain.model.Castle;
+import com.kcdformes.domain.model.DamageType;
 import com.kcdformes.domain.model.Enemy;
 import com.kcdformes.domain.model.GameMap;
 import com.kcdformes.domain.model.Position;
@@ -108,12 +109,35 @@ public class WaveSimulationService {
                     double frac = p - Math.floor(p);
                     double nx = from.x() + (to.x() - from.x()) * frac;
                     double ny = from.y() + (to.y() - from.y()) * frac;
+
+                    // Décale l'ennemi perpendiculairement à la direction du segment de
+                    // chemin courant, pour plusieurs ennemis de front sur un couloir
+                    // élargi plutôt qu'une file unique strictement sur l'axe du chemin.
+                    double dirX = to.x() - from.x();
+                    double dirY = to.y() - from.y();
+                    double dirLen = Math.sqrt(dirX * dirX + dirY * dirY);
+                    if (dirLen > 0) {
+                        nx += (-dirY / dirLen) * enemy.getLaneOffset();
+                        ny += (dirX / dirLen) * enemy.getLaneOffset();
+                    }
+
                     enemy.moveTo(nx, ny);
                 }
             }
 
             // 2. Attaques des tours (cible : ennemi à portée le plus proche)
             for (Tower tower : towers) {
+                if (tower.getType().damageType == DamageType.CONTINUOUS) {
+                    // Pas de cooldown : un rayon continu tape chaque tick tant qu'une
+                    // cible est en portée (voir TowerType pour le rééquilibrage de
+                    // baseDamage qui accompagne ce profil).
+                    Enemy target = findClosestTarget(tower, wave.getEnemies(), escaped, tick);
+                    if (target != null) {
+                        applyDamage(tower, target, tower.getDamage(), wave, damageEvents, deaths);
+                    }
+                    continue;
+                }
+
                 double cooldown = cooldowns.get(tower.getId()) - 1.0;
                 if (cooldown > 0) {
                     cooldowns.put(tower.getId(), cooldown);
@@ -126,12 +150,26 @@ public class WaveSimulationService {
                     continue;
                 }
 
-                target.takeDamage(tower.getDamage());
-                damageEvents.add(new DamageEvent(tower.getId(), target.getId(), tower.getDamage()));
-                if (target.isDead()) {
-                    wave.addGold(target.getGoldReward());
-                    deaths.add(target.getId());
+                applyDamage(tower, target, tower.getDamage(), wave, damageEvents, deaths);
+
+                if (tower.getType().damageType == DamageType.AOE) {
+                    // Dégâts réduits (moitié) aux ennemis proches de la cible principale,
+                    // dans le rayon de la tour — un seul tir, plusieurs ennemis touchés.
+                    double splashDamage = tower.getDamage() / 2.0;
+                    for (Enemy other : wave.getEnemies()) {
+                        if (other.getId().equals(target.getId())
+                                || other.isDead() || escaped.contains(other.getId())
+                                || tick <= other.getSpawnDelayTicks()) {
+                            continue;
+                        }
+                        double dx = other.getX() - target.getX();
+                        double dy = other.getY() - target.getY();
+                        if (Math.sqrt(dx * dx + dy * dy) <= tower.getType().splashRadius) {
+                            applyDamage(tower, other, (int) Math.round(splashDamage), wave, damageEvents, deaths);
+                        }
+                    }
                 }
+
                 cooldowns.put(tower.getId(), 1.0 / tower.getType().attackSpeed);
             }
 
@@ -160,6 +198,17 @@ public class WaveSimulationService {
         wave.complete();
 
         return new SimulationResult(ticks, wave.getGoldEarned(), castleDamageTaken);
+    }
+
+    /** Inflige des dégâts à un ennemi, enregistre l'évènement et le crédit en or s'il meurt. */
+    private void applyDamage(Tower tower, Enemy target, int damage,
+                              Wave wave, List<DamageEvent> damageEvents, List<UUID> deaths) {
+        target.takeDamage(damage);
+        damageEvents.add(new DamageEvent(tower.getId(), target.getId(), damage));
+        if (target.isDead()) {
+            wave.addGold(target.getGoldReward());
+            deaths.add(target.getId());
+        }
     }
 
     private Enemy findClosestTarget(Tower tower, List<Enemy> enemies, Set<UUID> escaped, int tick) {

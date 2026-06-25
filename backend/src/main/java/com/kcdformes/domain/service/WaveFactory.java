@@ -23,6 +23,14 @@ public class WaveFactory {
      */
     private static final double HP_SCALING_PER_WAVE = 0.5;
 
+    /**
+     * Décalages perpendiculaires au chemin (en cases), répartis cycliquement entre
+     * ennemis successifs pour qu'ils avancent sur plusieurs files de front dans un
+     * couloir élargi, plutôt qu'en une seule file strictement alignée. Appliqué
+     * pendant le déplacement par WaveSimulationService.
+     */
+    private static final double[] LANE_OFFSETS = { 0.0, -0.8, 0.8 };
+
     public Wave createWave(int waveNumber, Position spawnPosition) {
         List<Enemy> enemies = generateEnemies(waveNumber, spawnPosition);
         return new Wave(waveNumber, enemies);
@@ -57,7 +65,8 @@ public class WaveFactory {
 
     private Enemy spawnEnemy(EnemyType type, Position spawn, int waveNumber, int spawnIndex) {
         int hp = scaledHp(type, waveNumber);
-        return new Enemy(type, spawn.x(), spawn.y(), spawnIndex * SPAWN_INTERVAL_TICKS, hp);
+        double laneOffset = LANE_OFFSETS[spawnIndex % LANE_OFFSETS.length];
+        return new Enemy(type, spawn.x(), spawn.y(), spawnIndex * SPAWN_INTERVAL_TICKS, hp, laneOffset);
     }
 
     private int scaledHp(EnemyType type, int waveNumber) {
