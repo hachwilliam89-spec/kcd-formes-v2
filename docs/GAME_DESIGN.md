@@ -2,7 +2,7 @@
 
 > Document vivant : à mettre à jour à chaque décision de gameplay qui change ou affine ce qui suit. Versionné avec le code (git), pas un artefact figé.
 
-Dernière mise à jour : 2026-06-25
+Dernière mise à jour : 2026-06-26
 
 ## 1. Vision et piliers
 
@@ -17,8 +17,24 @@ Toute décision de gameplay ci-dessous doit rester cohérente avec ces trois pil
 - Boucle infinie : les vagues s'enchaînent sans fin, avec une difficulté croissante (réutilise `WaveFactory` existant).
 - Pas de condition de victoire fixe. La partie se termine quand le château tombe (`Castle.isDestroyed()`).
 - **Score = numéro de la vague la plus loin atteinte.**
-- Économie **par partie** : or de départ fixe identique à chaque run, aucun report de l'or restant d'une partie à l'autre (équité, évite le pay-to-win et la dérive de difficulté).
+- Économie **par partie** : or de départ fixe identique à chaque run (250), aucun report de l'or restant d'une partie à l'autre (équité, évite le pay-to-win et la dérive de difficulté). Valeur remontée de 100 à 250 après retour d'expérience : 100 ne permettait de poser qu'1-2 tours d'entrée de gamme, ce qui rendait les premières vagues trop punitives.
 - **Progression de compte (meta)**, séparée de l'économie de run : déblocages (nouvelles tours, cosmétiques) liés aux meilleurs scores atteints, jamais à l'or accumulé en partie. Ces deux économies (run vs compte) doivent rester des concepts distincts dans le code, pour ne jamais avoir à faire de migration si l'une évolue indépendamment de l'autre.
+
+### 2.1 Roster d'ennemis solo
+
+- **Goblin** : chair à canon, toujours présent dès la vague 1.
+- **Orc**, **Troll** : ennemis "élite", débloqués à partir d'un seuil de vague (voir 2.2).
+- **Chevalier noir (Dark Knight)** : mini-boss à cadence fixe (toutes les 5 vagues une fois débloqué) — point d'extension naturel vers un futur vrai boss (voir 2.2).
+- **Sapeur** : dévie du chemin pour foncer sur la tour la plus proche et la détruire à coups de dégâts de siège (la case redevient constructible) ; s'il survit à sa cible, il enchaîne sur la tour suivante la plus proche, et ainsi de suite jusqu'à ce qu'il ne reste plus aucune tour sur la map — ce n'est qu'à ce moment-là qu'il reprend sa route vers le château. Débloqué dans le même mix "élite" qu'Orc/Troll.
+- `goldReward` de chaque type calibré au fil de plusieurs passes d'équilibrage (dernier ajustement : +20 % sur tous les types, pour rendre la vague 10 atteignable sans la garantir) — c'est cette valeur qui sert aussi de "coût de menace" dans le système de budget décrit ci-dessous.
+
+### 2.2 Génération des vagues : seed par partie + composition aléatoire encadrée
+
+- Chaque partie reçoit un **seed** tiré une seule fois à sa création (`GameEntity.seed`). La composition d'une vague varie d'une partie à l'autre (seed différent), mais reste reproductible au sein d'une même partie (même seed + même numéro de vague => même résultat).
+- La composition n'est plus un compte fixe par type d'ennemi : Orc/Troll/Sapeur sont distribués via un **budget de menace** (calculé à partir des anciens comptes déterministes × `goldReward`), réparti aléatoirement entre les trois types — ce qui mélange à la fois la composition ET l'ordre d'apparition, sans changer le niveau de difficulté global calibré précédemment.
+- Le seuil de déblocage d'Orc/Troll/Sapeur est lui-même légèrement aléatoire par partie (jitter borné, vague 2 à 4) ; idem pour le Chevalier noir (vague 9 à 11). Bornes choisies pour garantir que la vague 1 reste toujours 100 % Goblin et que la vague 6 contient toujours le mix élite, quel que soit le seed.
+- La cadence d'apparition (intervalle entre deux ennemis) est également jitterée plutôt que strictement métronomique.
+- **Implémentation en pattern Composite** (`WaveSegment` et ses implémentations `EnemyBurst`, `SequentialSegments`, `ThreatBudgetMix`, `WeightedChoice`) : permet de faire évoluer la composition des vagues sans toucher à `WaveFactory`, et prépare l'apparition de futurs boss (`WeightedChoice` est le point d'extension prévu, pas encore branché).
 
 ## 3. Couche compétitive légère (avant le multi temps réel)
 
@@ -39,7 +55,7 @@ Deux joueurs s'affrontent en duel temps réel, chacun défendant son château et
 
 - **Tours de défense** : identiques au solo (Archer / Mage / Catapulte). Pas de duplication.
 - **Roster d'attaque (envoi chez l'adversaire)** : unités humaines dédiées au PvP — Recrue, Archer, Chevalier, Bélier de siège. Prix indexé sur une force équivalente (même logique que le `goldReward` des ennemis solo).
-- **Roster ennemis solo** (Goblin / Orc / Troll / Dark Knight) : reste exclusif au mode solo, ne sert pas en PvP. Cohérence thématique : monstres en PvE, armées humaines en PvP.
+- **Roster ennemis solo** (Goblin / Orc / Troll / Dark Knight / Sapeur, voir 2.1) : reste exclusif au mode solo, ne sert pas en PvP. Cohérence thématique : monstres en PvE, armées humaines en PvP.
 
 ### 4.3 Structure du plateau
 

@@ -37,7 +37,8 @@ export default function GamePage() {
     const { handleLogout } = useAuth()
     const {
         gameId, map, waveNumber, gold, castleHp, castleMaxHp, status,
-        createGame, placeTower, upgradeTower, startWave, refreshGame, resetGame,
+        awaitingBonusChoice, availableBonuses,
+        createGame, placeTower, upgradeTower, startWave, chooseBonus, refreshGame, resetGame,
     } = useGame()
 
     const canvasRef = useRef<GameCanvasHandle>(null)
@@ -49,6 +50,7 @@ export default function GamePage() {
     const [message, setMessage] = useState<string | null>(null)
     const [bestWave, setBestWave] = useState(0)
     const [isGameOver, setIsGameOver] = useState(false)
+    const [bonusChoiceLoading, setBonusChoiceLoading] = useState(false)
 
     useEffect(() => {
         if (!isAuthenticated) router.push('/')
@@ -152,6 +154,18 @@ export default function GamePage() {
         }
     }
 
+    async function handleChooseBonus(bonusType: string) {
+        try {
+            setBonusChoiceLoading(true)
+            await chooseBonus(bonusType)
+            setMessage('Bonus appliqué — la prochaine vague peut être lancée.')
+        } catch {
+            setMessage("Erreur lors de l'application du bonus")
+        } finally {
+            setBonusChoiceLoading(false)
+        }
+    }
+
     const towers: TowerData[] = map?.towers ?? []
     const hpRatio = castleMaxHp > 0 ? Math.max(0, Math.min(1, liveCastleHp / castleMaxHp)) : 0
 
@@ -225,10 +239,10 @@ export default function GamePage() {
 
                     <Button
                         onClick={handleStartWave}
-                        disabled={loading || isGameOver || combatRunning}
+                        disabled={loading || isGameOver || combatRunning || awaitingBonusChoice}
                         className="bg-red-600 hover:bg-red-500 text-white disabled:opacity-40"
                     >
-                        ⚔ Lancer vague
+                        {awaitingBonusChoice ? '⚔ Choisissez un bonus' : '⚔ Lancer vague'}
                     </Button>
 
                     {isGameOver && (
@@ -251,6 +265,36 @@ export default function GamePage() {
                     )}
                 </div>
             </div>
+
+            {/* Palier de bonus (toutes les 5 vagues) : bloque le jeu jusqu'à un choix
+                du joueur parmi plusieurs options (voir backend BonusType). */}
+            {awaitingBonusChoice && !isGameOver && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+                    <Card className="bg-slate-800 border-slate-600 w-96">
+                        <CardContent className="p-5 flex flex-col gap-3">
+                            <h2 className="text-lg font-bold text-yellow-400">
+                                🏆 Vague {waveNumber} repoussée — choisissez un bonus
+                            </h2>
+                            <p className="text-xs text-slate-400">
+                                Un seul bonus par palier. Choisissez celui qui vous aide le plus en ce moment.
+                            </p>
+                            <div className="flex flex-col gap-2 mt-1">
+                                {availableBonuses.map((bonus) => (
+                                    <button
+                                        key={bonus.type}
+                                        onClick={() => handleChooseBonus(bonus.type)}
+                                        disabled={bonusChoiceLoading}
+                                        className="text-left p-3 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 transition-all"
+                                    >
+                                        <span className="block font-semibold text-sm text-white">{bonus.label}</span>
+                                        <span className="block text-xs text-slate-300 mt-1">{bonus.description}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
         </div>
     )
 }

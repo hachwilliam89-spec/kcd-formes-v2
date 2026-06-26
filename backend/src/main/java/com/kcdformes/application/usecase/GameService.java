@@ -1,8 +1,10 @@
 package com.kcdformes.application.usecase;
 
+import com.kcdformes.domain.exception.BonusChoicePendingException;
 import com.kcdformes.domain.exception.InsufficientGoldException;
 import com.kcdformes.domain.exception.TowerNotUnlockedException;
 import com.kcdformes.domain.model.*;
+import com.kcdformes.domain.port.in.command.ChooseBonusUseCase;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase;
 import com.kcdformes.domain.port.in.command.UpgradeTowerUseCase;
@@ -24,11 +26,13 @@ import com.kcdformes.infrastructure.persistence.repository.PlayerRepositoryAdapt
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Service
-public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGameStateUseCase, UpgradeTowerUseCase {
+public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGameStateUseCase,
+        UpgradeTowerUseCase, ChooseBonusUseCase {
 
     /**
      * Or accordé à chaque nouvelle partie. Pas de report d'une partie à l'autre.
@@ -37,6 +41,17 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
      * punitives avant même d'avoir pu réinvestir de l'or gagné en jeu.
      */
     private static final int STARTING_GOLD = 250;
+
+    /** Cadence des paliers de bonus (voir BonusType) : toutes les BONUS_MILESTONE_INTERVAL vagues. */
+    private static final int BONUS_MILESTONE_INTERVAL = 5;
+
+    /**
+     * Montant de base du bonus GOLD_INJECTION, multiplié par la vague atteinte :
+     * une valeur fixe deviendrait négligeable en milieu/fin de partie, alors que
+     * l'or gagné par vague croît avec le nombre d'ennemis (voir WaveFactory) et
+     * leurs goldReward (voir EnemyType).
+     */
+    private static final int GOLD_INJECTION_PER_WAVE = 40;
 
     private final GameJpaRepository gameJpaRepository;
     private final CastleJpaRepository castleJpaRepository;
@@ -166,6 +181,13 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         GameEntity game = gameJpaRepository.findById(command.gameId())
                 .orElseThrow(() -> new IllegalArgumentException("Game not found: " + command.gameId()));
 
+        // Un palier de bonus est en attente (voir BonusType / ChooseBonusUseCase) :
+        // on bloque tout lancement de vague jusqu'à ce que le joueur ait choisi,
+        // plutôt que de laisser le palier passer inaperçu.
+        if (game.isAwaitingBonusChoice()) {
+            throw new BonusChoicePendingException(game.getId());
+        }
+
         CastleEntity castleEntity = game.getCastle();
         GameMap map = gameRepositoryAdapter.findMapByGameId(castleEntity.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Map not found for game: " + command.gameId()));
@@ -210,6 +232,13 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         if (castle.isDestroyed()) {
             game.setStatus("DEFEAT");
         }
+
+        // Palier de bonus toutes les BONUS_MILESTONE_INTERVAL vagues : inutile (et
+        // trompeur) de le déclencher sur une défaite, la partie étant déjà finie.
+        boolean milestoneReached = !castle.isDestroyed() && nextWave % BONUS_MILESTONE_INTERVAL == 0;
+        if (milestoneReached) {
+            game.setAwaitingBonusChoice(true);
+        }
         gameJpaRepository.save(game);
 
         return new StartWaveResult(
@@ -220,8 +249,44 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
                 castle.getMaxHp(),
                 result.castleDamageTaken(),
                 castle.isDestroyed(),
-                game.getStatus()
+                game.getStatus(),
+                milestoneReached,
+                milestoneReached ? List.of(BonusType.values()) : List.of()
         );
+    }
+
+    @Override
+    @Transactional
+    public ChooseBonusResult chooseBonus(ChooseBonusCommand command) {
+        GameEntity game = gameJpaRepository.findById(command.gameId())
+                .orElseThrow(() -> new IllegalArgumentException("Game not found: " + command.gameId()));
+
+        if (!game.isAwaitingBonusChoice()) {
+            throw new IllegalStateException("No bonus choice pending for game: " + command.gameId());
+        }
+
+        CastleEntity castleEntity = game.getCastle();
+
+        switch (command.bonusType()) {
+            case GOLD_INJECTION -> game.setGold(game.getGold() + game.getWaveNumber() * GOLD_INJECTION_PER_WAVE);
+            case CASTLE_REPAIR -> castleEntity.setHp(100);
+            case TOWER_REPAIR -> {
+                GameMap map = gameRepositoryAdapter.findMapByGameId(castleEntity.getId())
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "Map not found for game: " + command.gameId()));
+                // Tower.repair() mute les instances détenues par `map` (même référence
+                // que celles retournées par getTowers()) : saveMap ci-dessous persiste
+                // donc bien les PV restaurés.
+                map.getTowers().forEach(Tower::repair);
+                gameRepositoryAdapter.saveMap(castleEntity.getId(), map);
+            }
+        }
+
+        game.setAwaitingBonusChoice(false);
+        gameJpaRepository.save(game);
+        castleJpaRepository.save(castleEntity);
+
+        return new ChooseBonusResult(command.bonusType(), game.getGold(), castleEntity.getHp(), 100);
     }
 
     @Override
@@ -241,7 +306,8 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
                 game.getGold(),
                 game.getStatus(),
                 game.getCastle().getHp(),
-                100
+                100,
+                game.isAwaitingBonusChoice()
         );
     }
 }

@@ -18,7 +18,13 @@ public record WaveResponse(
         int castleDamageTaken,
         boolean castleDestroyed,
         String gameStatus,
-        List<TickResponse> ticks
+        List<TickResponse> ticks,
+        // Non vide uniquement si cette vague est un palier de bonus (toutes les 5
+        // vagues, voir GameService.BONUS_MILESTONE_INTERVAL) : le frontend doit
+        // alors présenter ce choix avant de permettre le lancement de la vague
+        // suivante (voir ChooseBonusUseCase).
+        boolean awaitingBonusChoice,
+        List<BonusOptionResponse> availableBonuses
 ) {
     public record EnemyResponse(UUID id, String type, double x, double y, int hp, int maxHp) {}
 
@@ -60,7 +66,9 @@ public record WaveResponse(
                 result.castleDamageTaken(),
                 result.castleDestroyed(),
                 result.gameStatus(),
-                ticks
+                ticks,
+                result.awaitingBonusChoice(),
+                result.availableBonuses().stream().map(BonusOptionResponse::from).toList()
         );
     }
 

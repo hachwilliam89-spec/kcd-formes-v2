@@ -2,6 +2,8 @@ package com.kcdformes.infrastructure.web.controller;
 
 import com.kcdformes.application.usecase.GameService;
 import com.kcdformes.domain.model.Tower;
+import com.kcdformes.domain.port.in.command.ChooseBonusUseCase.ChooseBonusCommand;
+import com.kcdformes.domain.port.in.command.ChooseBonusUseCase.ChooseBonusResult;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase.PlaceTowerCommand;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase.StartWaveCommand;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase.StartWaveResult;
@@ -67,6 +69,15 @@ public class GameController {
     public ResponseEntity<WaveResponse> startWave(@PathVariable UUID gameId, Authentication auth) {
         StartWaveResult result = gameService.startWave(new StartWaveCommand(gameId));
         return ResponseEntity.ok(WaveResponse.from(result));
+    }
+
+    @PostMapping("/{gameId}/bonus/choose")
+    public ResponseEntity<BonusChoiceResponse> chooseBonus(
+            @PathVariable UUID gameId,
+            @Valid @RequestBody ChooseBonusRequest request,
+            Authentication auth) {
+        ChooseBonusResult result = gameService.chooseBonus(new ChooseBonusCommand(gameId, request.bonusType()));
+        return ResponseEntity.ok(BonusChoiceResponse.from(result));
     }
 
     private UUID extractPlayerId(Authentication auth) {

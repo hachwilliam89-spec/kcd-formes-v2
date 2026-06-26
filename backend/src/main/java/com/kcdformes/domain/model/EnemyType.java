@@ -15,10 +15,13 @@ public enum EnemyType {
     // Objectif : rendre la vague 10 atteignable sans la garantir (pas un simple
     // détricotage du nerf précédent, qui visait un problème différent — la
     // croissance du nombre d'ennemis par vague, toujours valable).
-    GOBLIN(38, 0.3, 7, 5, false, 0),
-    ORC(100, 0.16, 17, 10, false, 0),
-    TROLL(250, 0.1, 38, 20, false, 0),
-    DARK_KNIGHT(188, 0.2, 50, 15, false, 0),
+    //
+    // goldReward remonté de +25 % supplémentaires :
+    // GOBLIN 7->9, ORC 17->21, TROLL 38->48, DARK_KNIGHT 50->63, SAPEUR 22->28.
+    GOBLIN(38, 0.3, 9, 5, false, 0),
+    ORC(100, 0.16, 21, 10, false, 0),
+    TROLL(250, 0.1, 48, 20, false, 0),
+    DARK_KNIGHT(188, 0.2, 63, 15, false, 0),
     /**
      * Nouvel ennemi (à partir de la vague 3, voir WaveFactory) : au lieu de
      * suivre le chemin jusqu'au château, dévie pour foncer sur la tour la plus
@@ -31,7 +34,7 @@ public enum EnemyType {
      */
     // PV +20 % (180, au lieu de 150) : le rend plus difficile à abattre en route
     // vers sa tour cible, pour augmenter la pression qu'il met sur le joueur.
-    SAPEUR(180, 0.12, 22, 8, true, 12);
+    SAPEUR(180, 0.12, 28, 8, true, 12);
 
     public final int baseHp;
     public final double speed;
