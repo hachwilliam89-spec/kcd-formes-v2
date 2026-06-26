@@ -8,10 +8,17 @@ public enum EnemyType {
     // nombre d'ennemis qui croît linéairement par vague (voir WaveFactory), les
     // anciennes valeurs faisaient grimper le revenu du joueur plus vite que la
     // difficulté, supprimant toute rareté de l'or en milieu/fin de partie.
-    GOBLIN(38, 0.3, 6, 5, false, 0),
-    ORC(100, 0.16, 14, 10, false, 0),
-    TROLL(250, 0.1, 32, 20, false, 0),
-    DARK_KNIGHT(188, 0.2, 42, 15, false, 0),
+    //
+    // goldReward remonté de +20 % ensuite (retour d'expérience : mort en vague 7,
+    // budget de construction/upgrade trop serré pour viser la vague 10) :
+    // GOBLIN 6->7, ORC 14->17, TROLL 32->38, DARK_KNIGHT 42->50, SAPEUR 18->22.
+    // Objectif : rendre la vague 10 atteignable sans la garantir (pas un simple
+    // détricotage du nerf précédent, qui visait un problème différent — la
+    // croissance du nombre d'ennemis par vague, toujours valable).
+    GOBLIN(38, 0.3, 7, 5, false, 0),
+    ORC(100, 0.16, 17, 10, false, 0),
+    TROLL(250, 0.1, 38, 20, false, 0),
+    DARK_KNIGHT(188, 0.2, 50, 15, false, 0),
     /**
      * Nouvel ennemi (à partir de la vague 3, voir WaveFactory) : au lieu de
      * suivre le chemin jusqu'au château, dévie pour foncer sur la tour la plus
@@ -24,7 +31,7 @@ public enum EnemyType {
      */
     // PV +20 % (180, au lieu de 150) : le rend plus difficile à abattre en route
     // vers sa tour cible, pour augmenter la pression qu'il met sur le joueur.
-    SAPEUR(180, 0.12, 18, 8, true, 12);
+    SAPEUR(180, 0.12, 22, 8, true, 12);
 
     public final int baseHp;
     public final double speed;
