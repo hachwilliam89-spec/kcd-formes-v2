@@ -61,4 +61,42 @@ class GameMapMapperTest {
 
         assertThat(reloaded.getTowers()).isEmpty();
     }
+
+    @Test
+    @DisplayName("Round-trip JSON préserve les PV d'une tour endommagée par un Sapeur")
+    void toJsonThenFromJson_preservesDamagedTowerHp() {
+        GameMap map = new GameMap(20, 15, new Position(0, 7), new Position(19, 7));
+        Tower archer = new Tower(TowerType.ARCHER, 2, 6);
+        archer.takeSiegeDamage(40);
+        map.placeTower(archer);
+
+        GameMap reloaded = mapper.fromJson(mapper.toJson(map));
+
+        Tower reloadedArcher = reloaded.getTowerAt(2, 6).orElseThrow();
+        assertThat(reloadedArcher.getHp()).isEqualTo(archer.getHp());
+        assertThat(reloadedArcher.getHp()).isLessThan(reloadedArcher.getMaxHp());
+    }
+
+    @Test
+    @DisplayName("Une tour persistée sans champ hp (donnée historique) revient à pleine vie")
+    void fromJson_legacyDataWithoutHp_fallsBackToFullHp() {
+        Map<String, Object> json = Map.of(
+                "width", 20,
+                "height", 15,
+                "pathStart", Map.of("x", 0, "y", 7),
+                "pathEnd", Map.of("x", 19, "y", 7),
+                "towers", java.util.List.of(Map.of(
+                        "id", java.util.UUID.randomUUID().toString(),
+                        "x", 2,
+                        "y", 6,
+                        "type", "ARCHER",
+                        "level", 1
+                ))
+        );
+
+        GameMap reloaded = mapper.fromJson(json);
+
+        Tower tower = reloaded.getTowerAt(2, 6).orElseThrow();
+        assertThat(tower.getHp()).isEqualTo(tower.getMaxHp());
+    }
 }

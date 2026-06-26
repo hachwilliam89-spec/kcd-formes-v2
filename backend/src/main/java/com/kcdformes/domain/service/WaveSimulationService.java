@@ -33,6 +33,9 @@ public class WaveSimulationService {
     /** Garde-fou pour éviter une boucle infinie en cas de configuration anormale. */
     private static final int MAX_TICKS = 1500;
 
+    /** Distance (en cases) à partir de laquelle un Sapeur cesse d'avancer et attaque la tour visée. */
+    private static final double SIEGE_MELEE_RANGE = 1.0;
+
     private final PathfindingService pathfindingService;
 
     public WaveSimulationService(PathfindingService pathfindingService) {
@@ -43,12 +46,17 @@ public class WaveSimulationService {
 
     public record DamageEvent(UUID towerId, UUID enemyId, int damage) {}
 
+    /** Dégâts de siège infligés par un Sapeur (EnemyType.attacksTowers) à la tour qu'il assiège. */
+    public record TowerDamageEvent(UUID enemyId, UUID towerId, int damage) {}
+
     public record TickSnapshot(
             int tick,
             List<EnemySnapshot> enemies,
             List<DamageEvent> damageEvents,
+            List<TowerDamageEvent> towerDamageEvents,
             List<UUID> deaths,
             List<UUID> reachedCastle,
+            List<UUID> destroyedTowers,
             int castleHp
     ) {}
 
@@ -71,6 +79,13 @@ public class WaveSimulationService {
             progress.put(enemy.getId(), 0.0);
         }
 
+        // État du comportement "Sapeur" (EnemyType.attacksTowers), persistant entre
+        // les ticks : la tour visée par chaque Sapeur une fois qu'il a dévié du
+        // chemin, et l'ensemble des Sapeurs ayant déjà détruit leur cible (et qui
+        // ne doivent donc plus jamais dévier à nouveau — voir handleSapperTick).
+        Map<UUID, UUID> siegeTargets = new HashMap<>();
+        Set<UUID> sappersFinishedSieging = new HashSet<>();
+
         Set<UUID> escaped = new HashSet<>();
         List<TickSnapshot> ticks = new ArrayList<>();
         int castleDamageTaken = 0;
@@ -80,8 +95,10 @@ public class WaveSimulationService {
         while (tick < MAX_TICKS) {
             tick++;
             List<DamageEvent> damageEvents = new ArrayList<>();
+            List<TowerDamageEvent> towerDamageEvents = new ArrayList<>();
             List<UUID> deaths = new ArrayList<>();
             List<UUID> reached = new ArrayList<>();
+            List<UUID> destroyedTowers = new ArrayList<>();
 
             // 1. Déplacement des ennemis le long du chemin
             for (Enemy enemy : wave.getEnemies()) {
@@ -91,6 +108,16 @@ public class WaveSimulationService {
                 if (tick <= enemy.getSpawnDelayTicks()) {
                     // Pas encore apparu : reste invisible et immobile au point de spawn.
                     continue;
+                }
+
+                if (enemy.getType().attacksTowers && !sappersFinishedSieging.contains(enemy.getId())) {
+                    boolean diverted = handleSapperTick(enemy, map, path, progress, siegeTargets,
+                            towerDamageEvents, destroyedTowers, sappersFinishedSieging);
+                    if (diverted) {
+                        // Ce tick a été consommé par le déplacement hors-chemin ou
+                        // l'attaque de la tour visée : pas de suivi de chemin normal.
+                        continue;
+                    }
                 }
 
                 double p = progress.get(enemy.getId()) + enemy.getType().speed;
@@ -127,6 +154,13 @@ public class WaveSimulationService {
 
             // 2. Attaques des tours (cible : ennemi à portée le plus proche)
             for (Tower tower : towers) {
+                if (tower.isDestroyed()) {
+                    // Détruite par un Sapeur plus tôt dans la simulation (la liste
+                    // `towers` capturée en début de méthode garde une référence
+                    // vers l'objet, même après sa suppression de `map`) : ne tire plus.
+                    continue;
+                }
+
                 if (tower.getType().damageType == DamageType.CONTINUOUS) {
                     // Pas de cooldown : un rayon continu tape chaque tick tant qu'une
                     // cible est en portée (voir TowerType pour le rééquilibrage de
@@ -183,7 +217,8 @@ public class WaveSimulationService {
                             enemy.getCurrentHp(), enemy.getMaxHp()))
                     .toList();
 
-            ticks.add(new TickSnapshot(tick, snapshot, damageEvents, deaths, reached, castle.getHp()));
+            ticks.add(new TickSnapshot(tick, snapshot, damageEvents, towerDamageEvents, deaths, reached,
+                    destroyedTowers, castle.getHp()));
 
             boolean allResolved = wave.getEnemies().stream()
                     .allMatch(enemy -> enemy.isDead() || escaped.contains(enemy.getId()));
@@ -235,5 +270,110 @@ public class WaveSimulationService {
         }
 
         return best;
+    }
+
+    /**
+     * Gère le comportement d'un Sapeur (EnemyType.attacksTowers) pour ce tick.
+     *
+     * Première fois appelé pour un Sapeur donné : choisit la tour la plus proche
+     * sur toute la map, sans limite de portée (comportement confirmé : « fonce sur
+     * la tour la plus proche »), puis s'y accroche jusqu'à sa destruction — il ne
+     * change jamais de cible en cours de route, même si une autre tour devient
+     * plus proche pendant le trajet.
+     *
+     * Une fois à portée de mêlée, il s'arrête et inflige des dégâts de siège
+     * chaque tick au lieu d'avancer. Quand la tour tombe, elle est retirée de la
+     * map (case définitivement libérée — confirmé), et le Sapeur reprend sa route
+     * vers le château au point du chemin le plus proche de sa position actuelle ;
+     * il est alors marqué comme ayant fini d'assiéger et ne déviera plus jamais,
+     * même si d'autres tours existent encore.
+     *
+     * @return true si ce tick a été consommé par ce comportement (déplacement
+     *         hors chemin ou attaque) ; false si aucune tour n'existe sur la map,
+     *         auquel cas l'appelant doit appliquer le suivi de chemin normal.
+     */
+    private boolean handleSapperTick(Enemy enemy, GameMap map, List<Position> path,
+                                      Map<UUID, Double> progress, Map<UUID, UUID> siegeTargets,
+                                      List<TowerDamageEvent> towerDamageEvents, List<UUID> destroyedTowers,
+                                      Set<UUID> sappersFinishedSieging) {
+        UUID targetId = siegeTargets.get(enemy.getId());
+        Tower target;
+
+        if (targetId == null) {
+            target = findClosestTower(enemy, map.getTowers());
+            if (target == null) {
+                return false; // Aucune tour sur la map : suit le chemin normalement.
+            }
+            siegeTargets.put(enemy.getId(), target.getId());
+        } else {
+            target = map.getTowerById(targetId).orElse(null);
+            if (target == null) {
+                // Garde-fou : ne devrait pas arriver (la cible est retirée des
+                // siegeTargets dès sa destruction, voir plus bas).
+                return false;
+            }
+        }
+
+        double dx = target.getX() - enemy.getX();
+        double dy = target.getY() - enemy.getY();
+        double dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist <= SIEGE_MELEE_RANGE) {
+            target.takeSiegeDamage(enemy.getType().siegeDamage);
+            towerDamageEvents.add(new TowerDamageEvent(enemy.getId(), target.getId(), enemy.getType().siegeDamage));
+
+            if (target.isDestroyed()) {
+                map.removeTower(target.getX(), target.getY());
+                destroyedTowers.add(target.getId());
+                siegeTargets.remove(enemy.getId());
+                sappersFinishedSieging.add(enemy.getId());
+                // Reprend la route vers le château au point du chemin le plus
+                // proche de sa position actuelle — pas de téléportation au
+                // début du chemin, juste une reprise cohérente de la progression.
+                progress.put(enemy.getId(), nearestPathIndex(enemy, path));
+            }
+        } else {
+            double speed = enemy.getType().speed;
+            enemy.moveTo(enemy.getX() + (dx / dist) * speed, enemy.getY() + (dy / dist) * speed);
+        }
+
+        return true;
+    }
+
+    /** Tour la plus proche d'un ennemi donné, sans limite de distance. Null si la map n'a aucune tour. */
+    private Tower findClosestTower(Enemy enemy, List<Tower> towers) {
+        Tower best = null;
+        double bestDistSq = Double.MAX_VALUE;
+
+        for (Tower tower : towers) {
+            double dx = tower.getX() - enemy.getX();
+            double dy = tower.getY() - enemy.getY();
+            double distSq = dx * dx + dy * dy;
+            if (distSq < bestDistSq) {
+                bestDistSq = distSq;
+                best = tower;
+            }
+        }
+
+        return best;
+    }
+
+    /** Index du point du chemin le plus proche de la position courante d'un ennemi qui en a dévié. */
+    private double nearestPathIndex(Enemy enemy, List<Position> path) {
+        int bestIndex = 0;
+        double bestDistSq = Double.MAX_VALUE;
+
+        for (int i = 0; i < path.size(); i++) {
+            Position p = path.get(i);
+            double dx = p.x() - enemy.getX();
+            double dy = p.y() - enemy.getY();
+            double distSq = dx * dx + dy * dy;
+            if (distSq < bestDistSq) {
+                bestDistSq = distSq;
+                bestIndex = i;
+            }
+        }
+
+        return bestIndex;
     }
 }

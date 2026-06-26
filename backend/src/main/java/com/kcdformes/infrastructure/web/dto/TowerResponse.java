@@ -18,7 +18,12 @@ public record TowerResponse(
         // de dégâts (zone, mono-cible, continu) sans dupliquer la logique de
         // TowerType côté client — voir GameScene.ts pour le rendu des effets.
         DamageType damageType,
-        double splashRadius
+        double splashRadius,
+        // PV courants / max de la structure elle-même (distincts des PV des
+        // ennemis) — permettent au frontend d'afficher une barre de vie de tour
+        // et de refléter les dégâts de siège d'un Sapeur (voir Tower.hp/getMaxHp).
+        int hp,
+        int maxHp
 ) {
     public static TowerResponse from(Tower tower) {
         return new TowerResponse(
@@ -30,7 +35,9 @@ public record TowerResponse(
                 tower.getDamage(),
                 tower.getRange(),
                 tower.getType().damageType,
-                tower.getType().splashRadius
+                tower.getType().splashRadius,
+                tower.getHp(),
+                tower.getMaxHp()
         );
     }
 }

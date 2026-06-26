@@ -102,4 +102,51 @@ class WaveFactoryTest {
         assertThat(dkCountWave10).isEqualTo(1);
         assertThat(dkCountWave40).isGreaterThan(dkCountWave10);
     }
+
+    @Test
+    @DisplayName("Le Troll apparaît dès la vague 3 (seuil avancé de la vague 6 à la vague 3)")
+    void createWave_wave3_containsTroll() {
+        Wave wave3 = waveFactory.createWave(3, spawn);
+
+        assertThat(wave3.getEnemies()).anyMatch(e -> e.getType() == EnemyType.TROLL);
+    }
+
+    @Test
+    @DisplayName("Aucun Troll avant la vague 3")
+    void createWave_beforeWave3_noTroll() {
+        Wave wave1 = waveFactory.createWave(1, spawn);
+        Wave wave2 = waveFactory.createWave(2, spawn);
+
+        assertThat(wave1.getEnemies()).noneMatch(e -> e.getType() == EnemyType.TROLL);
+        assertThat(wave2.getEnemies()).noneMatch(e -> e.getType() == EnemyType.TROLL);
+    }
+
+    @Test
+    @DisplayName("Le Sapeur (ennemi destructeur de tours) apparaît à partir de la vague 5")
+    void createWave_wave5_containsSapeur() {
+        Wave wave5 = waveFactory.createWave(5, spawn);
+
+        assertThat(wave5.getEnemies()).anyMatch(e -> e.getType() == EnemyType.SAPEUR);
+    }
+
+    @Test
+    @DisplayName("Aucun Sapeur avant la vague 5")
+    void createWave_beforeWave5_noSapeur() {
+        Wave wave4 = waveFactory.createWave(4, spawn);
+
+        assertThat(wave4.getEnemies()).noneMatch(e -> e.getType() == EnemyType.SAPEUR);
+    }
+
+    @Test
+    @DisplayName("Le nombre de Sapeurs augmente avec le numéro de vague")
+    void createWave_sapeurCount_growsWithWaveNumber() {
+        Wave wave5 = waveFactory.createWave(5, spawn);
+        Wave wave20 = waveFactory.createWave(20, spawn);
+
+        long sapeurCountWave5 = wave5.getEnemies().stream().filter(e -> e.getType() == EnemyType.SAPEUR).count();
+        long sapeurCountWave20 = wave20.getEnemies().stream().filter(e -> e.getType() == EnemyType.SAPEUR).count();
+
+        assertThat(sapeurCountWave5).isEqualTo(1);
+        assertThat(sapeurCountWave20).isGreaterThan(sapeurCountWave5);
+    }
 }

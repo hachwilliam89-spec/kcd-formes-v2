@@ -12,6 +12,11 @@ interface Tower {
     // utilisé par GameScene pour distinguer visuellement zone/mono-cible/continu.
     damageType: 'SINGLE_TARGET' | 'AOE' | 'CONTINUOUS'
     splashRadius: number
+    // PV courants / max de la structure elle-même — un Sapeur (ennemi qui dévie
+    // du chemin pour détruire une tour, voir GameScene) les réduit en cours de
+    // vague ; à 0, la tour est définitivement détruite côté backend.
+    hp: number
+    maxHp: number
 }
 
 interface GameMap {

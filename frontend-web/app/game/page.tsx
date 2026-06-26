@@ -37,7 +37,7 @@ export default function GamePage() {
     const { handleLogout } = useAuth()
     const {
         gameId, map, waveNumber, gold, castleHp, castleMaxHp, status,
-        createGame, placeTower, upgradeTower, startWave, resetGame,
+        createGame, placeTower, upgradeTower, startWave, refreshGame, resetGame,
     } = useGame()
 
     const canvasRef = useRef<GameCanvasHandle>(null)
@@ -129,6 +129,12 @@ export default function GamePage() {
                     setCombatRunning(false)
                     setLoading(false)
                     refreshBestWave()
+                    // Un Sapeur peut avoir détruit une tour pendant la vague (case libérée
+                    // côté backend) : on recharge la map pour que l'affichage des tours et
+                    // de leurs PV reflète l'état réel après combat.
+                    refreshGame().catch(() => {
+                        // best-effort : un échec n'empêche pas d'afficher le résultat de la vague.
+                    })
                     if (data.gameStatus === 'DEFEAT') {
                         setIsGameOver(true)
                         setMessage(`Le château est tombé à la vague ${data.number}. Partie terminée.`)

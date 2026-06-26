@@ -177,6 +177,11 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
 
         WaveSimulationService.SimulationResult result = waveSimulationService.simulate(map, wave, castle);
 
+        // Persiste la map : un Sapeur peut avoir détruit une tour pendant la
+        // simulation (mutation de `map` en mémoire) — sans cette sauvegarde,
+        // la tour détruite réapparaîtrait intacte au prochain chargement.
+        gameRepositoryAdapter.saveMap(castleEntity.getId(), map);
+
         // Persiste les effets de la vague : vie du château, or de la partie, statut.
         castleEntity.setHp(castle.getHp());
         castleJpaRepository.save(castleEntity);

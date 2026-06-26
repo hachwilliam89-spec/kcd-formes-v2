@@ -57,13 +57,27 @@ public class WaveFactory {
             }
         }
 
-        // Auparavant fixé à 1 occurrence indéfiniment (seuls Goblin/Orc montaient en
-        // nombre) : au-delà de la vague 6, le nombre de Trolls n'augmentait plus jamais,
-        // ce qui plafonnait la difficulté qu'ils apportent. +1 Troll toutes les 4 vagues.
-        if (waveNumber >= 6) {
-            int trollCount = 1 + (waveNumber - 6) / 4;
+        // Seuil avancé de la vague 6 à la vague 3 (passe de durcissement demandée) :
+        // le Troll, ennemi résistant, doit peser sur la difficulté dès le début de
+        // partie plutôt qu'après plusieurs vagues de mise en place tranquille.
+        // +1 Troll toutes les 4 vagues à partir de là (au-delà de la vague 6,
+        // le nombre de Trolls n'augmentait plus jamais sinon, ce qui plafonnait
+        // la difficulté qu'ils apportent).
+        if (waveNumber >= 3) {
+            int trollCount = 1 + (waveNumber - 3) / 4;
             for (int i = 0; i < trollCount; i++) {
                 enemies.add(spawnEnemy(EnemyType.TROLL, spawn, waveNumber, spawnIndex++));
+            }
+        }
+
+        // Nouvel ennemi (vague >= 5, voir EnemyType.SAPEUR) : introduit après le
+        // Troll pour laisser au joueur le temps de poser ses premières tours
+        // avant de devoir composer avec un ennemi qui peut les détruire.
+        // +1 Sapeur toutes les 5 vagues.
+        if (waveNumber >= 5) {
+            int sapeurCount = 1 + (waveNumber - 5) / 5;
+            for (int i = 0; i < sapeurCount; i++) {
+                enemies.add(spawnEnemy(EnemyType.SAPEUR, spawn, waveNumber, spawnIndex++));
             }
         }
 

@@ -15,6 +15,11 @@ export interface TowerData {
     // logique de profil de dégâts définie dans TowerType côté Java.
     damageType?: 'SINGLE_TARGET' | 'AOE' | 'CONTINUOUS'
     splashRadius?: number
+    // PV courants/max de la structure — absents tant que le backend n'a pas
+    // été redéployé avec le champ (voir GameMapMapper) ; dans ce cas on ne
+    // dessine simplement pas de barre de vie pour la tour.
+    hp?: number
+    maxHp?: number
 }
 
 export interface EnemySnapshot {
@@ -32,12 +37,23 @@ export interface DamageEvent {
     damage: number
 }
 
+// Dégât infligé par un Sapeur à la tour qu'il assiège (voir
+// WaveSimulationService.TowerDamageEvent côté backend) — distinct de
+// DamageEvent (tour → ennemi) puisque le sens de l'attaque est inversé ici.
+export interface TowerDamageEvent {
+    enemyId: string
+    towerId: string
+    damage: number
+}
+
 export interface TickSnapshot {
     tick: number
     enemies: EnemySnapshot[]
     damageEvents: DamageEvent[]
+    towerDamageEvents: TowerDamageEvent[]
     deaths: string[]
     reachedCastle: string[]
+    destroyedTowers: string[]
     castleHp: number
 }
 
@@ -55,7 +71,12 @@ const ENEMY_COLORS: Record<string, number> = {
     ORC: 0xb45309,         // marron
     TROLL: 0x6b7280,       // gris
     DARK_KNIGHT: 0x4338ca, // violet sombre
+    SAPEUR: 0xdc2626,      // rouge — signale visuellement la menace sur les tours
 }
+
+// Couleur de la ligne de siège (Sapeur → tour visée), distincte des couleurs
+// de tir des tours pour ne jamais être confondue avec une attaque de tour.
+const SIEGE_LINE_COLOR = 0xdc2626
 
 export class GameScene extends Phaser.Scene {
     private gridGraphics!: Phaser.GameObjects.Graphics
@@ -143,6 +164,22 @@ export class GameScene extends Phaser.Scene {
                 tower.type[0],
                 { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }
             ).setOrigin(0.5)
+
+            // Barre de vie de la structure elle-même — affichée uniquement si la
+            // tour a déjà subi des dégâts de siège (Sapeur) ; une tour intacte ou
+            // dont le backend n'envoie pas encore hp/maxHp ne l'affiche pas, pour
+            // ne pas surcharger l'écran en l'absence de menace.
+            if (tower.hp != null && tower.maxHp != null && tower.hp < tower.maxHp) {
+                const hpRatio = tower.maxHp > 0 ? Math.max(0, tower.hp / tower.maxHp) : 0
+                const barWidth = CELL_SIZE * 0.8
+                const barX = px + CELL_SIZE / 2 - barWidth / 2
+                const barY = py - 6
+
+                this.towersGraphics.fillStyle(0x000000, 0.5)
+                this.towersGraphics.fillRect(barX, barY, barWidth, 4)
+                this.towersGraphics.fillStyle(hpRatio > 0.3 ? 0x22c55e : 0xef4444, 1)
+                this.towersGraphics.fillRect(barX, barY, barWidth * hpRatio, 4)
+            }
         })
     }
 
@@ -172,8 +209,19 @@ export class GameScene extends Phaser.Scene {
             }
 
             const tick = ticks[index]
+
+            // Une tour détruite par un Sapeur ce tick doit disparaître immédiatement
+            // de l'affichage (et de towersById, sinon drawEffects continuerait de lui
+            // trouver une position pour d'éventuels événements résiduels) — on
+            // redessine donc towersGraphics dès qu'une destruction survient, plutôt
+            // que d'attendre le prochain drawTowers() déclenché par React.
+            if (tick.destroyedTowers.length > 0) {
+                tick.destroyedTowers.forEach((towerId) => this.towersById.delete(towerId))
+                this.drawTowers(Array.from(this.towersById.values()))
+            }
+
             this.drawEnemies(tick.enemies)
-            this.drawEffects(tick.damageEvents, tick.enemies)
+            this.drawEffects(tick.damageEvents, tick.towerDamageEvents, tick.enemies)
             onTick?.(tick.castleHp)
             index++
         }
@@ -223,11 +271,32 @@ export class GameScene extends Phaser.Scene {
      * le continu sont indistinguables du mono-cible à l'écran : seule la
      * barre de vie de l'ennemi bouge, sans indice sur la cause.
      */
-    private drawEffects(damageEvents: DamageEvent[], enemies: EnemySnapshot[]) {
+    private drawEffects(
+        damageEvents: DamageEvent[],
+        towerDamageEvents: TowerDamageEvent[],
+        enemies: EnemySnapshot[]
+    ) {
         this.effectsGraphics.clear()
-        if (damageEvents.length === 0) return
+        if (damageEvents.length === 0 && towerDamageEvents.length === 0) return
 
         const enemyById = new Map(enemies.map((e) => [e.id, e]))
+
+        // Ligne de siège : un Sapeur qui attaque une tour — sens inverse des
+        // DamageEvent habituels (ennemi → tour, pas tour → ennemi), donc tracée
+        // à part avec sa propre couleur pour rester immédiatement identifiable.
+        towerDamageEvents.forEach((event) => {
+            const tower = this.towersById.get(event.towerId)
+            const enemy = enemyById.get(event.enemyId)
+            if (!tower || !enemy) return
+
+            const towerPx = tower.x * CELL_SIZE + CELL_SIZE / 2
+            const towerPy = tower.y * CELL_SIZE + CELL_SIZE / 2
+            const enemyPx = enemy.x * CELL_SIZE + CELL_SIZE / 2
+            const enemyPy = enemy.y * CELL_SIZE + CELL_SIZE / 2
+
+            this.effectsGraphics.lineStyle(3, SIEGE_LINE_COLOR, 0.9)
+            this.effectsGraphics.lineBetween(enemyPx, enemyPy, towerPx, towerPy)
+        })
 
         damageEvents.forEach((event) => {
             const tower = this.towersById.get(event.towerId)
