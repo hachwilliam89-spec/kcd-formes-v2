@@ -27,7 +27,8 @@ public class GameMapMapper {
 
         List<Map<String, Object>> towers = map.getTowers().stream()
                 .map(t -> Map.of(
-                        "x", (Object) t.getX(),
+                        "id", (Object) t.getId().toString(),
+                        "x", t.getX(),
                         "y", t.getY(),
                         "type", t.getType().name(),
                         "level", t.getLevel()
@@ -57,7 +58,15 @@ public class GameMapMapper {
             int x = (int) t.get("x");
             int y = (int) t.get("y");
             int level = (int) t.get("level");
-            map.placeTower(new Tower(UUID.randomUUID(), type, x, y, level));
+            // Réutilise l'id persisté pour que les damageEvents de la simulation
+            // (towerId) restent réconciliables avec les tours déjà connues du
+            // frontend (TowerResponse renvoyé à la pose) — sinon chaque rechargement
+            // depuis la base invente un nouvel id et casse tout rendu d'effet côté
+            // client (voir GameScene.drawEffects). Fallback sur un id aléatoire
+            // uniquement pour les parties déjà persistées avant ce correctif.
+            Object rawId = t.get("id");
+            UUID id = rawId != null ? UUID.fromString((String) rawId) : UUID.randomUUID();
+            map.placeTower(new Tower(id, type, x, y, level));
         }
 
         return map;

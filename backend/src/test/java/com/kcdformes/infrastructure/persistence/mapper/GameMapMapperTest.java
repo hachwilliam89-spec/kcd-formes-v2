@@ -40,6 +40,19 @@ class GameMapMapperTest {
     }
 
     @Test
+    @DisplayName("Round-trip JSON préserve l'id des tours (réconciliable avec les damageEvents de la simulation)")
+    void toJsonThenFromJson_preservesTowerId() {
+        GameMap map = new GameMap(20, 15, new Position(0, 7), new Position(19, 7));
+        Tower mage = new Tower(TowerType.MAGE, 5, 8);
+        map.placeTower(mage);
+
+        GameMap reloaded = mapper.fromJson(mapper.toJson(map));
+
+        Tower reloadedMage = reloaded.getTowerAt(5, 8).orElseThrow();
+        assertThat(reloadedMage.getId()).isEqualTo(mage.getId());
+    }
+
+    @Test
     @DisplayName("Une map sans tour round-trip vers une liste vide")
     void toJsonThenFromJson_noTowers_returnsEmptyList() {
         GameMap map = new GameMap(20, 15, new Position(0, 7), new Position(19, 7));
