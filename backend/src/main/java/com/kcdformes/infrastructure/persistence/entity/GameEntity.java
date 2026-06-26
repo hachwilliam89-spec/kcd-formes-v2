@@ -33,6 +33,16 @@ public class GameEntity {
     @Column(nullable = false)
     private int gold = 0;
 
+    /**
+     * Graine aléatoire de cette partie, générée une seule fois à sa création
+     * (voir GameService.createGame). Permet à WaveFactory de varier la
+     * composition/l'ordre des vagues d'une partie à l'autre tout en restant
+     * reproductible au sein d'une même partie (même seed + même numéro de
+     * vague => même résultat si la vague est recalculée).
+     */
+    @Column(nullable = false)
+    private long seed;
+
     @Column(name = "started_at", nullable = false, updatable = false)
     private OffsetDateTime startedAt = OffsetDateTime.now();
 
@@ -60,6 +70,9 @@ public class GameEntity {
 
     public int getGold() { return gold; }
     public void setGold(int gold) { this.gold = gold; }
+
+    public long getSeed() { return seed; }
+    public void setSeed(long seed) { this.seed = seed; }
 
     public OffsetDateTime getStartedAt() { return startedAt; }
     public OffsetDateTime getEndedAt() { return endedAt; }
