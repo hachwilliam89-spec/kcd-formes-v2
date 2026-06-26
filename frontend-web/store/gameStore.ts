@@ -50,6 +50,7 @@ interface GameState {
     }) => void
 
     addTower: (tower: Tower) => void
+    upgradeTower: (tower: Tower) => void
     spendGold: (amount: number) => void
     setCastleHp: (hp: number) => void
     applyWaveResult: (result: WaveResult) => void
@@ -82,6 +83,18 @@ export const useGameStore = create<GameState>()((set) => ({
         set((state) => ({
             map: state.map
                 ? { ...state.map, towers: [...state.map.towers, tower] }
+                : null,
+        })),
+
+    // Remplace la tour existante (même id) par sa version mise à jour renvoyée par
+    // le backend après amélioration (niveau, dégâts, portée recalculés).
+    upgradeTower: (tower) =>
+        set((state) => ({
+            map: state.map
+                ? {
+                      ...state.map,
+                      towers: state.map.towers.map((t) => (t.id === tower.id ? tower : t)),
+                  }
                 : null,
         })),
 

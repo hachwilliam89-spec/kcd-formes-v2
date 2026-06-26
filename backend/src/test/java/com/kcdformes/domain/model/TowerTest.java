@@ -36,4 +36,25 @@ class TowerTest {
 
         assertThat(tower.canTarget(enemy)).isFalse();
     }
+
+    @Test
+    @DisplayName("Coût d'amélioration niveau 1 == coût d'une tour neuve du même type")
+    void getUpgradeCost_atLevel1_equalsBaseCost() {
+        Tower tower = new Tower(TowerType.ARCHER, 2, 3);
+        assertThat(tower.getUpgradeCost()).isEqualTo(TowerType.ARCHER.baseCost);
+    }
+
+    @Test
+    @DisplayName("Coût d'amélioration grimpe avec le niveau (x2 au niveau 2, x3 au niveau 3...)")
+    void getUpgradeCost_growsWithLevel() {
+        Tower tower = new Tower(TowerType.CATAPULT, 2, 3);
+
+        assertThat(tower.getUpgradeCost()).isEqualTo(TowerType.CATAPULT.baseCost); // niveau 1
+
+        tower.upgrade(); // niveau 2
+        assertThat(tower.getUpgradeCost()).isEqualTo(TowerType.CATAPULT.baseCost * 2);
+
+        tower.upgrade(); // niveau 3
+        assertThat(tower.getUpgradeCost()).isEqualTo(TowerType.CATAPULT.baseCost * 3);
+    }
 }

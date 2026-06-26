@@ -37,6 +37,12 @@ public class GameMap {
         return Optional.ofNullable(towers.get(key(x, y)));
     }
 
+    /** Recherche par id (ex. amélioration d'une tour existante) — distinct de getTowerAt,
+     * qui indexe par position. */
+    public Optional<Tower> getTowerById(UUID id) {
+        return towers.values().stream().filter(t -> t.getId().equals(id)).findFirst();
+    }
+
     public boolean isCellBlocked(int x, int y) {
         return towers.containsKey(key(x, y));
     }

@@ -44,6 +44,18 @@ public class Tower {
         this.level++;
     }
 
+    /**
+     * Coût en or pour passer cette tour au niveau suivant (calculé sur le niveau
+     * COURANT, avant l'incrément). Calé sur baseCost * level : au niveau 1,
+     * améliorer coûte autant que poser une tour neuve du même type — un vrai choix
+     * à chaque fois, pas un coup gratuit — puis le coût grimpe avec le niveau
+     * (x2, x3, ...) pour que réinvestir dans une tour existante reste un sacrifice
+     * face à l'achat de nouvelles tours faibles.
+     */
+    public int getUpgradeCost() {
+        return type.baseCost * level;
+    }
+
     public UUID getId() { return id; }
     public TowerType getType() { return type; }
     public int getX() { return x; }

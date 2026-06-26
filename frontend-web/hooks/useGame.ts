@@ -8,7 +8,7 @@ export function useGame() {
     const { player } = useAuthStore()
     const {
         gameId, map, waveNumber, gold, castleHp, castleMaxHp, status,
-        setGame, addTower, spendGold, applyWaveResult, reset,
+        setGame, addTower, upgradeTower: upgradeTowerInStore, spendGold, applyWaveResult, reset,
     } = useGameStore()
 
     async function createGame() {
@@ -27,6 +27,14 @@ export function useGame() {
             y,
         })
         addTower(data)
+        spendGold(cost)
+        return data
+    }
+
+    async function upgradeTower(towerId: string, cost: number) {
+        if (!gameId) throw new Error('Aucune partie en cours')
+        const { data } = await api.post(`/api/v1/games/${gameId}/towers/${towerId}/upgrade`)
+        upgradeTowerInStore(data)
         spendGold(cost)
         return data
     }
@@ -59,6 +67,7 @@ export function useGame() {
         status,
         createGame,
         placeTower,
+        upgradeTower,
         startWave,
         resetGame,
     }

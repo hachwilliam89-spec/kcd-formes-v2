@@ -5,9 +5,11 @@ import com.kcdformes.domain.exception.TowerNotUnlockedException;
 import com.kcdformes.domain.model.*;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase;
+import com.kcdformes.domain.port.in.command.UpgradeTowerUseCase;
 import com.kcdformes.domain.port.in.query.GetGameStateUseCase;
 import com.kcdformes.domain.service.PathfindingService;
 import com.kcdformes.domain.service.PlaceTowerService;
+import com.kcdformes.domain.service.UpgradeTowerService;
 import com.kcdformes.domain.service.WaveFactory;
 import com.kcdformes.domain.service.WaveSimulationService;
 import com.kcdformes.infrastructure.persistence.entity.CastleEntity;
@@ -25,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 @Service
-public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGameStateUseCase {
+public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGameStateUseCase, UpgradeTowerUseCase {
 
     /**
      * Or accordé à chaque nouvelle partie. Pas de report d'une partie à l'autre.
@@ -120,6 +122,35 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
 
         // Le placement n'a pas levé d'exception : on débite le coût de la tour
         // du solde de la partie en cours (l'or ne vit plus au niveau du compte).
+        game.setGold(game.getGold() - cost);
+        gameJpaRepository.save(game);
+
+        return tower;
+    }
+
+    @Override
+    @Transactional
+    public Tower upgradeTower(UpgradeTowerCommand command) {
+        GameEntity game = gameJpaRepository.findById(command.gameId())
+                .orElseThrow(() -> new IllegalArgumentException("Game not found: " + command.gameId()));
+
+        UUID castleId = game.getCastle().getId();
+        GameMap map = gameRepositoryAdapter.findMapByGameId(castleId)
+                .orElseThrow(() -> new IllegalArgumentException("Map not found for game: " + command.gameId()));
+
+        Tower existing = map.getTowerById(command.towerId())
+                .orElseThrow(() -> new IllegalArgumentException("Tower not found: " + command.towerId()));
+
+        // Coût calculé sur le niveau courant, avant l'incrément (voir Tower.getUpgradeCost) :
+        // on doit le lire ici, avant que le service domaine n'appelle tower.upgrade().
+        int cost = existing.getUpgradeCost();
+        if (game.getGold() < cost) {
+            throw new InsufficientGoldException(cost, game.getGold());
+        }
+
+        UpgradeTowerService service = new UpgradeTowerService(gameRepositoryAdapter);
+        Tower tower = service.upgradeTower(new UpgradeTowerCommand(castleId, command.towerId()));
+
         game.setGold(game.getGold() - cost);
         gameJpaRepository.save(game);
 

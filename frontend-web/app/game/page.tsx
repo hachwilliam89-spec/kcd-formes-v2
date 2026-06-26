@@ -37,7 +37,7 @@ export default function GamePage() {
     const { handleLogout } = useAuth()
     const {
         gameId, map, waveNumber, gold, castleHp, castleMaxHp, status,
-        createGame, placeTower, startWave, resetGame,
+        createGame, placeTower, upgradeTower, startWave, resetGame,
     } = useGame()
 
     const canvasRef = useRef<GameCanvasHandle>(null)
@@ -89,6 +89,23 @@ export default function GamePage() {
 
     async function handleCellClick(x: number, y: number) {
         if (isGameOver || combatRunning) return
+
+        // Cliquer sur une case déjà occupée améliore la tour en place plutôt que
+        // d'essayer (en vain) d'en poser une nouvelle par-dessus — c'est ce qui
+        // donne au joueur le choix permanent entre poser une tour neuve (faible)
+        // ailleurs ou investir dans une tour existante pour la renforcer.
+        const existingTower = (map?.towers ?? []).find((t) => t.x === x && t.y === y)
+        if (existingTower) {
+            const cost = TOWER_INFO[existingTower.type].cost * existingTower.level
+            try {
+                await upgradeTower(existingTower.id, cost)
+                setMessage(`${TOWER_INFO[existingTower.type].label} améliorée au niveau ${existingTower.level + 1} (-${cost} or)`)
+            } catch {
+                setMessage("Impossible d'améliorer cette tour (or insuffisant)")
+            }
+            return
+        }
+
         const cost = TOWER_INFO[selectedTower].cost
         try {
             await placeTower(selectedTower, x, y, cost)

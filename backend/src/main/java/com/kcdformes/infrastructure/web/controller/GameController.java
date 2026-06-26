@@ -5,6 +5,7 @@ import com.kcdformes.domain.model.Tower;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase.PlaceTowerCommand;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase.StartWaveCommand;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase.StartWaveResult;
+import com.kcdformes.domain.port.in.command.UpgradeTowerUseCase.UpgradeTowerCommand;
 import com.kcdformes.domain.port.in.query.GetGameStateUseCase.GameStateResult;
 import com.kcdformes.infrastructure.persistence.entity.GameEntity;
 import com.kcdformes.infrastructure.web.dto.*;
@@ -51,6 +52,15 @@ public class GameController {
         Tower tower = gameService.placeTower(
                 new PlaceTowerCommand(gameId, request.towerType(), request.x(), request.y()));
         return ResponseEntity.status(HttpStatus.CREATED).body(TowerResponse.from(tower));
+    }
+
+    @PostMapping("/{gameId}/towers/{towerId}/upgrade")
+    public ResponseEntity<TowerResponse> upgradeTower(
+            @PathVariable UUID gameId,
+            @PathVariable UUID towerId,
+            Authentication auth) {
+        Tower tower = gameService.upgradeTower(new UpgradeTowerCommand(gameId, towerId));
+        return ResponseEntity.ok(TowerResponse.from(tower));
     }
 
     @PostMapping("/{gameId}/waves/start")

@@ -15,13 +15,18 @@ public class WaveFactory {
     private static final int SPAWN_INTERVAL_TICKS = 4;
 
     /**
-     * Montée en puissance des PV par vague (+50 % par vague par rapport à la vague 1).
-     * Sans ce facteur, seul le nombre d'ennemis augmente : des tours suffisamment
-     * placées dès les premières vagues tuent alors tout indéfiniment, quelle que
-     * soit la vague atteinte (plus aucun ennemi ne passe jamais). Relevé de 0.35 à
-     * 0.5 : encore trop facile en test local après la première passe.
+     * Montée en puissance des PV par vague : composée (multiplicative), pas additive.
+     * Avec un facteur additif (multiplier = 1 + (wave-1)*0.5), l'avance en or et en
+     * tours du joueur finit toujours par dépasser la croissance des PV sur la durée
+     * (vagues infinies) — la difficulté plafonne et le jeu devient trivial passé un
+     * certain nombre de vagues, quel que soit le réglage du coefficient. Un facteur
+     * composé (multiplier = HP_GROWTH_RATE^(wave-1)) crée un vrai mur de difficulté
+     * à long terme, conforme aux pratiques observées dans les TD à vagues infinies
+     * (Bloons TD, Kingdom Rush...). 1.16 reste proche de l'ancien +50 %/vague sur les
+     * premières vagues (~équivalent jusqu'à la vague 4-5) mais diverge fortement
+     * ensuite — valeur de départ à retester en jeu.
      */
-    private static final double HP_SCALING_PER_WAVE = 0.5;
+    private static final double HP_GROWTH_RATE = 1.16;
 
     /**
      * Décalages perpendiculaires au chemin (en cases), répartis cycliquement entre
@@ -52,12 +57,24 @@ public class WaveFactory {
             }
         }
 
+        // Auparavant fixé à 1 occurrence indéfiniment (seuls Goblin/Orc montaient en
+        // nombre) : au-delà de la vague 6, le nombre de Trolls n'augmentait plus jamais,
+        // ce qui plafonnait la difficulté qu'ils apportent. +1 Troll toutes les 4 vagues.
         if (waveNumber >= 6) {
-            enemies.add(spawnEnemy(EnemyType.TROLL, spawn, waveNumber, spawnIndex++));
+            int trollCount = 1 + (waveNumber - 6) / 4;
+            for (int i = 0; i < trollCount; i++) {
+                enemies.add(spawnEnemy(EnemyType.TROLL, spawn, waveNumber, spawnIndex++));
+            }
         }
 
+        // Idem pour le Chevalier noir (1 occurrence fixe toutes les 5 vagues) : +1
+        // exemplaire supplémentaire toutes les 15 vagues passé la vague 10, plus lent
+        // que le Troll car c'est l'ennemi le plus coûteux à tuer.
         if (waveNumber >= 10 && waveNumber % 5 == 0) {
-            enemies.add(spawnEnemy(EnemyType.DARK_KNIGHT, spawn, waveNumber, spawnIndex++));
+            int darkKnightCount = 1 + (waveNumber - 10) / 15;
+            for (int i = 0; i < darkKnightCount; i++) {
+                enemies.add(spawnEnemy(EnemyType.DARK_KNIGHT, spawn, waveNumber, spawnIndex++));
+            }
         }
 
         return enemies;
@@ -70,7 +87,7 @@ public class WaveFactory {
     }
 
     private int scaledHp(EnemyType type, int waveNumber) {
-        double multiplier = 1 + (waveNumber - 1) * HP_SCALING_PER_WAVE;
+        double multiplier = Math.pow(HP_GROWTH_RATE, waveNumber - 1);
         return (int) Math.round(type.baseHp * multiplier);
     }
 }
