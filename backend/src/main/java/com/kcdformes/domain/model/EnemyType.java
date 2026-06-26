@@ -18,7 +18,9 @@ public enum EnemyType {
      * proche (sans limite de portée) et la détruit à coups de dégâts de siège
      * (voir WaveSimulationService.handleSapperTick) — la tour est perdue
      * définitivement, sa case redevient constructible. S'il survit à sa cible,
-     * il reprend ensuite sa route vers le château sans plus jamais dévier.
+     * il enchaîne ensuite sur la tour suivante la plus proche, et ainsi de
+     * suite jusqu'à ce qu'il ne reste plus aucune tour sur la map ; ce n'est
+     * qu'à ce moment-là qu'il reprend sa route vers le château.
      */
     // PV +20 % (180, au lieu de 150) : le rend plus difficile à abattre en route
     // vers sa tour cible, pour augmenter la pression qu'il met sur le joueur.

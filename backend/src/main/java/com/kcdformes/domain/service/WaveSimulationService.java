@@ -81,10 +81,11 @@ public class WaveSimulationService {
 
         // État du comportement "Sapeur" (EnemyType.attacksTowers), persistant entre
         // les ticks : la tour visée par chaque Sapeur une fois qu'il a dévié du
-        // chemin, et l'ensemble des Sapeurs ayant déjà détruit leur cible (et qui
-        // ne doivent donc plus jamais dévier à nouveau — voir handleSapperTick).
+        // chemin. Quand cette cible est détruite, l'entrée est retirée et le
+        // Sapeur en recherche une nouvelle au tick suivant (voir handleSapperTick) —
+        // il ne reprend sa route vers le château que lorsqu'il ne reste plus
+        // aucune tour sur la map.
         Map<UUID, UUID> siegeTargets = new HashMap<>();
-        Set<UUID> sappersFinishedSieging = new HashSet<>();
 
         Set<UUID> escaped = new HashSet<>();
         List<TickSnapshot> ticks = new ArrayList<>();
@@ -110,9 +111,9 @@ public class WaveSimulationService {
                     continue;
                 }
 
-                if (enemy.getType().attacksTowers && !sappersFinishedSieging.contains(enemy.getId())) {
+                if (enemy.getType().attacksTowers) {
                     boolean diverted = handleSapperTick(enemy, map, path, progress, siegeTargets,
-                            towerDamageEvents, destroyedTowers, sappersFinishedSieging);
+                            towerDamageEvents, destroyedTowers);
                     if (diverted) {
                         // Ce tick a été consommé par le déplacement hors-chemin ou
                         // l'attaque de la tour visée : pas de suivi de chemin normal.
@@ -275,42 +276,46 @@ public class WaveSimulationService {
     /**
      * Gère le comportement d'un Sapeur (EnemyType.attacksTowers) pour ce tick.
      *
-     * Première fois appelé pour un Sapeur donné : choisit la tour la plus proche
-     * sur toute la map, sans limite de portée (comportement confirmé : « fonce sur
-     * la tour la plus proche »), puis s'y accroche jusqu'à sa destruction — il ne
-     * change jamais de cible en cours de route, même si une autre tour devient
-     * plus proche pendant le trajet.
+     * Tant qu'il n'a pas de cible courante (siegeTargets ne contient pas son id) :
+     * choisit la tour la plus proche parmi celles restant sur la map, sans limite
+     * de portée (comportement confirmé : « fonce sur la tour la plus proche »).
+     * Une fois accroché à une cible, il ne la change jamais en cours de route,
+     * même si une autre tour devient plus proche pendant le trajet.
      *
      * Une fois à portée de mêlée, il s'arrête et inflige des dégâts de siège
      * chaque tick au lieu d'avancer. Quand la tour tombe, elle est retirée de la
-     * map (case définitivement libérée — confirmé), et le Sapeur reprend sa route
-     * vers le château au point du chemin le plus proche de sa position actuelle ;
-     * il est alors marqué comme ayant fini d'assiéger et ne déviera plus jamais,
-     * même si d'autres tours existent encore.
+     * map (case définitivement libérée — confirmé) et l'entrée de siegeTargets
+     * est retirée : au tick suivant, ce même Sapeur recherchera la tour la plus
+     * proche parmi celles qui restent et recommencera le cycle (confirmé : « après
+     * une tour détruite, les Sapeurs ciblent une autre »). Il ne reprend sa route
+     * vers le château que lorsqu'il ne reste plus aucune tour sur la map.
      *
      * @return true si ce tick a été consommé par ce comportement (déplacement
-     *         hors chemin ou attaque) ; false si aucune tour n'existe sur la map,
+     *         hors chemin ou attaque) ; false si aucune tour ne reste sur la map,
      *         auquel cas l'appelant doit appliquer le suivi de chemin normal.
      */
     private boolean handleSapperTick(Enemy enemy, GameMap map, List<Position> path,
                                       Map<UUID, Double> progress, Map<UUID, UUID> siegeTargets,
-                                      List<TowerDamageEvent> towerDamageEvents, List<UUID> destroyedTowers,
-                                      Set<UUID> sappersFinishedSieging) {
+                                      List<TowerDamageEvent> towerDamageEvents, List<UUID> destroyedTowers) {
         UUID targetId = siegeTargets.get(enemy.getId());
         Tower target;
 
         if (targetId == null) {
             target = findClosestTower(enemy, map.getTowers());
             if (target == null) {
-                return false; // Aucune tour sur la map : suit le chemin normalement.
+                // Plus aucune tour sur la map (toutes détruites, ou aucune n'a
+                // jamais été posée) : reprend/suit le chemin normalement.
+                return false;
             }
             siegeTargets.put(enemy.getId(), target.getId());
         } else {
             target = map.getTowerById(targetId).orElse(null);
             if (target == null) {
-                // Garde-fou : ne devrait pas arriver (la cible est retirée des
-                // siegeTargets dès sa destruction, voir plus bas).
-                return false;
+                // Garde-fou : la cible a disparu sans repasser par le nettoyage
+                // ci-dessous (ne devrait pas arriver). On retire l'entrée pour
+                // retenter une nouvelle cible dès le prochain tick.
+                siegeTargets.remove(enemy.getId());
+                return true;
             }
         }
 
@@ -325,11 +330,12 @@ public class WaveSimulationService {
             if (target.isDestroyed()) {
                 map.removeTower(target.getX(), target.getY());
                 destroyedTowers.add(target.getId());
+                // Libère la cible : le prochain tick recherchera la tour la plus
+                // proche parmi celles qui restent (voir javadoc ci-dessus). Tient
+                // aussi à jour le point du chemin le plus proche au cas où il ne
+                // resterait plus aucune tour — permet de reprendre la route vers
+                // le château sans téléportation si c'est le cas.
                 siegeTargets.remove(enemy.getId());
-                sappersFinishedSieging.add(enemy.getId());
-                // Reprend la route vers le château au point du chemin le plus
-                // proche de sa position actuelle — pas de téléportation au
-                // début du chemin, juste une reprise cohérente de la progression.
                 progress.put(enemy.getId(), nearestPathIndex(enemy, path));
             }
         } else {

@@ -156,4 +156,38 @@ class WaveSimulationServiceTest {
         assertThat(sapeur.isDead()).isTrue();
         assertThat(map.getTowerAt(5, 5)).isPresent();
     }
+
+    @Test
+    @DisplayName("Un Sapeur qui détruit sa tour cible enchaîne sur la tour suivante la plus proche")
+    void simulate_sapeurChainsToNextClosestTowerAfterDestroyingFirst() {
+        Tower first = new Tower(TowerType.ARCHER, 5, 5);
+        // Hors de portée (3.0) du point de siège (5,6) : ne peut pas tirer sur le
+        // Sapeur avant que celui-ci ne vienne à lui, après la destruction de `first`.
+        Tower second = new Tower(TowerType.ARCHER, 12, 5);
+        map.placeTower(first);
+        map.placeTower(second);
+
+        // À distance 1.0 de `first` dès le départ : c'est la tour la plus proche,
+        // donc la première ciblée (siège immédiat, pas de trajet à simuler).
+        Enemy sapeur = new Enemy(EnemyType.SAPEUR, 5, 6);
+        Wave wave = new Wave(1, List.of(sapeur));
+        wave.start();
+
+        WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
+
+        // Les deux tours doivent avoir été détruites au cours de la simulation :
+        // preuve que le Sapeur a bien enchaîné sur `second` après avoir abattu
+        // `first`, plutôt que de s'arrêter ou de reprendre sa route prématurément.
+        boolean firstDestroyed = result.ticks().stream()
+                .anyMatch(t -> t.destroyedTowers().contains(first.getId()));
+        boolean secondDestroyed = result.ticks().stream()
+                .anyMatch(t -> t.destroyedTowers().contains(second.getId()));
+        assertThat(firstDestroyed).isTrue();
+        assertThat(secondDestroyed).isTrue();
+        assertThat(map.getTowers()).isEmpty();
+
+        // Plus aucune tour sur la map : le Sapeur reprend sa route et finit par
+        // atteindre le château, comme tout ennemi ayant survécu jusqu'au bout du chemin.
+        assertThat(result.castleDamageTaken()).isEqualTo(EnemyType.SAPEUR.castleDamage);
+    }
 }
