@@ -57,6 +57,16 @@ export function useGame() {
         router.push('/')
     }
 
+    // Recharge l'état complet de la partie depuis le backend. Utile après une vague :
+    // un Sapeur peut avoir détruit une tour en cours de simulation (mémoire serveur),
+    // et seul un refetch de la map donne l'état des tours réellement à jour (PV, suppression).
+    async function refreshGame() {
+        if (!gameId) throw new Error('Aucune partie en cours')
+        const { data } = await api.get(`/api/v1/games/${gameId}`)
+        setGame(data)
+        return data
+    }
+
     return {
         gameId,
         map,
@@ -69,6 +79,7 @@ export function useGame() {
         placeTower,
         upgradeTower,
         startWave,
+        refreshGame,
         resetGame,
     }
 }

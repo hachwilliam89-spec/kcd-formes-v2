@@ -5,8 +5,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.stream.IntStream;
+
 import static org.assertj.core.api.Assertions.*;
 
+/**
+ * Depuis l'introduction du seed de partie, WaveFactory n'est plus 100 %
+ * déterministe par numéro de vague seul (voir sa javadoc) : ces tests
+ * utilisent donc soit des seeds fixes (pour vérifier un résultat exact et
+ * reproductible), soit des bornes/invariants valables pour n'importe quel
+ * seed, plutôt que des comptes strictement égaux comme avant.
+ */
 class WaveFactoryTest {
 
     private WaveFactory waveFactory;
@@ -19,38 +29,41 @@ class WaveFactoryTest {
     }
 
     @Test
-    @DisplayName("Wave 1 — only goblins")
+    @DisplayName("Wave 1 — only goblins, quel que soit le seed")
     void createWave_wave1_containsOnlyGoblins() {
-        Wave wave = waveFactory.createWave(1, spawn);
+        // Le seuil Orc/Troll/Sapeur est jitteré mais jamais sous 2 (voir
+        // WaveFactory.eliteThreshold) : la vague 1 doit donc toujours rester
+        // 100% Goblin, peu importe le seed de la partie.
+        for (long seed : List.of(0L, 1L, 2L, 42L, -7L, Long.MAX_VALUE, Long.MIN_VALUE)) {
+            Wave wave = waveFactory.createWave(1, spawn, seed);
 
-        assertThat(wave.getEnemies()).isNotEmpty();
-        assertThat(wave.getEnemies())
-                .allMatch(e -> e.getType() == EnemyType.GOBLIN);
+            assertThat(wave.getEnemies()).isNotEmpty();
+            assertThat(wave.getEnemies())
+                    .allMatch(e -> e.getType() == EnemyType.GOBLIN);
+        }
     }
 
     @Test
-    @DisplayName("Wave 3 — contains orcs")
-    void createWave_wave3_containsOrcs() {
-        Wave wave = waveFactory.createWave(3, spawn);
+    @DisplayName("Wave 6 — contient toujours au moins un Orc, un Troll et un Sapeur")
+    void createWave_wave6_alwaysContainsEliteMix() {
+        // Le seuil jitteré vaut au plus 4 (voir eliteThreshold) : la vague 6 est
+        // donc toujours au-delà du seuil, quel que soit le seed, et le minimum
+        // garanti (minGuaranteed=1, voir ThreatBudgetMix) assure la présence
+        // d'au moins une occurrence de chaque type du mix.
+        for (long seed : List.of(0L, 1L, 2L, 42L, -7L)) {
+            Wave wave = waveFactory.createWave(6, spawn, seed);
 
-        assertThat(wave.getEnemies())
-                .anyMatch(e -> e.getType() == EnemyType.ORC);
-    }
-
-    @Test
-    @DisplayName("Wave 6 — contains a troll")
-    void createWave_wave6_containsTroll() {
-        Wave wave = waveFactory.createWave(6, spawn);
-
-        assertThat(wave.getEnemies())
-                .anyMatch(e -> e.getType() == EnemyType.TROLL);
+            assertThat(wave.getEnemies()).anyMatch(e -> e.getType() == EnemyType.ORC);
+            assertThat(wave.getEnemies()).anyMatch(e -> e.getType() == EnemyType.TROLL);
+            assertThat(wave.getEnemies()).anyMatch(e -> e.getType() == EnemyType.SAPEUR);
+        }
     }
 
     @Test
     @DisplayName("Wave number increases difficulty")
     void createWave_laterWaves_haveMoreEnemies() {
-        Wave wave1 = waveFactory.createWave(1, spawn);
-        Wave wave5 = waveFactory.createWave(5, spawn);
+        Wave wave1 = waveFactory.createWave(1, spawn, 123L);
+        Wave wave5 = waveFactory.createWave(5, spawn, 123L);
 
         assertThat(wave5.getEnemies().size())
                 .isGreaterThan(wave1.getEnemies().size());
@@ -59,8 +72,8 @@ class WaveFactoryTest {
     @Test
     @DisplayName("La croissance des PV est composée : la vague 20 dépasse largement ce qu'un facteur additif donnerait")
     void createWave_hpGrowth_isCompoundedNotLinear() {
-        Wave wave1 = waveFactory.createWave(1, spawn);
-        Wave wave20 = waveFactory.createWave(20, spawn);
+        Wave wave1 = waveFactory.createWave(1, spawn, 1L);
+        Wave wave20 = waveFactory.createWave(20, spawn, 1L);
 
         int goblinHpWave1 = wave1.getEnemies().get(0).getMaxHp();
         int goblinHpWave20 = wave20.getEnemies().stream()
@@ -78,28 +91,109 @@ class WaveFactoryTest {
     }
 
     @Test
-    @DisplayName("Le nombre de Trolls augmente avec le numéro de vague (plus seulement 1 fixe)")
-    void createWave_trollCount_growsWithWaveNumber() {
-        Wave wave6 = waveFactory.createWave(6, spawn);
-        Wave wave14 = waveFactory.createWave(14, spawn);
+    @DisplayName("Le budget de menace Orc/Troll/Sapeur augmente avec le numéro de vague")
+    void eliteBudget_growsWithWaveNumber() {
+        int threshold = 3; // valeur arbitraire fixe, seule la formule est testée ici
+        int budgetAtThreshold = WaveFactory.eliteBudget(threshold, threshold);
+        int budgetMuchLater = WaveFactory.eliteBudget(threshold + 14, threshold);
 
-        long trollCountWave6 = wave6.getEnemies().stream().filter(e -> e.getType() == EnemyType.TROLL).count();
-        long trollCountWave14 = wave14.getEnemies().stream().filter(e -> e.getType() == EnemyType.TROLL).count();
-
-        assertThat(trollCountWave6).isEqualTo(1);
-        assertThat(trollCountWave14).isGreaterThan(trollCountWave6);
+        assertThat(budgetMuchLater).isGreaterThan(budgetAtThreshold);
     }
 
     @Test
-    @DisplayName("Le nombre de Chevaliers noirs augmente avec le numéro de vague (plus seulement 1 fixe)")
-    void createWave_darkKnightCount_growsWithWaveNumber() {
-        Wave wave10 = waveFactory.createWave(10, spawn);
-        Wave wave40 = waveFactory.createWave(40, spawn);
+    @DisplayName("Le mix Orc/Troll/Sapeur ne dépasse jamais son budget de menace")
+    void eliteMix_neverExceedsBudget() {
+        for (long seed : List.of(0L, 1L, 2L, 42L, -7L)) {
+            int threshold = WaveFactory.eliteThreshold(seed);
+            for (int waveNumber = threshold; waveNumber <= threshold + 20; waveNumber++) {
+                Wave wave = waveFactory.createWave(waveNumber, spawn, seed);
 
-        long dkCountWave10 = wave10.getEnemies().stream().filter(e -> e.getType() == EnemyType.DARK_KNIGHT).count();
-        long dkCountWave40 = wave40.getEnemies().stream().filter(e -> e.getType() == EnemyType.DARK_KNIGHT).count();
+                long orcCount = wave.getEnemies().stream().filter(e -> e.getType() == EnemyType.ORC).count();
+                long trollCount = wave.getEnemies().stream().filter(e -> e.getType() == EnemyType.TROLL).count();
+                long sapeurCount = wave.getEnemies().stream().filter(e -> e.getType() == EnemyType.SAPEUR).count();
 
-        assertThat(dkCountWave10).isEqualTo(1);
-        assertThat(dkCountWave40).isGreaterThan(dkCountWave10);
+                int spent = (int) (orcCount * EnemyType.ORC.goldReward
+                        + trollCount * EnemyType.TROLL.goldReward
+                        + sapeurCount * EnemyType.SAPEUR.goldReward);
+
+                assertThat(spent).isLessThanOrEqualTo(WaveFactory.eliteBudget(waveNumber, threshold));
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Le nombre de Chevaliers noirs augmente avec le numéro de vague (formule)")
+    void darkKnightCount_growsWithWaveNumber() {
+        int threshold = 10; // valeur arbitraire fixe, seule la formule est testée ici
+        int countAtThreshold = WaveFactory.darkKnightCount(threshold, threshold);
+        int countMuchLater = WaveFactory.darkKnightCount(threshold + 30, threshold);
+
+        assertThat(countAtThreshold).isEqualTo(1);
+        assertThat(countMuchLater).isGreaterThan(countAtThreshold);
+    }
+
+    @Test
+    @DisplayName("Aucun Orc/Troll/Sapeur avant le seuil jitteré (pour un seed donné)")
+    void createWave_beforeEliteThreshold_noEliteEnemies() {
+        long seed = 7L;
+        int threshold = WaveFactory.eliteThreshold(seed);
+
+        for (int waveNumber = 1; waveNumber < threshold; waveNumber++) {
+            Wave wave = waveFactory.createWave(waveNumber, spawn, seed);
+
+            assertThat(wave.getEnemies()).noneMatch(e -> e.getType() == EnemyType.ORC);
+            assertThat(wave.getEnemies()).noneMatch(e -> e.getType() == EnemyType.TROLL);
+            assertThat(wave.getEnemies()).noneMatch(e -> e.getType() == EnemyType.SAPEUR);
+        }
+    }
+
+    @Test
+    @DisplayName("Orc/Troll/Sapeur apparaissent dès le seuil jitteré (pour un seed donné)")
+    void createWave_atEliteThreshold_containsEliteMix() {
+        long seed = 7L;
+        int threshold = WaveFactory.eliteThreshold(seed);
+
+        Wave wave = waveFactory.createWave(threshold, spawn, seed);
+
+        assertThat(wave.getEnemies()).anyMatch(e -> e.getType() == EnemyType.ORC);
+        assertThat(wave.getEnemies()).anyMatch(e -> e.getType() == EnemyType.TROLL);
+        assertThat(wave.getEnemies()).anyMatch(e -> e.getType() == EnemyType.SAPEUR);
+    }
+
+    @Test
+    @DisplayName("Le seuil Orc/Troll/Sapeur est jitteré entre 2 et 4 selon le seed, jamais en dehors")
+    void eliteThreshold_isWithinJitterBounds() {
+        IntStream.range(-50, 50).forEach(i -> {
+            int threshold = WaveFactory.eliteThreshold((long) i);
+            assertThat(threshold).isBetween(2, 4);
+        });
+    }
+
+    @Test
+    @DisplayName("Même seed + même vague => même composition (reproductible au sein d'une partie)")
+    void createWave_sameSeedAndWave_isReproducible() {
+        Wave first = waveFactory.createWave(8, spawn, 999L);
+        Wave second = waveFactory.createWave(8, spawn, 999L);
+
+        List<EnemyType> firstTypes = first.getEnemies().stream().map(Enemy::getType).toList();
+        List<EnemyType> secondTypes = second.getEnemies().stream().map(Enemy::getType).toList();
+
+        assertThat(firstTypes).isEqualTo(secondTypes);
+    }
+
+    @Test
+    @DisplayName("Des seeds différents produisent des compositions différentes (variabilité entre parties)")
+    void createWave_differentSeeds_produceDifferentCompositions() {
+        // Sur un échantillon de vagues, au moins une doit différer entre deux
+        // seeds — un seul seed pourrait coïncider par hasard, mais pas dix.
+        boolean anyDifference = IntStream.rangeClosed(5, 14).anyMatch(waveNumber -> {
+            Wave a = waveFactory.createWave(waveNumber, spawn, 11L);
+            Wave b = waveFactory.createWave(waveNumber, spawn, 22L);
+            List<EnemyType> typesA = a.getEnemies().stream().map(Enemy::getType).toList();
+            List<EnemyType> typesB = b.getEnemies().stream().map(Enemy::getType).toList();
+            return !typesA.equals(typesB);
+        });
+
+        assertThat(anyDifference).isTrue();
     }
 }

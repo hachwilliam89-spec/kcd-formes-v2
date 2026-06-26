@@ -24,12 +24,21 @@ public record WaveResponse(
 
     public record DamageEventResponse(UUID towerId, UUID enemyId, int damage) {}
 
+    /** Dégâts de siège infligés par un Sapeur à la tour qu'il assiège (voir WaveSimulationService.TowerDamageEvent). */
+    public record TowerDamageEventResponse(UUID enemyId, UUID towerId, int damage) {}
+
     public record TickResponse(
             int tick,
             List<EnemyResponse> enemies,
             List<DamageEventResponse> damageEvents,
+            List<TowerDamageEventResponse> towerDamageEvents,
             List<UUID> deaths,
             List<UUID> reachedCastle,
+            // Tours détruites pendant ce tick — la case correspondante redevient
+            // constructible côté domaine (voir GameMap.removeTower) ; le frontend
+            // s'en sert pour retirer la tour de l'affichage sans attendre la fin
+            // de l'animation de la vague.
+            List<UUID> destroyedTowers,
             int castleHp
     ) {}
 
@@ -64,8 +73,12 @@ public record WaveResponse(
                 tick.damageEvents().stream()
                         .map(d -> new DamageEventResponse(d.towerId(), d.enemyId(), d.damage()))
                         .toList(),
+                tick.towerDamageEvents().stream()
+                        .map(d -> new TowerDamageEventResponse(d.enemyId(), d.towerId(), d.damage()))
+                        .toList(),
                 tick.deaths(),
                 tick.reachedCastle(),
+                tick.destroyedTowers(),
                 tick.castleHp()
         );
     }

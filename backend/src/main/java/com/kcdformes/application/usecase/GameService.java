@@ -25,17 +25,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGameStateUseCase, UpgradeTowerUseCase {
 
     /**
      * Or accordé à chaque nouvelle partie. Pas de report d'une partie à l'autre.
-     * Volontairement serré (juste de quoi poser 1-2 tours d'entrée de gamme) :
-     * un capital de départ trop généreux permettait de saturer le chemin dès le
-     * début et de tenir indéfiniment sans jamais avoir à réinvestir l'or gagné.
+     * Remonté de 100 à 250 (retour d'expérience) : 100 ne permettait de poser
+     * qu'1-2 tours d'entrée de gamme, ce qui rendait les premières vagues trop
+     * punitives avant même d'avoir pu réinvestir de l'or gagné en jeu.
      */
-    private static final int STARTING_GOLD = 100;
+    private static final int STARTING_GOLD = 250;
 
     private final GameJpaRepository gameJpaRepository;
     private final CastleJpaRepository castleJpaRepository;
@@ -87,6 +88,8 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         game.setCastle(castle);
         game.setStatus("IN_PROGRESS");
         game.setGold(STARTING_GOLD);
+        // Seed propre à cette partie : voir GameEntity.seed / WaveFactory pour son usage.
+        game.setSeed(ThreadLocalRandom.current().nextLong());
         return gameJpaRepository.save(game);
     }
 
@@ -168,7 +171,9 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
                 .orElseThrow(() -> new IllegalArgumentException("Map not found for game: " + command.gameId()));
 
         int nextWave = game.getWaveNumber() + 1;
-        Wave wave = waveFactory.createWave(nextWave, map.getPathStart());
+        // Seed de la partie (voir GameEntity.seed) : la composition de la vague varie
+        // d'une partie à l'autre mais reste reproductible au sein de cette partie.
+        Wave wave = waveFactory.createWave(nextWave, map.getPathStart(), game.getSeed());
         wave.start();
 
         Castle castle = new Castle(
@@ -176,6 +181,11 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
                 castleEntity.getHp(), 100, castleEntity.getLevel());
 
         WaveSimulationService.SimulationResult result = waveSimulationService.simulate(map, wave, castle);
+
+        // Persiste la map : un Sapeur peut avoir détruit une tour pendant la
+        // simulation (mutation de `map` en mémoire) — sans cette sauvegarde,
+        // la tour détruite réapparaîtrait intacte au prochain chargement.
+        gameRepositoryAdapter.saveMap(castleEntity.getId(), map);
 
         // Persiste les effets de la vague : vie du château, or de la partie, statut.
         castleEntity.setHp(castle.getHp());

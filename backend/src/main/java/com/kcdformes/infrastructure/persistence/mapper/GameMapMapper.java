@@ -31,7 +31,11 @@ public class GameMapMapper {
                         "x", t.getX(),
                         "y", t.getY(),
                         "type", t.getType().name(),
-                        "level", t.getLevel()
+                        "level", t.getLevel(),
+                        // PV courants de la structure (voir Tower.hp) : une tour endommagée
+                        // par un Sapeur sans être détruite doit le rester après un
+                        // rechargement de la map, pas revenir à pleine vie.
+                        "hp", t.getHp()
                 ))
                 .toList();
         json.put("towers", towers);
@@ -66,7 +70,15 @@ public class GameMapMapper {
             // uniquement pour les parties déjà persistées avant ce correctif.
             Object rawId = t.get("id");
             UUID id = rawId != null ? UUID.fromString((String) rawId) : UUID.randomUUID();
-            map.placeTower(new Tower(id, type, x, y, level));
+
+            // Fallback pleine vie pour les parties déjà persistées avant l'ajout du
+            // champ hp (mécanique Sapeur) — sinon une NPE/cast invalide casserait le
+            // chargement de toute partie existante créée avant ce correctif.
+            Object rawHp = t.get("hp");
+            Tower tower = rawHp != null
+                    ? new Tower(id, type, x, y, level, ((Number) rawHp).intValue())
+                    : new Tower(id, type, x, y, level);
+            map.placeTower(tower);
         }
 
         return map;
