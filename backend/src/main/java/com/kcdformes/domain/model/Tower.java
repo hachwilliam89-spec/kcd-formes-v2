@@ -86,6 +86,15 @@ public class Tower {
     }
 
     /**
+     * Répare entièrement la structure (palier de bonus TOWER_REPAIR, voir
+     * BonusType / GameService.chooseBonus) : remet les PV à leur maximum courant,
+     * sans changer le niveau de la tour (à la différence de upgrade()).
+     */
+    public void repair() {
+        this.hp = getMaxHp();
+    }
+
+    /**
      * Coût en or pour passer cette tour au niveau suivant (calculé sur le niveau
      * COURANT, avant l'incrément). Calé sur baseCost * level : au niveau 1,
      * améliorer coûte autant que poser une tour neuve du même type — un vrai choix

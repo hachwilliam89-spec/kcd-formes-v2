@@ -8,7 +8,9 @@ export function useGame() {
     const { player } = useAuthStore()
     const {
         gameId, map, waveNumber, gold, castleHp, castleMaxHp, status,
-        setGame, addTower, upgradeTower: upgradeTowerInStore, spendGold, applyWaveResult, reset,
+        awaitingBonusChoice, availableBonuses,
+        setGame, addTower, upgradeTower: upgradeTowerInStore, spendGold, applyWaveResult,
+        applyBonusChoice, reset,
     } = useGameStore()
 
     async function createGame() {
@@ -48,7 +50,18 @@ export function useGame() {
             castleHp: data.castleHp,
             castleMaxHp: data.castleMaxHp,
             gameStatus: data.gameStatus,
+            awaitingBonusChoice: data.awaitingBonusChoice,
+            availableBonuses: data.availableBonuses,
         })
+        return data
+    }
+
+    // Palier de bonus (toutes les 5 vagues) : envoie le choix du joueur au backend,
+    // qui applique l'effet et lève le blocage sur le lancement de vague suivant.
+    async function chooseBonus(bonusType: string) {
+        if (!gameId) throw new Error('Aucune partie en cours')
+        const { data } = await api.post(`/api/v1/games/${gameId}/bonus/choose`, { bonusType })
+        applyBonusChoice(data)
         return data
     }
 
@@ -75,10 +88,13 @@ export function useGame() {
         castleHp,
         castleMaxHp,
         status,
+        awaitingBonusChoice,
+        availableBonuses,
         createGame,
         placeTower,
         upgradeTower,
         startWave,
+        chooseBonus,
         refreshGame,
         resetGame,
     }

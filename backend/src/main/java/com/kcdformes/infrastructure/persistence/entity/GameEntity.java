@@ -43,6 +43,14 @@ public class GameEntity {
     @Column(nullable = false)
     private long seed;
 
+    /**
+     * Vrai entre la fin d'une vague multiple de 5 et le choix effectif d'un bonus
+     * par le joueur (voir BonusType / ChooseBonusUseCase) : bloque le lancement
+     * d'une nouvelle vague (voir GameService.startWave) tant qu'il reste vrai.
+     */
+    @Column(name = "awaiting_bonus_choice", nullable = false)
+    private boolean awaitingBonusChoice = false;
+
     @Column(name = "started_at", nullable = false, updatable = false)
     private OffsetDateTime startedAt = OffsetDateTime.now();
 
@@ -73,6 +81,9 @@ public class GameEntity {
 
     public long getSeed() { return seed; }
     public void setSeed(long seed) { this.seed = seed; }
+
+    public boolean isAwaitingBonusChoice() { return awaitingBonusChoice; }
+    public void setAwaitingBonusChoice(boolean awaitingBonusChoice) { this.awaitingBonusChoice = awaitingBonusChoice; }
 
     public OffsetDateTime getStartedAt() { return startedAt; }
     public OffsetDateTime getEndedAt() { return endedAt; }

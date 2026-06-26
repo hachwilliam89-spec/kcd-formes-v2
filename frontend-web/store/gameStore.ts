@@ -25,12 +25,22 @@ interface GameMap {
     towers: Tower[]
 }
 
+interface BonusOption {
+    type: string
+    label: string
+    description: string
+}
+
 interface WaveResult {
     waveNumber: number
     goldEarned: number
     castleHp: number
     castleMaxHp: number
     gameStatus: string
+    // Palier de bonus (toutes les 5 vagues, voir backend GameService) : si vrai,
+    // le joueur doit choisir un bonus avant de pouvoir relancer une vague.
+    awaitingBonusChoice: boolean
+    availableBonuses: BonusOption[]
 }
 
 interface GameState {
@@ -42,6 +52,8 @@ interface GameState {
     castleHp: number
     castleMaxHp: number
     map: GameMap | null
+    awaitingBonusChoice: boolean
+    availableBonuses: BonusOption[]
 
     setGame: (game: {
         gameId: string
@@ -52,6 +64,7 @@ interface GameState {
         castleHp: number
         castleMaxHp: number
         map: GameMap
+        awaitingBonusChoice?: boolean
     }) => void
 
     addTower: (tower: Tower) => void
@@ -59,6 +72,7 @@ interface GameState {
     spendGold: (amount: number) => void
     setCastleHp: (hp: number) => void
     applyWaveResult: (result: WaveResult) => void
+    applyBonusChoice: (result: { gold: number; castleHp: number; castleMaxHp: number }) => void
     reset: () => void
 }
 
@@ -71,6 +85,8 @@ export const useGameStore = create<GameState>()((set) => ({
     castleHp: 100,
     castleMaxHp: 100,
     map: null,
+    awaitingBonusChoice: false,
+    availableBonuses: [],
 
     setGame: (game) =>
         set({
@@ -82,6 +98,7 @@ export const useGameStore = create<GameState>()((set) => ({
             castleHp: game.castleHp,
             castleMaxHp: game.castleMaxHp,
             map: game.map,
+            awaitingBonusChoice: game.awaitingBonusChoice ?? false,
         }),
 
     addTower: (tower) =>
@@ -115,7 +132,20 @@ export const useGameStore = create<GameState>()((set) => ({
             castleHp: result.castleHp,
             castleMaxHp: result.castleMaxHp,
             status: result.gameStatus,
+            awaitingBonusChoice: result.awaitingBonusChoice,
+            availableBonuses: result.availableBonuses,
         })),
+
+    // Choix de bonus résolu côté backend (voir ChooseBonusUseCase) : on referme
+    // l'invite et on applique l'effet (or/PV château déjà recalculés côté serveur).
+    applyBonusChoice: (result) =>
+        set({
+            gold: result.gold,
+            castleHp: result.castleHp,
+            castleMaxHp: result.castleMaxHp,
+            awaitingBonusChoice: false,
+            availableBonuses: [],
+        }),
 
     reset: () =>
         set({
@@ -127,5 +157,7 @@ export const useGameStore = create<GameState>()((set) => ({
             castleHp: 100,
             castleMaxHp: 100,
             map: null,
+            awaitingBonusChoice: false,
+            availableBonuses: [],
         }),
 }))

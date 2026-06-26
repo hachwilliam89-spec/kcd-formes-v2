@@ -1,4 +1,5 @@
 package com.kcdformes.infrastructure.web.controller;
+import com.kcdformes.domain.exception.BonusChoicePendingException;
 import com.kcdformes.domain.exception.CellOccupiedException;
 import com.kcdformes.domain.exception.InsufficientGoldException;
 import com.kcdformes.domain.exception.InvalidPositionException;
@@ -32,6 +33,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(TowerNotUnlockedException.class)
     public ResponseEntity<Map<String, String>> handleTowerNotUnlocked(TowerNotUnlockedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(BonusChoicePendingException.class)
+    public ResponseEntity<Map<String, String>> handleBonusChoicePending(BonusChoicePendingException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

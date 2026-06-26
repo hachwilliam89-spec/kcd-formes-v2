@@ -15,7 +15,10 @@ public record GameResponse(
         int gold,
         int castleHp,
         int castleMaxHp,
-        MapResponse map
+        MapResponse map,
+        // Permet au frontend de re-proposer le choix de bonus après un rechargement
+        // de page survenu pendant qu'un palier était en attente (voir BonusType).
+        boolean awaitingBonusChoice
 ) {
     public record MapResponse(
             int width,
@@ -29,7 +32,7 @@ public record GameResponse(
      */
     public static GameResponse from(GameEntity game, GameMap map, GameStateResult state) {
         return build(game.getId(), state.castleId(), game.getStatus(), game.getWaveNumber(),
-                game.getGold(), state.castleHp(), state.castleMaxHp(), map);
+                game.getGold(), state.castleHp(), state.castleMaxHp(), map, state.awaitingBonusChoice());
     }
 
     /**
@@ -39,18 +42,20 @@ public record GameResponse(
      */
     public static GameResponse from(GameStateResult state) {
         return build(state.gameId(), state.castleId(), state.status(), state.waveNumber(),
-                state.gold(), state.castleHp(), state.castleMaxHp(), state.map());
+                state.gold(), state.castleHp(), state.castleMaxHp(), state.map(), state.awaitingBonusChoice());
     }
 
     private static GameResponse build(UUID gameId, UUID castleId, String status, int waveNumber,
-                                       int gold, int castleHp, int castleMaxHp, GameMap map) {
+                                       int gold, int castleHp, int castleMaxHp, GameMap map,
+                                       boolean awaitingBonusChoice) {
         List<TowerResponse> towers = map.getTowers().stream()
                 .map(TowerResponse::from)
                 .toList();
 
         return new GameResponse(
                 gameId, castleId, status, waveNumber, gold, castleHp, castleMaxHp,
-                new MapResponse(map.getWidth(), map.getHeight(), towers)
+                new MapResponse(map.getWidth(), map.getHeight(), towers),
+                awaitingBonusChoice
         );
     }
 }
