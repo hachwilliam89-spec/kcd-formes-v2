@@ -17,7 +17,11 @@ public enum TowerType {
     // pour ne pas re-déséquilibrer en changeant juste le profil de tir.
     ARCHER(12, 3.0, 50, 0.6, 0, DamageType.SINGLE_TARGET, 0),
     MAGE(11, 2.5, 100, 0.45, 0, DamageType.CONTINUOUS, 0),
-    CATAPULT(40, 4.0, 150, 0.3, 0, DamageType.AOE, 1.5),
+    // baseDamage réduit de 40 à 27 (-33 %) : la zone restait trop dominante en
+    // pratique (un seul tir touchait la cible principale + tous les ennemis
+    // groupés dans splashRadius, pour un DPS effectif largement supérieur aux
+    // autres profils à coût équivalent).
+    CATAPULT(27, 4.0, 150, 0.3, 0, DamageType.AOE, 1.5),
     // Tour débloquée par la progression de compte (meilleure vague atteinte),
     // pas par l'or de la partie en cours : voir GameService.placeTower().
     BALLISTA(64, 5.0, 200, 0.22, 10, DamageType.SINGLE_TARGET, 0);

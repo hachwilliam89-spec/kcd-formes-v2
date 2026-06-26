@@ -122,31 +122,37 @@ class WaveFactoryTest {
     }
 
     @Test
-    @DisplayName("Le Sapeur (ennemi destructeur de tours) apparaît à partir de la vague 5")
-    void createWave_wave5_containsSapeur() {
-        Wave wave5 = waveFactory.createWave(5, spawn);
+    @DisplayName("Le Sapeur (ennemi destructeur de tours) apparaît dès la vague 3 (avancé de la vague 5)")
+    void createWave_wave3_containsSapeur() {
+        Wave wave3 = waveFactory.createWave(3, spawn);
 
-        assertThat(wave5.getEnemies()).anyMatch(e -> e.getType() == EnemyType.SAPEUR);
+        assertThat(wave3.getEnemies()).anyMatch(e -> e.getType() == EnemyType.SAPEUR);
     }
 
     @Test
-    @DisplayName("Aucun Sapeur avant la vague 5")
-    void createWave_beforeWave5_noSapeur() {
-        Wave wave4 = waveFactory.createWave(4, spawn);
+    @DisplayName("Aucun Sapeur avant la vague 3")
+    void createWave_beforeWave3_noSapeur() {
+        Wave wave1 = waveFactory.createWave(1, spawn);
+        Wave wave2 = waveFactory.createWave(2, spawn);
 
-        assertThat(wave4.getEnemies()).noneMatch(e -> e.getType() == EnemyType.SAPEUR);
+        assertThat(wave1.getEnemies()).noneMatch(e -> e.getType() == EnemyType.SAPEUR);
+        assertThat(wave2.getEnemies()).noneMatch(e -> e.getType() == EnemyType.SAPEUR);
     }
 
     @Test
-    @DisplayName("Le nombre de Sapeurs augmente avec le numéro de vague")
+    @DisplayName("Le nombre de Sapeurs augmente d'un toutes les 2 vagues à partir de la vague 3")
     void createWave_sapeurCount_growsWithWaveNumber() {
+        Wave wave3 = waveFactory.createWave(3, spawn);
         Wave wave5 = waveFactory.createWave(5, spawn);
         Wave wave20 = waveFactory.createWave(20, spawn);
 
+        long sapeurCountWave3 = wave3.getEnemies().stream().filter(e -> e.getType() == EnemyType.SAPEUR).count();
         long sapeurCountWave5 = wave5.getEnemies().stream().filter(e -> e.getType() == EnemyType.SAPEUR).count();
         long sapeurCountWave20 = wave20.getEnemies().stream().filter(e -> e.getType() == EnemyType.SAPEUR).count();
 
-        assertThat(sapeurCountWave5).isEqualTo(1);
+        assertThat(sapeurCountWave3).isEqualTo(1);
+        // Vague 5 = vague 3 + 2 : un Sapeur de plus que la vague 3.
+        assertThat(sapeurCountWave5).isEqualTo(2);
         assertThat(sapeurCountWave20).isGreaterThan(sapeurCountWave5);
     }
 }

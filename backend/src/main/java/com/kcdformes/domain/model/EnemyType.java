@@ -13,7 +13,7 @@ public enum EnemyType {
     TROLL(250, 0.1, 32, 20, false, 0),
     DARK_KNIGHT(188, 0.2, 42, 15, false, 0),
     /**
-     * Nouvel ennemi (à partir de la vague 5, voir WaveFactory) : au lieu de
+     * Nouvel ennemi (à partir de la vague 3, voir WaveFactory) : au lieu de
      * suivre le chemin jusqu'au château, dévie pour foncer sur la tour la plus
      * proche (sans limite de portée) et la détruit à coups de dégâts de siège
      * (voir WaveSimulationService.handleSapperTick) — la tour est perdue
