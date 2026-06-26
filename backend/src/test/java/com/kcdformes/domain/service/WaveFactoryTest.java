@@ -140,7 +140,7 @@ class WaveFactoryTest {
     }
 
     @Test
-    @DisplayName("Le nombre de Sapeurs augmente d'un toutes les 2 vagues à partir de la vague 3")
+    @DisplayName("Le nombre de Sapeurs augmente d'un à chaque vague à partir de la vague 3")
     void createWave_sapeurCount_growsWithWaveNumber() {
         Wave wave3 = waveFactory.createWave(3, spawn);
         Wave wave5 = waveFactory.createWave(5, spawn);
@@ -151,8 +151,8 @@ class WaveFactoryTest {
         long sapeurCountWave20 = wave20.getEnemies().stream().filter(e -> e.getType() == EnemyType.SAPEUR).count();
 
         assertThat(sapeurCountWave3).isEqualTo(1);
-        // Vague 5 = vague 3 + 2 : un Sapeur de plus que la vague 3.
-        assertThat(sapeurCountWave5).isEqualTo(2);
+        // +1 par vague depuis la vague 3 : vague 5 = vague 3 + 2 Sapeurs supplémentaires.
+        assertThat(sapeurCountWave5).isEqualTo(3);
         assertThat(sapeurCountWave20).isGreaterThan(sapeurCountWave5);
     }
 }

@@ -137,7 +137,11 @@ class WaveSimulationServiceTest {
     @DisplayName("Une autre tour à portée peut tuer le Sapeur pendant qu'il assiège sa cible")
     void simulate_otherTowerInRange_canKillSapeurWhileItSieges() {
         Tower targeted = new Tower(TowerType.ARCHER, 5, 5); // cible visée par le Sapeur
-        Tower defender = new Tower(TowerType.CATAPULT, 5, 7); // à portée (3.0) du point de siège (5,6)
+        // Baliste (dégâts élevés, portée 5.0) plutôt que Catapulte : depuis le buff de
+        // PV du Sapeur (150 -> 180), la Catapulte seule + l'Archer qui se défend ne
+        // l'abattaient plus avec une marge confortable avant que l'Archer (150 PV,
+        // 12 dégâts de siège/tick) ne soit lui-même détruit au tick 13.
+        Tower defender = new Tower(TowerType.BALLISTA, 5, 7); // à portée (5.0) du point de siège (5,6)
         map.placeTower(targeted);
         map.placeTower(defender);
 
@@ -147,7 +151,8 @@ class WaveSimulationServiceTest {
 
         simulationService.simulate(map, wave, castle);
 
-        // Le Catapulte (dégâts élevés) tue le Sapeur avant qu'il ne détruise sa cible.
+        // La Baliste (dégâts élevés) + l'Archer qui se défend tuent le Sapeur avant
+        // qu'il ne détruise sa cible.
         assertThat(sapeur.isDead()).isTrue();
         assertThat(map.getTowerAt(5, 5)).isPresent();
     }

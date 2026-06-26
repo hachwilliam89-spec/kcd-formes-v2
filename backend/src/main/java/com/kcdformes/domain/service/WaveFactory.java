@@ -73,9 +73,11 @@ public class WaveFactory {
         // Nouvel ennemi (vague >= 3, voir EnemyType.SAPEUR) : avancé à la même vague
         // que le Troll (passe de durcissement demandée) — le joueur doit composer
         // avec la menace de destruction de tours dès le début de partie.
-        // +1 Sapeur toutes les 2 vagues à partir de là.
+        // +1 Sapeur à chaque vague à partir de là (tour après tour, plutôt que
+        // toutes les 2 vagues) : ramp-up plus rapide pour mettre davantage de
+        // pression sur le joueur.
         if (waveNumber >= 3) {
-            int sapeurCount = 1 + (waveNumber - 3) / 2;
+            int sapeurCount = 1 + (waveNumber - 3);
             for (int i = 0; i < sapeurCount; i++) {
                 enemies.add(spawnEnemy(EnemyType.SAPEUR, spawn, waveNumber, spawnIndex++));
             }

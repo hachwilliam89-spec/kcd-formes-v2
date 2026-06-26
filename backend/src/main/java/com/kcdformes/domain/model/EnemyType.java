@@ -20,7 +20,9 @@ public enum EnemyType {
      * définitivement, sa case redevient constructible. S'il survit à sa cible,
      * il reprend ensuite sa route vers le château sans plus jamais dévier.
      */
-    SAPEUR(150, 0.12, 18, 8, true, 12);
+    // PV +20 % (180, au lieu de 150) : le rend plus difficile à abattre en route
+    // vers sa tour cible, pour augmenter la pression qu'il met sur le joueur.
+    SAPEUR(180, 0.12, 18, 8, true, 12);
 
     public final int baseHp;
     public final double speed;
