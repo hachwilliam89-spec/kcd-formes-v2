@@ -1,6 +1,7 @@
 package com.kcdformes.infrastructure.web.controller;
 import com.kcdformes.domain.exception.BonusChoicePendingException;
 import com.kcdformes.domain.exception.CellOccupiedException;
+import com.kcdformes.domain.exception.CellOnPathException;
 import com.kcdformes.domain.exception.GameAlreadyFinishedException;
 import com.kcdformes.domain.exception.InsufficientGoldException;
 import com.kcdformes.domain.exception.InvalidPositionException;
@@ -19,6 +20,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(CellOccupiedException.class)
     public ResponseEntity<Map<String, String>> handleCellOccupied(CellOccupiedException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
+    }
+
+    // 400 comme InvalidPositionException (et non 409 comme CellOccupied) : une
+    // case du couloir est DÉFINITIVEMENT inconstructible — la requête est invalide
+    // en soi, ce n'est pas un conflit d'état susceptible de se résoudre.
+    @ExceptionHandler(CellOnPathException.class)
+    public ResponseEntity<Map<String, String>> handleCellOnPath(CellOnPathException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", ex.getMessage()));
     }
 
     @ExceptionHandler(InvalidPositionException.class)

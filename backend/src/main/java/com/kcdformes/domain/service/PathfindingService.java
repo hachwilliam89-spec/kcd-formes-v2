@@ -13,17 +13,67 @@ public class PathfindingService {
 
     /**
      * Vérifie qu'un chemin existe entre pathStart et pathEnd sur la map.
-     * Utilisé pour valider qu'un placement de tour ne bloque pas complètement le passage.
+     *
+     * Héritage du modèle "labyrinthe" abandonné (les tours déviaient le chemin,
+     * seul le blocage complet était interdit) : plus utilisé en production depuis
+     * le passage au couloir strict (voir findCorridorPath / corridorCells), mais
+     * conservé car c'est le point de réentrée naturel si un futur mode de map
+     * "labyrinthe" est un jour introduit.
      */
     public boolean hasPath(GameMap map) {
         return findPath(map) != null;
     }
 
     /**
-     * Calcule le chemin optimal (A*) de pathStart à pathEnd.
-     * Retourne null si aucun chemin n'existe.
+     * COULOIR STRICT — décision de design (voir GAME_DESIGN 2.6) : le chemin des
+     * ennemis est calculé en ignorant les tours. Il est donc identique pour toute
+     * la partie, quelles que soient les tours posées : les tours ne dévient jamais
+     * les ennemis, elles ne peuvent tout simplement pas être posées sur le couloir
+     * (voir corridorCells / PlaceTowerService).
+     */
+    public List<Position> findCorridorPath(GameMap map) {
+        return findPath(map, true);
+    }
+
+    /**
+     * Cases inconstructibles du couloir : le chemin élargi d'une case de part et
+     * d'autre (distance de Chebyshev <= 1, diagonales comprises pour une bande
+     * propre dans les virages d'éventuelles futures maps). L'élargissement
+     * correspond à la bande de déplacement réelle des ennemis : ils avancent sur
+     * plusieurs files (Enemy.laneOffset, +/-0.8 case perpendiculairement au
+     * chemin), pas en file indienne sur la case centrale.
+     */
+    public Set<Position> corridorCells(GameMap map) {
+        List<Position> path = findCorridorPath(map);
+        Set<Position> cells = new HashSet<>();
+        if (path == null) {
+            return cells;
+        }
+        for (Position p : path) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    int nx = p.x() + dx;
+                    int ny = p.y() + dy;
+                    if (map.isValidPosition(nx, ny)) {
+                        cells.add(new Position(nx, ny));
+                    }
+                }
+            }
+        }
+        return cells;
+    }
+
+    /**
+     * Calcule le chemin optimal (A*) de pathStart à pathEnd, en considérant les
+     * tours comme des murs. Retourne null si aucun chemin n'existe.
+     * Conservé pour un éventuel futur mode labyrinthe (voir hasPath) — la
+     * production passe par findCorridorPath.
      */
     public List<Position> findPath(GameMap map) {
+        return findPath(map, false);
+    }
+
+    private List<Position> findPath(GameMap map, boolean ignoreTowers) {
         Position start = map.getPathStart();
         Position end = map.getPathEnd();
 
@@ -41,7 +91,7 @@ public class PathfindingService {
                 return reconstructPath(cameFrom, current.position);
             }
 
-            for (Position neighbor : getNeighbors(current.position, map)) {
+            for (Position neighbor : getNeighbors(current.position, map, ignoreTowers)) {
                 double tentativeG = gScore.getOrDefault(current.position, Double.MAX_VALUE) + 1;
 
                 if (tentativeG < gScore.getOrDefault(neighbor, Double.MAX_VALUE)) {
@@ -56,7 +106,7 @@ public class PathfindingService {
         return null; // Aucun chemin trouvé
     }
 
-    private List<Position> getNeighbors(Position pos, GameMap map) {
+    private List<Position> getNeighbors(Position pos, GameMap map, boolean ignoreTowers) {
         int[][] directions = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
         List<Position> neighbors = new ArrayList<>();
 
@@ -64,7 +114,7 @@ public class PathfindingService {
             int nx = pos.x() + dir[0];
             int ny = pos.y() + dir[1];
 
-            if (map.isValidPosition(nx, ny) && !map.isCellBlocked(nx, ny)) {
+            if (map.isValidPosition(nx, ny) && (ignoreTowers || !map.isCellBlocked(nx, ny))) {
                 neighbors.add(new Position(nx, ny));
             }
         }

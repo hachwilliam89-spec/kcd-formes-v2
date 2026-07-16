@@ -61,4 +61,28 @@ class PathfindingServiceTest {
     void hasPath_whenPathExists_returnsTrue() {
         assertThat(pathfindingService.hasPath(map)).isTrue();
     }
+
+    @Test
+    @DisplayName("Couloir strict : le chemin ignore les tours, même posées sur son tracé")
+    void findCorridorPath_ignoresTowers() {
+        List<Position> emptyPath = pathfindingService.findCorridorPath(map);
+
+        // Tour posée directement sur le tracé (possible via GameMap en test —
+        // PlaceTowerService l'interdit en production, voir CellOnPathException) :
+        // le couloir ne doit PAS dévier, contrairement à findPath (mode labyrinthe).
+        map.placeTower(new Tower(TowerType.ARCHER, 2, 2));
+
+        assertThat(pathfindingService.findCorridorPath(map)).isEqualTo(emptyPath);
+        assertThat(pathfindingService.findCorridorPath(map)).contains(new Position(2, 2));
+    }
+
+    @Test
+    @DisplayName("Couloir strict : la bande inconstructible couvre le chemin élargi d'une case")
+    void corridorCells_coverPathPlusOneCell() {
+        var cells = pathfindingService.corridorCells(map);
+
+        // Chemin horizontal y=2 : la bande couvre y=1..3 sur toute la longueur.
+        assertThat(cells).contains(new Position(2, 1), new Position(2, 2), new Position(2, 3));
+        assertThat(cells).doesNotContain(new Position(2, 0), new Position(2, 4));
+    }
 }

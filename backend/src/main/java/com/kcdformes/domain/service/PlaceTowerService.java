@@ -1,7 +1,9 @@
 package com.kcdformes.domain.service;
 
+import com.kcdformes.domain.exception.CellOnPathException;
 import com.kcdformes.domain.exception.InsufficientGoldException;
 import com.kcdformes.domain.model.GameMap;
+import com.kcdformes.domain.model.Position;
 import com.kcdformes.domain.model.Tower;
 import com.kcdformes.domain.model.TowerType;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase;
@@ -39,18 +41,20 @@ public class PlaceTowerService implements PlaceTowerUseCase {
         // Note: la vérification/débit de l'or du joueur est gérée en amont par
         // GameService.placeTower (couche application), qui a accès au PlayerEntity
         // lié à la partie. Ce service ne s'occupe que de la validation géométrique
-        // du placement (cellule libre, dans les limites, ne bloque pas le chemin).
+        // du placement (cellule libre, dans les limites, hors du couloir).
 
-        // Vérifie que le placement ne bloque pas le chemin
+        // COULOIR STRICT (voir GAME_DESIGN 2.6) : aucune tour sur le couloir des
+        // ennemis (chemin + une case de part et d'autre, là où circulent les files
+        // décalées par Enemy.laneOffset). Remplace l'ancien check "ne bloque pas
+        // complètement le chemin" du modèle labyrinthe abandonné : le couloir
+        // étant inconstructible, il ne peut plus être bloqué du tout, et le chemin
+        // reste identique pour toute la partie.
+        if (pathfindingService.corridorCells(map).contains(new Position(x, y))) {
+            throw new CellOnPathException(x, y);
+        }
+
         Tower tower = new Tower(type, x, y);
         map.placeTower(tower); // lève CellOccupiedException ou InvalidPositionException si invalide
-
-        boolean pathExists = pathfindingService.hasPath(map);
-        if (!pathExists) {
-            map.removeTower(x, y); // rollback
-            throw new IllegalStateException(
-                "Cannot place tower at (%d, %d): it would completely block the path".formatted(x, y));
-        }
 
         // Persiste l'état mis à jour
         gameRepository.saveMap(gameId, map);

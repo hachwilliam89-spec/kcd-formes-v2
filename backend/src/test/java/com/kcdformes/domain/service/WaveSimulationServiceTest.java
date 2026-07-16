@@ -140,7 +140,8 @@ class WaveSimulationServiceTest {
         // Baliste (dégâts élevés, portée 5.0) plutôt que Catapulte : depuis le buff de
         // PV du Sapeur (150 -> 180), la Catapulte seule + l'Archer qui se défend ne
         // l'abattaient plus avec une marge confortable avant que l'Archer (150 PV,
-        // 12 dégâts de siège/tick) ne soit lui-même détruit au tick 13.
+        // 8 dégâts de siège/tick depuis le nerf mesuré au harnais) ne soit
+        // lui-même détruit au tick 19.
         Tower defender = new Tower(TowerType.BALLISTA, 5, 7); // à portée (5.0) du point de siège (5,6)
         map.placeTower(targeted);
         map.placeTower(defender);

@@ -97,6 +97,15 @@ const SIEGE_LINE_COLOR = 0xdc2626
 const BOSS_HEAL_PULSE_COLOR = 0x22c55e
 const BOSS_AOE_PULSE_COLOR = 0xf97316
 
+// COULOIR STRICT (décision de design, voir GAME_DESIGN 2.6 et
+// PathfindingService.corridorCells côté backend) : la bande y=6..8 est
+// inconstructible — chemin y=7 élargi d'une case de part et d'autre, là où
+// circulent les files d'ennemis (laneOffset ±0.8). Le backend rejette de toute
+// façon ces placements (400 CellOnPathException) ; ce filtre évite juste un
+// aller-retour réseau pour un clic qui ne peut pas aboutir.
+const CORRIDOR_MIN_Y = 6
+const CORRIDOR_MAX_Y = 8
+
 export class GameScene extends Phaser.Scene {
     private gridGraphics!: Phaser.GameObjects.Graphics
     private towersGraphics!: Phaser.GameObjects.Graphics
@@ -133,10 +142,12 @@ export class GameScene extends Phaser.Scene {
             const cellX = Math.floor(pointer.x / CELL_SIZE)
             const cellY = Math.floor(pointer.y / CELL_SIZE)
 
-            // Vérifie que le clic est dans la grille
+            // Vérifie que le clic est dans la grille, hors du couloir des ennemis
+            // (inconstructible — voir CORRIDOR_MIN_Y/MAX_Y).
             if (
                 cellX >= 0 && cellX < GRID_WIDTH &&
-                cellY >= 0 && cellY < GRID_HEIGHT
+                cellY >= 0 && cellY < GRID_HEIGHT &&
+                (cellY < CORRIDOR_MIN_Y || cellY > CORRIDOR_MAX_Y)
             ) {
                 this.onCellClick?.(cellX, cellY)
             }
