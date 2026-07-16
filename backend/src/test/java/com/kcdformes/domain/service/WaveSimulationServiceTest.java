@@ -169,7 +169,16 @@ class WaveSimulationServiceTest {
 
         // À distance 1.0 de `first` dès le départ : c'est la tour la plus proche,
         // donc la première ciblée (siège immédiat, pas de trajet à simuler).
-        Enemy sapeur = new Enemy(EnemyType.SAPEUR, 5, 6);
+        //
+        // PV surdimensionnés (1000) via l'override prévu à cet effet : ce test
+        // vérifie le COMPORTEMENT d'enchaînement, pas l'équilibrage. Avec les PV
+        // réels du Sapeur, l'issue dépend des constantes de tuning (aux valeurs
+        // actuelles, les deux archers qui se défendent le tuent avant la fin du
+        // 2e siège : ~250 dégâts à encaisser pour 180 PV) — chaque passe
+        // d'équilibrage cassait donc ce test sans qu'aucun comportement n'ait
+        // changé. La survie du Sapeur sous le feu relève des tests d'équilibrage,
+        // pas de celui-ci.
+        Enemy sapeur = new Enemy(EnemyType.SAPEUR, 5, 6, 0, 1000);
         Wave wave = new Wave(1, List.of(sapeur));
         wave.start();
 
@@ -189,5 +198,63 @@ class WaveSimulationServiceTest {
         // Plus aucune tour sur la map : le Sapeur reprend sa route et finit par
         // atteindre le château, comme tout ennemi ayant survécu jusqu'au bout du chemin.
         assertThat(result.castleDamageTaken()).isEqualTo(EnemyType.SAPEUR.castleDamage);
+    }
+
+    @Test
+    @DisplayName("Le Boss soigne les ennemis proches et endommage les tours proches lors de sa pulsation")
+    void simulate_bossPulse_healsNearbyAlliesAndDamagesNearbyTowers() {
+        Tower tower = new Tower(TowerType.ARCHER, 3, 7); // proche de la position du Boss au tick de son 1er pulse (voir calcul ci-dessous)
+        map.placeTower(tower);
+
+        // Boss : spawnDelay=0, avance donc dès le tick 1 (vitesse 0.07/tick). À son
+        // 1er pulse (tick = abilityIntervalTicks = 40), il a parcouru 40*0.07 = 2.8
+        // cases depuis (0,7), soit (2.8,7) — à moins de auraRadius (3.0) du Goblin
+        // resté immobile au spawn, et à moins de aoeRadius (2.0) de la tour en (3,7).
+        Enemy boss = new Enemy(EnemyType.BOSS_WARLORD, map.getPathStart().x(), map.getPathStart().y(), 0);
+
+        // Goblin endommagé, spawnDelay très élevé pour qu'il reste immobile au
+        // point de spawn pendant toute la fenêtre observée (sinon sa vitesse propre
+        // l'éloignerait du Boss avant le 1er pulse).
+        Enemy goblin = new Enemy(EnemyType.GOBLIN, map.getPathStart().x(), map.getPathStart().y(), 2000, 100);
+        goblin.takeDamage(50); // 50/100 PV : doit être soigné par l'aura
+
+        Wave wave = new Wave(1, List.of(boss, goblin));
+        wave.start();
+
+        WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
+
+        WaveSimulationService.TickSnapshot firstPulseTick = result.ticks().stream()
+                .filter(t -> !t.bossAbilityEvents().isEmpty())
+                .findFirst().orElseThrow(() -> new AssertionError("Aucune pulsation de Boss enregistrée"));
+
+        assertThat(firstPulseTick.tick()).isEqualTo(EnemyType.BOSS_WARLORD.abilityIntervalTicks);
+
+        WaveSimulationService.BossAbilityEvent event = firstPulseTick.bossAbilityEvents().get(0);
+        assertThat(event.alliesHealed()).isEqualTo(1);
+        assertThat(event.towersHit()).isEqualTo(1);
+
+        assertThat(goblin.getCurrentHp()).isGreaterThan(50);
+        assertThat(tower.getHp()).isLessThan(tower.getMaxHp());
+
+        boolean towerDamageRecorded = result.ticks().stream()
+                .flatMap(t -> t.towerDamageEvents().stream())
+                .anyMatch(e -> e.enemyId().equals(boss.getId()) && e.towerId().equals(tower.getId()));
+        assertThat(towerDamageRecorded).isTrue();
+    }
+
+    @Test
+    @DisplayName("La pulsation du Boss se répète toutes les abilityIntervalTicks (pas un effet ponctuel)")
+    void simulate_bossPulse_repeatsOnEachInterval() {
+        Enemy boss = new Enemy(EnemyType.BOSS_WARLORD, map.getPathStart().x(), map.getPathStart().y(), 0);
+        Wave wave = new Wave(1, List.of(boss));
+        wave.start();
+
+        WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
+
+        int interval = EnemyType.BOSS_WARLORD.abilityIntervalTicks;
+        boolean secondPulseFound = result.ticks().stream()
+                .anyMatch(t -> t.tick() == interval * 2 && !t.bossAbilityEvents().isEmpty());
+
+        assertThat(secondPulseFound).isTrue();
     }
 }

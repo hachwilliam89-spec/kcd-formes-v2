@@ -54,6 +54,11 @@ public class Enemy {
         if (this.currentHp == 0) this.alive = false;
     }
 
+    /** Soigne cet ennemi, plafonné à ses PV max (utilisé par l'aura du Boss, voir WaveSimulationService). */
+    public void heal(int amount) {
+        this.currentHp = Math.min(maxHp, this.currentHp + amount);
+    }
+
     public void moveTo(double x, double y) {
         this.x = x;
         this.y = y;

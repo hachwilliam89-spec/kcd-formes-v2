@@ -3,6 +3,7 @@ package com.kcdformes.domain.service;
 import com.kcdformes.domain.model.Castle;
 import com.kcdformes.domain.model.DamageType;
 import com.kcdformes.domain.model.Enemy;
+import com.kcdformes.domain.model.EnemyType;
 import com.kcdformes.domain.model.GameMap;
 import com.kcdformes.domain.model.Position;
 import com.kcdformes.domain.model.Tower;
@@ -49,6 +50,14 @@ public class WaveSimulationService {
     /** Dégâts de siège infligés par un Sapeur (EnemyType.attacksTowers) à la tour qu'il assiège. */
     public record TowerDamageEvent(UUID enemyId, UUID towerId, int damage) {}
 
+    /**
+     * Pulsation d'aura/AoE d'un Boss (EnemyType.isBoss, voir handleBossAbilityTick) :
+     * un évènement par Boss par pulsation, même si aucun allié n'avait besoin
+     * d'être soigné et aucune tour n'était à portée (alliesHealed/towersHit à 0),
+     * pour permettre au frontend d'animer le pulse à chaque déclenchement.
+     */
+    public record BossAbilityEvent(UUID bossId, double x, double y, int alliesHealed, int towersHit) {}
+
     public record TickSnapshot(
             int tick,
             List<EnemySnapshot> enemies,
@@ -57,6 +66,7 @@ public class WaveSimulationService {
             List<UUID> deaths,
             List<UUID> reachedCastle,
             List<UUID> destroyedTowers,
+            List<BossAbilityEvent> bossAbilityEvents,
             int castleHp
     ) {}
 
@@ -87,6 +97,12 @@ public class WaveSimulationService {
         // aucune tour sur la map.
         Map<UUID, UUID> siegeTargets = new HashMap<>();
 
+        // Compte à rebours (en ticks) avant la prochaine pulsation d'aura/AoE de
+        // chaque Boss (EnemyType.isBoss). Absent de la map => pas encore pulsé :
+        // getOrDefault renvoie alors l'intervalle complet (premier pulse après
+        // abilityIntervalTicks ticks suivant son apparition), voir plus bas.
+        Map<UUID, Integer> bossCooldowns = new HashMap<>();
+
         Set<UUID> escaped = new HashSet<>();
         List<TickSnapshot> ticks = new ArrayList<>();
         int castleDamageTaken = 0;
@@ -100,6 +116,7 @@ public class WaveSimulationService {
             List<UUID> deaths = new ArrayList<>();
             List<UUID> reached = new ArrayList<>();
             List<UUID> destroyedTowers = new ArrayList<>();
+            List<BossAbilityEvent> bossAbilityEvents = new ArrayList<>();
 
             // 1. Déplacement des ennemis le long du chemin
             for (Enemy enemy : wave.getEnemies()) {
@@ -151,6 +168,29 @@ public class WaveSimulationService {
 
                     enemy.moveTo(nx, ny);
                 }
+            }
+
+            // 1.5. Pulsation des Boss (EnemyType.isBoss) : soin de zone des
+            // ennemis proches + attaque de zone des tours proches, tous les
+            // abilityIntervalTicks ticks. Contrairement au Sapeur, le Boss ne
+            // dévie jamais du chemin pour ça — la pulsation se déclenche sur
+            // place, où qu'il se trouve sur le chemin au moment du tick.
+            for (Enemy enemy : wave.getEnemies()) {
+                if (!enemy.getType().isBoss || enemy.isDead() || escaped.contains(enemy.getId())) {
+                    continue;
+                }
+                if (tick <= enemy.getSpawnDelayTicks()) {
+                    continue;
+                }
+
+                int cooldown = bossCooldowns.getOrDefault(enemy.getId(), enemy.getType().abilityIntervalTicks) - 1;
+                if (cooldown > 0) {
+                    bossCooldowns.put(enemy.getId(), cooldown);
+                    continue;
+                }
+
+                bossCooldowns.put(enemy.getId(), enemy.getType().abilityIntervalTicks);
+                bossAbilityEvents.add(handleBossAbilityTick(enemy, map, wave, towerDamageEvents, destroyedTowers));
             }
 
             // 2. Attaques des tours (cible : ennemi à portée le plus proche)
@@ -219,7 +259,7 @@ public class WaveSimulationService {
                     .toList();
 
             ticks.add(new TickSnapshot(tick, snapshot, damageEvents, towerDamageEvents, deaths, reached,
-                    destroyedTowers, castle.getHp()));
+                    destroyedTowers, bossAbilityEvents, castle.getHp()));
 
             boolean allResolved = wave.getEnemies().stream()
                     .allMatch(enemy -> enemy.isDead() || escaped.contains(enemy.getId()));
@@ -344,6 +384,55 @@ public class WaveSimulationService {
         }
 
         return true;
+    }
+
+    /**
+     * Exécute une pulsation d'aura/AoE d'un Boss (EnemyType.isBoss) : soigne les
+     * ennemis vivants dans auraRadius (hors lui-même) d'une fraction de leurs PV
+     * max, puis inflige aoeDamage à chaque tour dans aoeRadius — potentiellement
+     * plusieurs tours en une seule pulsation, contrairement au Sapeur qui ne vise
+     * qu'une tour à la fois. Une tour détruite par ce pulse est retirée de la map
+     * (case libérée), comme pour le Sapeur (voir handleSapperTick).
+     */
+    private BossAbilityEvent handleBossAbilityTick(Enemy boss, GameMap map, Wave wave,
+                                                     List<TowerDamageEvent> towerDamageEvents,
+                                                     List<UUID> destroyedTowers) {
+        EnemyType type = boss.getType();
+
+        int alliesHealed = 0;
+        for (Enemy other : wave.getEnemies()) {
+            if (other.getId().equals(boss.getId()) || other.isDead() || other.getCurrentHp() >= other.getMaxHp()) {
+                continue;
+            }
+            double dx = other.getX() - boss.getX();
+            double dy = other.getY() - boss.getY();
+            if (Math.sqrt(dx * dx + dy * dy) <= type.auraRadius) {
+                other.heal((int) Math.round(other.getMaxHp() * type.auraHealRatio));
+                alliesHealed++;
+            }
+        }
+
+        int towersHit = 0;
+        // Copie défensive : une tour détruite par ce pulse est retirée de `map`
+        // en cours d'itération (même besoin que handleSapperTick).
+        for (Tower tower : new ArrayList<>(map.getTowers())) {
+            if (tower.isDestroyed()) {
+                continue;
+            }
+            double dx = tower.getX() - boss.getX();
+            double dy = tower.getY() - boss.getY();
+            if (Math.sqrt(dx * dx + dy * dy) <= type.aoeRadius) {
+                tower.takeSiegeDamage(type.aoeDamage);
+                towerDamageEvents.add(new TowerDamageEvent(boss.getId(), tower.getId(), type.aoeDamage));
+                towersHit++;
+                if (tower.isDestroyed()) {
+                    map.removeTower(tower.getX(), tower.getY());
+                    destroyedTowers.add(tower.getId());
+                }
+            }
+        }
+
+        return new BossAbilityEvent(boss.getId(), boss.getX(), boss.getY(), alliesHealed, towersHit);
     }
 
     /** Tour la plus proche d'un ennemi donné, sans limite de distance. Null si la map n'a aucune tour. */

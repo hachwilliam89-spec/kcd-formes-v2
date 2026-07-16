@@ -55,6 +55,14 @@ public class WaveFactory {
     private static final long WAVE_MIX_CONSTANT = 0x9E3779B97F4A7C15L;
 
     /**
+     * Cadence d'apparition du premier Boss (EnemyType.BOSS_WARLORD) : toutes les
+     * 10 vagues, accompagné de l'escorte d'ennemis classiques générée normalement
+     * pour cette vague (goblins + mix Orc/Troll/Sapeur, voir generateEnemies) —
+     * pas une vague dédiée au Boss seul.
+     */
+    private static final int BOSS_MILESTONE_INTERVAL = 10;
+
+    /**
      * Surcharge de confort pour les usages ponctuels où la reproductibilité
      * inter-appels n'a pas d'importance (tests ad hoc, simulation hors partie
      * réelle) : tire un seed aléatoire à chaque appel. La partie réelle
@@ -99,10 +107,24 @@ public class WaveFactory {
         }
 
         // Chevalier noir : cadence fixe conservée (tous les 5 vagues une fois
-        // débloqué) — c'est le "mini-boss" actuel de la vague, le point
-        // d'extension naturel pour un futur segment Boss (voir WeightedChoice).
-        if (waveNumber >= darkKnightThreshold && waveNumber % 5 == 0) {
+        // débloqué) — le "mini-boss" actuel de la vague. Absent des vagues à
+        // Boss (voir ci-dessous) pour laisser le Boss être la seule menace
+        // spéciale mise en avant sur ces vagues-là, plutôt que d'empiler les deux.
+        boolean bossWave = waveNumber % BOSS_MILESTONE_INTERVAL == 0;
+        if (waveNumber >= darkKnightThreshold && waveNumber % 5 == 0 && !bossWave) {
             new EnemyBurst(EnemyType.DARK_KNIGHT, darkKnightCount(waveNumber, darkKnightThreshold)).resolve(waveRng, order);
+        }
+
+        // Premier Boss (EnemyType.BOSS_WARLORD) : toutes les BOSS_MILESTONE_INTERVAL
+        // vagues, avec l'escorte classique déjà générée ci-dessus (goblins + mix
+        // Orc/Troll/Sapeur). Le nombre de Boss augmente légèrement à chaque
+        // récurrence (1 puis 2 à partir de la 3e apparition, etc.) ; ses PV
+        // grimpent surtout via le scaling multiplicatif par vague (scaledHp),
+        // déjà bien plus marqué après 10+ vagues que pour les autres ennemis.
+        if (bossWave) {
+            int recurrence = waveNumber / BOSS_MILESTONE_INTERVAL;
+            int bossCount = 1 + (recurrence - 1) / 2;
+            new EnemyBurst(EnemyType.BOSS_WARLORD, bossCount).resolve(waveRng, order);
         }
 
         return toEnemies(order, waveNumber, spawn, waveRng);

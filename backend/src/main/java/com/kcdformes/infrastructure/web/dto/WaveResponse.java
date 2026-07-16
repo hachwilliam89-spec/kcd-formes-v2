@@ -33,6 +33,9 @@ public record WaveResponse(
     /** Dégâts de siège infligés par un Sapeur à la tour qu'il assiège (voir WaveSimulationService.TowerDamageEvent). */
     public record TowerDamageEventResponse(UUID enemyId, UUID towerId, int damage) {}
 
+    /** Pulsation d'aura/AoE d'un Boss (voir WaveSimulationService.BossAbilityEvent) — pour l'animer côté frontend. */
+    public record BossAbilityEventResponse(UUID bossId, double x, double y, int alliesHealed, int towersHit) {}
+
     public record TickResponse(
             int tick,
             List<EnemyResponse> enemies,
@@ -45,6 +48,7 @@ public record WaveResponse(
             // s'en sert pour retirer la tour de l'affichage sans attendre la fin
             // de l'animation de la vague.
             List<UUID> destroyedTowers,
+            List<BossAbilityEventResponse> bossAbilityEvents,
             int castleHp
     ) {}
 
@@ -87,6 +91,9 @@ public record WaveResponse(
                 tick.deaths(),
                 tick.reachedCastle(),
                 tick.destroyedTowers(),
+                tick.bossAbilityEvents().stream()
+                        .map(b -> new BossAbilityEventResponse(b.bossId(), b.x(), b.y(), b.alliesHealed(), b.towersHit()))
+                        .toList(),
                 tick.castleHp()
         );
     }

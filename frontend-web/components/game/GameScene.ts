@@ -46,6 +46,17 @@ export interface TowerDamageEvent {
     damage: number
 }
 
+// Pulsation d'aura/AoE d'un Boss (voir WaveSimulationService.BossAbilityEvent
+// côté backend) : un évènement par Boss à chaque déclenchement, même quand
+// alliesHealed/towersHit valent 0 — sert à animer le pulse à l'écran.
+export interface BossAbilityEvent {
+    bossId: string
+    x: number
+    y: number
+    alliesHealed: number
+    towersHit: number
+}
+
 export interface TickSnapshot {
     tick: number
     enemies: EnemySnapshot[]
@@ -54,6 +65,7 @@ export interface TickSnapshot {
     deaths: string[]
     reachedCastle: string[]
     destroyedTowers: string[]
+    bossAbilityEvents: BossAbilityEvent[]
     castleHp: number
 }
 
@@ -72,11 +84,18 @@ const ENEMY_COLORS: Record<string, number> = {
     TROLL: 0x6b7280,       // gris
     DARK_KNIGHT: 0x4338ca, // violet sombre
     SAPEUR: 0xdc2626,      // rouge — signale visuellement la menace sur les tours
+    BOSS_WARLORD: 0xeab308, // or — distinct de tout le reste, signale le premier boss
 }
 
 // Couleur de la ligne de siège (Sapeur → tour visée), distincte des couleurs
 // de tir des tours pour ne jamais être confondue avec une attaque de tour.
 const SIEGE_LINE_COLOR = 0xdc2626
+
+// Couleurs des pulsations de Boss (voir drawBossAbilityEvents) : vert pour le
+// soin de zone, orange pour l'attaque de zone — pour rester cohérent avec les
+// codes couleur déjà utilisés ailleurs (vert = positif, orange/rouge = dégâts).
+const BOSS_HEAL_PULSE_COLOR = 0x22c55e
+const BOSS_AOE_PULSE_COLOR = 0xf97316
 
 export class GameScene extends Phaser.Scene {
     private gridGraphics!: Phaser.GameObjects.Graphics
@@ -220,8 +239,10 @@ export class GameScene extends Phaser.Scene {
                 this.drawTowers(Array.from(this.towersById.values()))
             }
 
+            this.effectsGraphics.clear()
             this.drawEnemies(tick.enemies)
             this.drawEffects(tick.damageEvents, tick.towerDamageEvents, tick.enemies)
+            this.drawBossAbilityEvents(tick.bossAbilityEvents)
             onTick?.(tick.castleHp)
             index++
         }
@@ -245,20 +266,51 @@ export class GameScene extends Phaser.Scene {
             const color = ENEMY_COLORS[enemy.type] ?? 0xffffff
             const px = enemy.x * CELL_SIZE + CELL_SIZE / 2
             const py = enemy.y * CELL_SIZE + CELL_SIZE / 2
+            // Le Boss est nettement plus gros que les ennemis classiques, avec un
+            // contour noir épais — doit rester identifiable au premier coup d'œil
+            // au milieu de son escorte, même sans connaître ENEMY_COLORS par cœur.
+            const isBoss = enemy.type === 'BOSS_WARLORD'
+            const radius = isBoss ? CELL_SIZE * 0.55 : CELL_SIZE / 3
 
             this.enemiesGraphics.fillStyle(color, 1)
-            this.enemiesGraphics.fillCircle(px, py, CELL_SIZE / 3)
+            this.enemiesGraphics.fillCircle(px, py, radius)
+            if (isBoss) {
+                this.enemiesGraphics.lineStyle(3, 0x000000, 0.8)
+                this.enemiesGraphics.strokeCircle(px, py, radius)
+            }
 
             // Barre de vie au-dessus de l'ennemi
             const hpRatio = enemy.maxHp > 0 ? Math.max(0, enemy.hp / enemy.maxHp) : 0
-            const barWidth = CELL_SIZE * 0.8
+            const barWidth = isBoss ? CELL_SIZE * 1.4 : CELL_SIZE * 0.8
             const barX = px - barWidth / 2
-            const barY = py - CELL_SIZE / 2 - 2
+            const barY = py - radius - 6
 
             this.enemiesGraphics.fillStyle(0x000000, 0.5)
             this.enemiesGraphics.fillRect(barX, barY, barWidth, 4)
             this.enemiesGraphics.fillStyle(hpRatio > 0.3 ? 0x22c55e : 0xef4444, 1)
             this.enemiesGraphics.fillRect(barX, barY, barWidth * hpRatio, 4)
+        })
+    }
+
+    /**
+     * Dessine la pulsation d'aura/AoE d'un Boss (voir BossAbilityEvent) : un
+     * anneau vert qui s'étend pour le soin de zone si des alliés ont été
+     * soignés, un anneau orange pour l'attaque de zone si des tours ont été
+     * touchées — les deux peuvent apparaître ensemble sur le même pulse.
+     */
+    private drawBossAbilityEvents(events: BossAbilityEvent[]) {
+        events.forEach((event) => {
+            const px = event.x * CELL_SIZE + CELL_SIZE / 2
+            const py = event.y * CELL_SIZE + CELL_SIZE / 2
+
+            if (event.alliesHealed > 0) {
+                this.effectsGraphics.lineStyle(3, BOSS_HEAL_PULSE_COLOR, 0.8)
+                this.effectsGraphics.strokeCircle(px, py, CELL_SIZE * 1.5)
+            }
+            if (event.towersHit > 0) {
+                this.effectsGraphics.lineStyle(3, BOSS_AOE_PULSE_COLOR, 0.8)
+                this.effectsGraphics.strokeCircle(px, py, CELL_SIZE * 1.1)
+            }
         })
     }
 
@@ -276,7 +328,9 @@ export class GameScene extends Phaser.Scene {
         towerDamageEvents: TowerDamageEvent[],
         enemies: EnemySnapshot[]
     ) {
-        this.effectsGraphics.clear()
+        // Note : effectsGraphics est déjà vidé une fois par tick par l'appelant
+        // (renderTick, voir playWave), pour pouvoir accueillir ensuite les
+        // anneaux de drawBossAbilityEvents sans que celui-ci ne les efface.
         if (damageEvents.length === 0 && towerDamageEvents.length === 0) return
 
         const enemyById = new Map(enemies.map((e) => [e.id, e]))

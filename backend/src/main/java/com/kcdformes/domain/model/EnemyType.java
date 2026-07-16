@@ -34,7 +34,22 @@ public enum EnemyType {
      */
     // PV +20 % (180, au lieu de 150) : le rend plus difficile à abattre en route
     // vers sa tour cible, pour augmenter la pression qu'il met sur le joueur.
-    SAPEUR(180, 0.12, 28, 8, true, 12);
+    SAPEUR(180, 0.12, 28, 8, true, 12),
+
+    /**
+     * Premier boss du jeu (voir WaveFactory.BOSS_MILESTONE_INTERVAL) : apparaît
+     * toutes les 10 vagues, accompagné d'une escorte d'ennemis classiques (voir
+     * WaveFactory.generateEnemies). Contrairement au Sapeur, il ne dévie jamais
+     * du chemin vers le château : à la place, toutes les abilityIntervalTicks,
+     * il (1) soigne les ennemis proches d'une fraction (auraHealRatio) de leurs
+     * PV max dans un rayon auraRadius, et (2) inflige aoeDamage à toutes les
+     * tours dans un rayon aoeRadius (voir
+     * WaveSimulationService.handleBossAbilityTick). PV de base très élevés,
+     * encore amplifiés par le scaling multiplicatif par vague (HP_GROWTH_RATE) :
+     * à la vague 10 il dépasse déjà largement les PV d'un Troll de la même vague.
+     */
+    BOSS_WARLORD(900, 0.07, 220, 40, false, 0,
+            true, 0.06, 3.0, 15, 2.0, 40);
 
     public final int baseHp;
     public final double speed;
@@ -45,14 +60,40 @@ public enum EnemyType {
     public final boolean attacksTowers;
     /** Dégâts de siège infligés à la tour ciblée, par tick, une fois à portée de mêlée. */
     public final int siegeDamage;
+    /** Si vrai, c'est un boss : déclenche le pulse d'aura/AoE (voir WaveSimulationService.handleBossAbilityTick). */
+    public final boolean isBoss;
+    /** Fraction des PV max soignée à chaque ennemi proche à chaque pulsation (boss uniquement). */
+    public final double auraHealRatio;
+    /** Rayon (en cases) de l'aura de soin (boss uniquement). */
+    public final double auraRadius;
+    /** Dégâts infligés à chaque tour dans aoeRadius à chaque pulsation (boss uniquement). */
+    public final int aoeDamage;
+    /** Rayon (en cases) de l'attaque de zone périodique (boss uniquement). */
+    public final double aoeRadius;
+    /** Intervalle (en ticks) entre deux pulsations d'aura/AoE (boss uniquement). */
+    public final int abilityIntervalTicks;
 
     EnemyType(int baseHp, double speed, int goldReward, int castleDamage,
               boolean attacksTowers, int siegeDamage) {
+        this(baseHp, speed, goldReward, castleDamage, attacksTowers, siegeDamage,
+                false, 0, 0, 0, 0, 0);
+    }
+
+    EnemyType(int baseHp, double speed, int goldReward, int castleDamage,
+              boolean attacksTowers, int siegeDamage,
+              boolean isBoss, double auraHealRatio, double auraRadius,
+              int aoeDamage, double aoeRadius, int abilityIntervalTicks) {
         this.baseHp = baseHp;
         this.speed = speed;
         this.goldReward = goldReward;
         this.castleDamage = castleDamage;
         this.attacksTowers = attacksTowers;
         this.siegeDamage = siegeDamage;
+        this.isBoss = isBoss;
+        this.auraHealRatio = auraHealRatio;
+        this.auraRadius = auraRadius;
+        this.aoeDamage = aoeDamage;
+        this.aoeRadius = aoeRadius;
+        this.abilityIntervalTicks = abilityIntervalTicks;
     }
 }

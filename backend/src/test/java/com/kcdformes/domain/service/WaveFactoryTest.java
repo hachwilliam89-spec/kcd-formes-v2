@@ -196,4 +196,55 @@ class WaveFactoryTest {
 
         assertThat(anyDifference).isTrue();
     }
+
+    @Test
+    @DisplayName("Le Boss apparaît toutes les 10 vagues, jamais avant ni entre deux paliers")
+    void createWave_bossAppearsEveryTenWaves() {
+        for (long seed : List.of(0L, 1L, 2L, 42L, -7L)) {
+            for (int waveNumber = 1; waveNumber <= 30; waveNumber++) {
+                Wave wave = waveFactory.createWave(waveNumber, spawn, seed);
+                boolean hasBoss = wave.getEnemies().stream().anyMatch(e -> e.getType() == EnemyType.BOSS_WARLORD);
+
+                if (waveNumber % 10 == 0) {
+                    assertThat(hasBoss).as("vague %d (seed %d) devrait contenir un Boss", waveNumber, seed).isTrue();
+                } else {
+                    assertThat(hasBoss).as("vague %d (seed %d) ne devrait pas contenir de Boss", waveNumber, seed).isFalse();
+                }
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Une vague à Boss contient toujours une escorte d'ennemis classiques (pas un Boss seul)")
+    void createWave_bossWave_alwaysHasEscort() {
+        for (long seed : List.of(0L, 1L, 2L, 42L, -7L)) {
+            Wave wave = waveFactory.createWave(10, spawn, seed);
+
+            assertThat(wave.getEnemies()).anyMatch(e -> e.getType() == EnemyType.BOSS_WARLORD);
+            assertThat(wave.getEnemies()).anyMatch(e -> e.getType() != EnemyType.BOSS_WARLORD);
+        }
+    }
+
+    @Test
+    @DisplayName("Le Chevalier noir n'apparaît pas sur une vague à Boss (pas d'empilement de mini-boss)")
+    void createWave_bossWave_neverHasDarkKnight() {
+        for (long seed : List.of(0L, 1L, 2L, 42L, -7L)) {
+            for (int recurrence = 1; recurrence <= 3; recurrence++) {
+                Wave wave = waveFactory.createWave(recurrence * 10, spawn, seed);
+                assertThat(wave.getEnemies()).noneMatch(e -> e.getType() == EnemyType.DARK_KNIGHT);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Le nombre de Boss augmente avec les récurrences (vague 30 >= vague 10)")
+    void createWave_bossCount_growsWithRecurrence() {
+        long seed = 5L;
+        long bossCountWave10 = waveFactory.createWave(10, spawn, seed).getEnemies().stream()
+                .filter(e -> e.getType() == EnemyType.BOSS_WARLORD).count();
+        long bossCountWave30 = waveFactory.createWave(30, spawn, seed).getEnemies().stream()
+                .filter(e -> e.getType() == EnemyType.BOSS_WARLORD).count();
+
+        assertThat(bossCountWave30).isGreaterThanOrEqualTo(bossCountWave10);
+    }
 }
