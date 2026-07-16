@@ -73,7 +73,10 @@ public class WaveSimulationService {
     public record SimulationResult(List<TickSnapshot> ticks, int goldEarned, int castleDamageTaken) {}
 
     public SimulationResult simulate(GameMap map, Wave wave, Castle castle) {
-        List<Position> path = pathfindingService.findPath(map);
+        // Couloir strict : le chemin ignore les tours (elles ne peuvent de toute
+        // façon pas être posées dessus, voir PlaceTowerService) — il est donc
+        // stable d'une vague à l'autre, quelles que soient les tours posées.
+        List<Position> path = pathfindingService.findCorridorPath(map);
         if (path == null || path.isEmpty()) {
             throw new IllegalStateException("Aucun chemin disponible sur la map");
         }

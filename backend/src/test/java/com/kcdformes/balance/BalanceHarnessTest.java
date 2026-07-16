@@ -74,35 +74,37 @@ class BalanceHarnessTest {
                              List<Integer> hpByWave, List<Integer> towersLostByWave) {}
 
     // --- Setups de référence ---
-    // Chemin : ligne y=7 de (0,7) à (19,7) — les tours sont posées en y=6/y=8,
-    // à portée du chemin (Archer 3.0, Mage 2.5, Catapulte 4.0, Baliste 5.0).
+    // Chemin : ligne y=7 de (0,7) à (19,7). COULOIR STRICT (GAME_DESIGN 2.6) :
+    // la bande y=6..8 est inconstructible — les tours sont donc posées en
+    // y=5/y=9, les emplacements légaux les plus proches du chemin (distance 2,
+    // à portée : Archer 3.0, Mage 2.5, Catapulte 4.0, Baliste 5.0).
     // "sans-tours" sert de plancher de référence pour les assertions : tout
     // vrai setup doit faire strictement mieux que lui.
     private static final Setup BASELINE = new Setup("sans-tours", List.of(), 1);
 
     private static final Setup ECO_ARCHERS = new Setup("eco-archers", List.of(
-            new Placement(TowerType.ARCHER, 4, 6),
-            new Placement(TowerType.ARCHER, 8, 8),
-            new Placement(TowerType.ARCHER, 12, 6),
-            new Placement(TowerType.ARCHER, 16, 8),
-            new Placement(TowerType.ARCHER, 6, 8),
-            new Placement(TowerType.ARCHER, 14, 8)
+            new Placement(TowerType.ARCHER, 4, 5),
+            new Placement(TowerType.ARCHER, 8, 9),
+            new Placement(TowerType.ARCHER, 12, 5),
+            new Placement(TowerType.ARCHER, 16, 9),
+            new Placement(TowerType.ARCHER, 6, 9),
+            new Placement(TowerType.ARCHER, 14, 9)
     ), 3);
 
     private static final Setup MIXTE = new Setup("mixte", List.of(
-            new Placement(TowerType.ARCHER, 4, 6),
-            new Placement(TowerType.MAGE, 8, 8),
-            new Placement(TowerType.CATAPULT, 12, 6),
-            new Placement(TowerType.ARCHER, 16, 8),
-            new Placement(TowerType.MAGE, 14, 6)
+            new Placement(TowerType.ARCHER, 4, 5),
+            new Placement(TowerType.MAGE, 8, 9),
+            new Placement(TowerType.CATAPULT, 12, 5),
+            new Placement(TowerType.ARCHER, 16, 9),
+            new Placement(TowerType.MAGE, 14, 5)
     ), 3);
 
     private static final Setup PREMIUM = new Setup("premium", List.of(
-            new Placement(TowerType.ARCHER, 4, 6),
-            new Placement(TowerType.CATAPULT, 8, 8),
-            new Placement(TowerType.BALLISTA, 12, 6),
-            new Placement(TowerType.MAGE, 14, 8),
-            new Placement(TowerType.BALLISTA, 16, 6)
+            new Placement(TowerType.ARCHER, 4, 5),
+            new Placement(TowerType.CATAPULT, 8, 9),
+            new Placement(TowerType.BALLISTA, 12, 5),
+            new Placement(TowerType.MAGE, 14, 9),
+            new Placement(TowerType.BALLISTA, 16, 5)
     ), 3);
 
     private final WaveFactory waveFactory = new WaveFactory();

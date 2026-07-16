@@ -57,6 +57,13 @@ Toute décision de gameplay ci-dessous doit rester cohérente avec ces trois pil
 - **Règle de travail** : toute passe d'équilibrage (PV, goldReward, cadences, paramètres du boss...) se valide en lançant le harnais avant/après (`./mvnw test -Dtest=BalanceHarnessTest`) et en comparant les rapports — plus de tuning au ressenti seul.
 - Ses assertions sont volontairement lâches (invariants insensibles au tuning, ex. « tout setup fait mieux que ne rien poser ») : les tests de comportement restent dans `WaveSimulationServiceTest` / `WaveFactoryTest`, découplés des constantes d'équilibrage (voir le test d'enchaînement du Sapeur, PV surdimensionnés via l'override).
 
+### 2.6 Terrain : couloir strict (décision)
+
+- **Décision** : le jeu est un tower defense à **couloir strict**, pas un labyrinthe. Le chemin des ennemis est fixe pour toute la partie (calculé en ignorant les tours), et le couloir — chemin élargi d'une case de part et d'autre, là où circulent les files d'ennemis (`laneOffset` ±0.8) — est **inconstructible** (`CellOnPathException`).
+- **Pourquoi** : l'ancien modèle implicite (A* qui contournait les tours, seul le blocage complet étant interdit) était un labyrinthe qui s'ignorait — on pouvait poser des tours dans le couloir dessiné et dévier les mobs hors de celui-ci, incohérence visuelle et stratégique. Le couloir strict colle au rendu existant, au style Bloons TD visé, et garde l'équilibrage maîtrisable (le harnais 2.5 suppose un chemin stable).
+- **Exception assumée** : le Sapeur reste le seul ennemi autorisé à sortir du couloir (c'est sa mécanique, voir 2.1) — une exception lisible plutôt qu'une règle molle.
+- **Implémentation** : `PathfindingService.findCorridorPath` (A* ignorant les tours) et `corridorCells` (bande chemin ±1) ; rejet dans `PlaceTowerService` ; la simulation suit le chemin de couloir ; le frontend filtre les clics sur la bande (`GameScene`, `CORRIDOR_MIN_Y/MAX_Y`). `findPath`/`hasPath` (tours = murs) sont conservés comme point de réentrée si un mode labyrinthe voit le jour.
+
 ## 3. Couche compétitive légère (avant le multi temps réel)
 
 - **Leaderboard** : classement global par meilleure vague atteinte.
