@@ -25,7 +25,7 @@ Toute décision de gameplay ci-dessous doit rester cohérente avec ces trois pil
 - **Goblin** : chair à canon, toujours présent dès la vague 1.
 - **Orc**, **Troll** : ennemis "élite", débloqués à partir d'un seuil de vague (voir 2.2).
 - **Chevalier noir (Dark Knight)** : mini-boss à cadence fixe (toutes les 5 vagues une fois débloqué) — point d'extension naturel vers un futur vrai boss (voir 2.2).
-- **Sapeur** : dévie du chemin pour foncer sur la tour la plus proche et la détruire à coups de dégâts de siège (la case redevient constructible) ; s'il survit à sa cible, il enchaîne sur la tour suivante la plus proche, et ainsi de suite jusqu'à ce qu'il ne reste plus aucune tour sur la map — ce n'est qu'à ce moment-là qu'il reprend sa route vers le château. Débloqué dans le même mix "élite" qu'Orc/Troll.
+- **Sapeur** : dévie du chemin pour foncer sur la tour la plus proche et la détruire à coups de dégâts de siège (la case redevient constructible) ; s'il survit à sa cible, il enchaîne sur la tour suivante la plus proche, et ainsi de suite jusqu'à ce qu'il ne reste plus aucune tour sur la map — ce n'est qu'à ce moment-là qu'il reprend sa route vers le château. Débloqué dans le même mix "élite" qu'Orc/Troll. Dégâts de siège 12 → 8 : premier ajustement piloté par le harnais (voir 2.5) — à 12, le churn de tours détruites/rachetées étouffait l'économie et rendait le boss vague 10 inatteignable (mort médiane vague 7 tous builds confondus).
 - **Boss (Seigneur de guerre / `BOSS_WARLORD`)** : premier vrai boss du jeu, voir 2.3.
 - `goldReward` de chaque type calibré au fil de plusieurs passes d'équilibrage (dernier ajustement : +20 % sur tous les types, pour rendre la vague 10 atteignable sans la garantir) — c'est cette valeur qui sert aussi de "coût de menace" dans le système de budget décrit ci-dessous.
 
@@ -50,6 +50,12 @@ Toute décision de gameplay ci-dessous doit rester cohérente avec ces trois pil
 - Tous les 5 paliers de vague (`GameService.BONUS_MILESTONE_INTERVAL`), le lancement de la vague suivante est bloqué jusqu'à ce que le joueur choisisse un bonus parmi plusieurs options (`BonusType`) : injection d'or proportionnelle à la vague atteinte, réparation complète du château, ou réparation de toutes les tours endommagées.
 - Choix unique par palier, sans effet automatique — le joueur garde la main sur la stratégie (or immédiat vs résilience défensive).
 - Implémentation : `ChooseBonusUseCase` / `GameService.chooseBonus`, flag `GameEntity.awaitingBonusChoice` persisté, modale de choix bloquante côté frontend.
+
+### 2.5 Outillage d'équilibrage : harnais de simulation
+
+- **`BalanceHarnessTest`** (`backend/src/test/.../balance/`) : joue des parties complètes (jusqu'à 40 vagues × 20 seeds) contre des setups de tours de référence pilotés par un bot d'achat simple, et imprime un rapport agrégé — vague de mort médiane/min/max, taux de survie aux vagues 10/20/30, tours perdues (dont sur vagues à boss), or final.
+- **Règle de travail** : toute passe d'équilibrage (PV, goldReward, cadences, paramètres du boss...) se valide en lançant le harnais avant/après (`./mvnw test -Dtest=BalanceHarnessTest`) et en comparant les rapports — plus de tuning au ressenti seul.
+- Ses assertions sont volontairement lâches (invariants insensibles au tuning, ex. « tout setup fait mieux que ne rien poser ») : les tests de comportement restent dans `WaveSimulationServiceTest` / `WaveFactoryTest`, découplés des constantes d'équilibrage (voir le test d'enchaînement du Sapeur, PV surdimensionnés via l'override).
 
 ## 3. Couche compétitive légère (avant le multi temps réel)
 

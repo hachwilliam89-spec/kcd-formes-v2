@@ -34,7 +34,13 @@ public enum EnemyType {
      */
     // PV +20 % (180, au lieu de 150) : le rend plus difficile à abattre en route
     // vers sa tour cible, pour augmenter la pression qu'il met sur le joueur.
-    SAPEUR(180, 0.12, 28, 8, true, 12),
+    // Dégâts de siège 12 -> 8 (harnais d'équilibrage, voir BalanceHarnessTest) :
+    // à 12, les Sapeurs détruisaient les tours plus vite que l'économie ne
+    // permettait de les racheter (4-5 tours perdues PAR VAGUE dès la vague 5,
+    // mort médiane vague 7 quel que soit le build, boss vague 10 inatteignable).
+    // À 8, un Archer (150 PV) tient 19 ticks de siège au lieu de 13 — le temps
+    // pour la défense de tuer le Sapeur avant de perdre la tour.
+    SAPEUR(180, 0.12, 28, 8, true, 8),
 
     /**
      * Premier boss du jeu (voir WaveFactory.BOSS_MILESTONE_INTERVAL) : apparaît
