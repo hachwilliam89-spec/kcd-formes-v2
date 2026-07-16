@@ -62,6 +62,13 @@ export function useGame() {
         if (!gameId) throw new Error('Aucune partie en cours')
         const { data } = await api.post(`/api/v1/games/${gameId}/bonus/choose`, { bonusType })
         applyBonusChoice(data)
+        // La réponse du choix ne porte que l'or et les PV du château
+        // (ChooseBonusResult) : les effets sur la map — TOWER_REPAIR remet les
+        // jauges des tours à plein côté serveur — n'y figurent pas. Sans ce
+        // refetch, les barres de vie des tours restaient sur l'état d'avant le
+        // bonus. Même besoin (et même remède) que les tours détruites par un
+        // Sapeur pendant une vague, voir refreshGame.
+        await refreshGame()
         return data
     }
 
