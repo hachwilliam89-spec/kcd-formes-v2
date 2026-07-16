@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 interface Tower {
     id: string
@@ -74,9 +75,13 @@ interface GameState {
     applyWaveResult: (result: WaveResult) => void
     applyBonusChoice: (result: { gold: number; castleHp: number; castleMaxHp: number }) => void
     reset: () => void
+
+    /** Vrai une fois gameId relu depuis localStorage — même besoin que authStore.hasHydrated. */
+    hasHydrated: boolean
+    setHasHydrated: (hydrated: boolean) => void
 }
 
-export const useGameStore = create<GameState>()((set) => ({
+export const useGameStore = create<GameState>()(persist((set) => ({
     gameId: null,
     castleId: null,
     status: '',
@@ -160,4 +165,17 @@ export const useGameStore = create<GameState>()((set) => ({
             awaitingBonusChoice: false,
             availableBonuses: [],
         }),
+
+    hasHydrated: false,
+    setHasHydrated: (hydrated) => set({ hasHydrated: hydrated }),
+}), {
+    name: 'game-storage',
+    // Seuls les IDENTIFIANTS survivent au rechargement : tout le reste (map, or,
+    // PV, statut...) est refetché depuis le backend au montage (voir
+    // useGame.resumeGame) — le serveur est la seule source de vérité, persister
+    // des copies locales inviterait à rejouer sur un état périmé.
+    partialize: (state) => ({ gameId: state.gameId, castleId: state.castleId }),
+    onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+    },
 }))

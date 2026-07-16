@@ -8,7 +8,7 @@ export function useGame() {
     const { player } = useAuthStore()
     const {
         gameId, map, waveNumber, gold, castleHp, castleMaxHp, status,
-        awaitingBonusChoice, availableBonuses,
+        awaitingBonusChoice, availableBonuses, hasHydrated,
         setGame, addTower, upgradeTower: upgradeTowerInStore, spendGold, applyWaveResult,
         applyBonusChoice, reset,
     } = useGameStore()
@@ -77,6 +77,20 @@ export function useGame() {
         router.push('/')
     }
 
+    // Reprise après un rechargement de page : le store ne persiste que le gameId,
+    // l'état complet (map, or, PV, statut) est refetché ici depuis le backend.
+    // Si la partie n'existe plus côté serveur (base réinitialisée, id d'un autre
+    // environnement...), on repart sur un store vierge — le composant recréera
+    // alors une partie neuve via createGame.
+    async function resumeGame() {
+        try {
+            return await refreshGame()
+        } catch {
+            reset()
+            return null
+        }
+    }
+
     // Recharge l'état complet de la partie depuis le backend. Utile après une vague :
     // un Sapeur peut avoir détruit une tour en cours de simulation (mémoire serveur),
     // et seul un refetch de la map donne l'état des tours réellement à jour (PV, suppression).
@@ -97,12 +111,14 @@ export function useGame() {
         status,
         awaitingBonusChoice,
         availableBonuses,
+        hasHydrated,
         createGame,
         placeTower,
         upgradeTower,
         startWave,
         chooseBonus,
         refreshGame,
+        resumeGame,
         resetGame,
     }
 }

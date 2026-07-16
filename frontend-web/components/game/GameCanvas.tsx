@@ -63,7 +63,16 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
 
     useImperativeHandle(ref, () => ({
         playWave: (ticks, onTick, onComplete) => {
-            sceneRef.current?.playWave(ticks, onTick, onComplete)
+            // Scène indisponible (ex. remontage à chaud en dev) : signaler quand
+            // même la fin, sinon l'appelant attend un onComplete qui ne viendra
+            // jamais et l'UI reste verrouillée en "combat en cours" (voir
+            // handleStartWave) — le résultat de la vague, lui, est déjà acquis
+            // côté serveur.
+            if (!sceneRef.current) {
+                onComplete?.()
+                return
+            }
+            sceneRef.current.playWave(ticks, onTick, onComplete)
         },
     }))
 
