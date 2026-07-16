@@ -223,7 +223,13 @@ export class GameScene extends Phaser.Scene {
         onTick?: (castleHp: number) => void,
         onComplete?: () => void
     ) {
-        if (!this.enemiesGraphics) return
+        // Scène pas (ou plus) initialisée : signaler quand même la fin plutôt que
+        // de sortir en silence — sinon l'appelant ne reçoit jamais onComplete et
+        // l'UI reste verrouillée en "combat en cours" (voir GameCanvas/page).
+        if (!this.enemiesGraphics) {
+            onComplete?.()
+            return
+        }
         this.waveTimer?.remove()
 
         let index = 0

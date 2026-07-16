@@ -33,12 +33,12 @@ const TOWER_INFO: Record<TowerType, { label: string; cost: number; color: string
 
 export default function GamePage() {
     const router = useRouter()
-    const { player, isAuthenticated } = useAuthStore()
+    const { player, isAuthenticated, hasHydrated: authHydrated } = useAuthStore()
     const { handleLogout } = useAuth()
     const {
         gameId, map, waveNumber, gold, castleHp, castleMaxHp, status,
-        awaitingBonusChoice, availableBonuses,
-        createGame, placeTower, upgradeTower, startWave, chooseBonus, refreshGame, resetGame,
+        awaitingBonusChoice, availableBonuses, hasHydrated: gameHydrated,
+        createGame, placeTower, upgradeTower, startWave, chooseBonus, refreshGame, resumeGame, resetGame,
     } = useGame()
 
     const canvasRef = useRef<GameCanvasHandle>(null)
@@ -52,18 +52,36 @@ export default function GamePage() {
     const [isGameOver, setIsGameOver] = useState(false)
     const [bonusChoiceLoading, setBonusChoiceLoading] = useState(false)
 
+    // Redirection vers la connexion : UNIQUEMENT une fois le store relu depuis
+    // localStorage (authHydrated). La réhydratation de persist est asynchrone —
+    // au premier rendu après un F5, isAuthenticated est encore à sa valeur
+    // initiale (false) même pour un utilisateur connecté : rediriger à ce
+    // moment-là éjectait systématiquement vers l'écran de connexion à chaque
+    // rechargement de page.
     useEffect(() => {
-        if (!isAuthenticated) router.push('/')
-    }, [isAuthenticated, router])
+        if (authHydrated && !isAuthenticated) router.push('/')
+    }, [authHydrated, isAuthenticated, router])
 
-    // Reprise d'une partie déjà perdue (ex. rechargement de page) : pas d'animation
-    // à attendre, on peut refléter l'état tout de suite. Ne dépend que de gameId
-    // (chargement de la partie), pas de status à chaque mise à jour : sinon le
-    // bandeau "Château détruit" apparaîtrait dès la réponse de l'API de la vague,
-    // avant que l'animation de combat n'ait fini de se jouer à l'écran.
+    // Reprise de la partie persistée après un rechargement : seul gameId survit
+    // (voir gameStore.partialize), l'état complet est refetché ici. Couvre aussi
+    // la reprise d'une partie déjà perdue (bandeau + blocage immédiats, pas
+    // d'animation à attendre). Ne dépend volontairement que du chargement de la
+    // partie, pas de status/map à chaque mise à jour : sinon le bandeau
+    // "Château détruit" apparaîtrait dès la réponse de l'API de la vague, avant
+    // la fin de l'animation de combat (c'est finishWave qui gère ce cas-là).
     useEffect(() => {
-        if (gameId && status === 'DEFEAT') setIsGameOver(true)
-    }, [gameId])
+        if (!isAuthenticated || !gameId) return
+        if (status === 'DEFEAT') {
+            setIsGameOver(true)
+            return
+        }
+        if (!map) {
+            resumeGame().then((data) => {
+                if (data?.status === 'DEFEAT') setIsGameOver(true)
+            })
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAuthenticated, gameId])
 
     async function refreshBestWave() {
         try {
@@ -79,11 +97,14 @@ export default function GamePage() {
         refreshBestWave()
     }, [isAuthenticated])
 
+    // gameHydrated : sans cette garde, l'effet partait AVANT la relecture du
+    // gameId persisté (réhydratation asynchrone) et créait une nouvelle partie
+    // à chaque F5, orphelinant silencieusement la partie en cours.
     useEffect(() => {
-        if (isAuthenticated && !gameId) {
+        if (isAuthenticated && gameHydrated && !gameId) {
             createGame().catch(() => setMessage('Erreur lors de la création de la partie'))
         }
-    }, [isAuthenticated, gameId])
+    }, [isAuthenticated, gameHydrated, gameId])
 
     useEffect(() => {
         setLiveCastleHp(castleHp)
@@ -124,29 +145,41 @@ export default function GamePage() {
             const data = await startWave()
             setMessage(`Vague ${data.number} en cours...`)
 
-            canvasRef.current?.playWave(
-                data.ticks,
-                (tickCastleHp: number) => setLiveCastleHp(tickCastleHp),
-                () => {
-                    setCombatRunning(false)
-                    setLoading(false)
-                    refreshBestWave()
-                    // Un Sapeur peut avoir détruit une tour pendant la vague (case libérée
-                    // côté backend) : on recharge la map pour que l'affichage des tours et
-                    // de leurs PV reflète l'état réel après combat.
-                    refreshGame().catch(() => {
-                        // best-effort : un échec n'empêche pas d'afficher le résultat de la vague.
-                    })
-                    if (data.gameStatus === 'DEFEAT') {
-                        setIsGameOver(true)
-                        setMessage(`Le château est tombé à la vague ${data.number}. Partie terminée.`)
-                    } else if (data.status === 'VICTORY') {
-                        setMessage(`Vague ${data.number} repoussée — +${data.goldEarned} or !`)
-                    } else {
-                        setMessage(`Vague ${data.number} : des ennemis ont atteint le château (-${data.castleDamageTaken} PV). +${data.goldEarned} or.`)
-                    }
+            // Clôture de vague : TOUJOURS exécutée, avec ou sans animation. La
+            // vague est déjà entièrement résolue côté serveur — l'animation n'est
+            // qu'un rejeu visuel. Si elle ne peut pas se jouer (canvas remonté à
+            // chaud en dev, refs obsolètes...), on applique quand même le
+            // résultat : sans ça, combatRunning restait verrouillé à true et
+            // l'écran de défaite ne s'affichait jamais.
+            const finishWave = () => {
+                setCombatRunning(false)
+                setLoading(false)
+                refreshBestWave()
+                // Un Sapeur peut avoir détruit une tour pendant la vague (case libérée
+                // côté backend) : on recharge la map pour que l'affichage des tours et
+                // de leurs PV reflète l'état réel après combat.
+                refreshGame().catch(() => {
+                    // best-effort : un échec n'empêche pas d'afficher le résultat de la vague.
+                })
+                if (data.gameStatus === 'DEFEAT') {
+                    setIsGameOver(true)
+                    setMessage(`Le château est tombé à la vague ${data.number}. Partie terminée.`)
+                } else if (data.status === 'VICTORY') {
+                    setMessage(`Vague ${data.number} repoussée — +${data.goldEarned} or !`)
+                } else {
+                    setMessage(`Vague ${data.number} : des ennemis ont atteint le château (-${data.castleDamageTaken} PV). +${data.goldEarned} or.`)
                 }
-            )
+            }
+
+            if (canvasRef.current) {
+                canvasRef.current.playWave(
+                    data.ticks,
+                    (tickCastleHp: number) => setLiveCastleHp(tickCastleHp),
+                    finishWave
+                )
+            } else {
+                finishWave()
+            }
         } catch {
             setMessage('Erreur lors du lancement de la vague')
             setCombatRunning(false)
@@ -267,8 +300,15 @@ export default function GamePage() {
             </div>
 
             {/* Palier de bonus (toutes les 5 vagues) : bloque le jeu jusqu'à un choix
-                du joueur parmi plusieurs options (voir backend BonusType). */}
-            {awaitingBonusChoice && !isGameOver && (
+                du joueur parmi plusieurs options (voir backend BonusType).
+                !combatRunning : la vague est entièrement résolue côté serveur dès la
+                réponse HTTP, donc awaitingBonusChoice est vrai dès le DÉBUT de
+                l'animation — sans ce garde, la modale s'affichait par-dessus le
+                combat en cours, et choisir un bonus déclenchait le refetch de
+                l'état de FIN de vague (voir useGame.chooseBonus) : les tours que
+                les Sapeurs détruisaient plus tard dans l'animation semblaient
+                "supprimées par le bonus". */}
+            {awaitingBonusChoice && !isGameOver && !combatRunning && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
                     <Card className="bg-slate-800 border-slate-600 w-96">
                         <CardContent className="p-5 flex flex-col gap-3">
