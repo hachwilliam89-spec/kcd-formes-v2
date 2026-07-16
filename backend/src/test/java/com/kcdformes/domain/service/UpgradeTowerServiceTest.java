@@ -34,6 +34,9 @@ class UpgradeTowerServiceTest {
     private FakeGameRepository gameRepository;
     private UpgradeTowerService service;
     private UUID gameId;
+    // Identité du joueur : exigée par le contrat des commandes (voir PlaceTowerUseCase),
+    // mais la vérification de propriété vit dans GameService — ici une valeur quelconque suffit.
+    private final UUID playerId = UUID.randomUUID();
     private Tower tower;
 
     @BeforeEach
@@ -51,7 +54,7 @@ class UpgradeTowerServiceTest {
     @Test
     @DisplayName("upgradeTower incrémente le niveau de la tour visée")
     void upgradeTower_incrementsLevel() {
-        Tower upgraded = service.upgradeTower(new UpgradeTowerCommand(gameId, tower.getId()));
+        Tower upgraded = service.upgradeTower(new UpgradeTowerCommand(gameId, playerId, tower.getId()));
 
         assertThat(upgraded.getLevel()).isEqualTo(2);
     }
@@ -59,7 +62,7 @@ class UpgradeTowerServiceTest {
     @Test
     @DisplayName("upgradeTower persiste le niveau mis à jour dans la map sauvegardée")
     void upgradeTower_persistsUpdatedMap() {
-        service.upgradeTower(new UpgradeTowerCommand(gameId, tower.getId()));
+        service.upgradeTower(new UpgradeTowerCommand(gameId, playerId, tower.getId()));
 
         GameMap reloaded = gameRepository.findMapByGameId(gameId).orElseThrow();
         Tower persisted = reloaded.getTowerById(tower.getId()).orElseThrow();
@@ -69,14 +72,14 @@ class UpgradeTowerServiceTest {
     @Test
     @DisplayName("upgradeTower lève une exception si la tour n'existe pas")
     void upgradeTower_unknownTower_throws() {
-        assertThatThrownBy(() -> service.upgradeTower(new UpgradeTowerCommand(gameId, UUID.randomUUID())))
+        assertThatThrownBy(() -> service.upgradeTower(new UpgradeTowerCommand(gameId, playerId, UUID.randomUUID())))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     @DisplayName("upgradeTower lève une exception si la partie n'existe pas")
     void upgradeTower_unknownGame_throws() {
-        assertThatThrownBy(() -> service.upgradeTower(new UpgradeTowerCommand(UUID.randomUUID(), tower.getId())))
+        assertThatThrownBy(() -> service.upgradeTower(new UpgradeTowerCommand(UUID.randomUUID(), playerId, tower.getId())))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

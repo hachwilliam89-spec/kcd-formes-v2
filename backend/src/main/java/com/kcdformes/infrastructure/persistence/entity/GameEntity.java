@@ -51,6 +51,19 @@ public class GameEntity {
     @Column(name = "awaiting_bonus_choice", nullable = false)
     private boolean awaitingBonusChoice = false;
 
+    /**
+     * Verrou optimiste JPA : deux requêtes concurrentes qui chargent la même
+     * version et tentent de sauvegarder chacune leur copie ne peuvent pas
+     * toutes les deux réussir — la seconde échoue en
+     * ObjectOptimisticLockingFailureException (mappée en 409, voir
+     * GlobalExceptionHandler). Sans ça, un double-clic sur "lancer la vague"
+     * simulait deux fois la même vague (même seed + même waveNumber) : or
+     * doublé et château débité deux fois.
+     */
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @Column(name = "started_at", nullable = false, updatable = false)
     private OffsetDateTime startedAt = OffsetDateTime.now();
 

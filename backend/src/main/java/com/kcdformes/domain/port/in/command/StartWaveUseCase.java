@@ -9,7 +9,9 @@ import java.util.UUID;
 
 public interface StartWaveUseCase {
 
-    record StartWaveCommand(UUID gameId) {}
+    // playerId : identité du joueur authentifié, pour la vérification de propriété
+    // de la partie (voir GameService.loadOwnedGame).
+    record StartWaveCommand(UUID gameId, UUID playerId) {}
 
     /**
      * Résultat complet d'une vague : la vague elle-même (statut, or gagné),

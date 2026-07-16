@@ -6,7 +6,9 @@ import java.util.UUID;
 
 public interface UpgradeTowerUseCase {
 
-    record UpgradeTowerCommand(UUID gameId, UUID towerId) {}
+    // playerId : identité du joueur authentifié, pour la vérification de propriété
+    // de la partie (voir GameService.loadOwnedGame).
+    record UpgradeTowerCommand(UUID gameId, UUID playerId, UUID towerId) {}
 
     Tower upgradeTower(UpgradeTowerCommand command);
 }

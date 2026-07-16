@@ -12,5 +12,7 @@ public interface GetGameStateUseCase {
     record GameStateResult(UUID gameId, UUID castleId, GameMap map, int waveNumber, int gold, String status,
                             int castleHp, int castleMaxHp, boolean awaitingBonusChoice) {}
 
-    GameStateResult getGameState(UUID gameId);
+    // playerId : identité du joueur authentifié — l'état d'une partie n'est visible
+    // que par son propriétaire (voir GameService.loadOwnedGame).
+    GameStateResult getGameState(UUID gameId, UUID playerId);
 }

@@ -6,7 +6,9 @@ import java.util.UUID;
 
 public interface ChooseBonusUseCase {
 
-    record ChooseBonusCommand(UUID gameId, BonusType bonusType) {}
+    // playerId : identité du joueur authentifié, pour la vérification de propriété
+    // de la partie (voir GameService.loadOwnedGame).
+    record ChooseBonusCommand(UUID gameId, UUID playerId, BonusType bonusType) {}
 
     /**
      * Résultat du choix : seuls les champs pertinents pour le bonus choisi varient

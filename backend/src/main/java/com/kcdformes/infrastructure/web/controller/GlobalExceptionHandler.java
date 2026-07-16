@@ -1,6 +1,7 @@
 package com.kcdformes.infrastructure.web.controller;
 import com.kcdformes.domain.exception.BonusChoicePendingException;
 import com.kcdformes.domain.exception.CellOccupiedException;
+import com.kcdformes.domain.exception.GameAlreadyFinishedException;
 import com.kcdformes.domain.exception.InsufficientGoldException;
 import com.kcdformes.domain.exception.InvalidPositionException;
 import com.kcdformes.domain.exception.TowerNotUnlockedException;
@@ -38,6 +39,24 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BonusChoicePendingException.class)
     public ResponseEntity<Map<String, String>> handleBonusChoicePending(BonusChoicePendingException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(GameAlreadyFinishedException.class)
+    public ResponseEntity<Map<String, String>> handleGameAlreadyFinished(GameAlreadyFinishedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
+    }
+
+    /**
+     * Échec du verrou optimiste (voir GameEntity.version) : deux requêtes ont
+     * modifié la même partie en parallèle, la seconde perd. 409 plutôt que 500 :
+     * l'état du serveur est sain, c'est la requête du client qui est arrivée sur
+     * une version périmée — il lui suffit de recharger l'état et de réessayer.
+     */
+    @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<Map<String, String>> handleOptimisticLock(
+            org.springframework.orm.ObjectOptimisticLockingFailureException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", "La partie a été modifiée par une autre requête — rechargez l'état et réessayez"));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

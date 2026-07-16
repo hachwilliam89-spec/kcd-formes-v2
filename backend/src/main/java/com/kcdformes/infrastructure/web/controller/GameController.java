@@ -35,14 +35,14 @@ public class GameController {
             Authentication auth) {
         UUID playerId = extractPlayerId(auth);
         GameEntity game = gameService.createGame(playerId, request.castleName());
-        GameStateResult state = gameService.getGameState(game.getId());
+        GameStateResult state = gameService.getGameState(game.getId(), playerId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(GameResponse.from(game, state.map(), state));
     }
 
     @GetMapping("/{gameId}")
     public ResponseEntity<GameResponse> getGame(@PathVariable UUID gameId, Authentication auth) {
-        GameStateResult state = gameService.getGameState(gameId);
+        GameStateResult state = gameService.getGameState(gameId, extractPlayerId(auth));
         return ResponseEntity.ok(GameResponse.from(state));
     }
 
@@ -52,7 +52,7 @@ public class GameController {
             @Valid @RequestBody PlaceTowerRequest request,
             Authentication auth) {
         Tower tower = gameService.placeTower(
-                new PlaceTowerCommand(gameId, request.towerType(), request.x(), request.y()));
+                new PlaceTowerCommand(gameId, extractPlayerId(auth), request.towerType(), request.x(), request.y()));
         return ResponseEntity.status(HttpStatus.CREATED).body(TowerResponse.from(tower));
     }
 
@@ -61,13 +61,13 @@ public class GameController {
             @PathVariable UUID gameId,
             @PathVariable UUID towerId,
             Authentication auth) {
-        Tower tower = gameService.upgradeTower(new UpgradeTowerCommand(gameId, towerId));
+        Tower tower = gameService.upgradeTower(new UpgradeTowerCommand(gameId, extractPlayerId(auth), towerId));
         return ResponseEntity.ok(TowerResponse.from(tower));
     }
 
     @PostMapping("/{gameId}/waves/start")
     public ResponseEntity<WaveResponse> startWave(@PathVariable UUID gameId, Authentication auth) {
-        StartWaveResult result = gameService.startWave(new StartWaveCommand(gameId));
+        StartWaveResult result = gameService.startWave(new StartWaveCommand(gameId, extractPlayerId(auth)));
         return ResponseEntity.ok(WaveResponse.from(result));
     }
 
@@ -76,7 +76,8 @@ public class GameController {
             @PathVariable UUID gameId,
             @Valid @RequestBody ChooseBonusRequest request,
             Authentication auth) {
-        ChooseBonusResult result = gameService.chooseBonus(new ChooseBonusCommand(gameId, request.bonusType()));
+        ChooseBonusResult result = gameService.chooseBonus(
+                new ChooseBonusCommand(gameId, extractPlayerId(auth), request.bonusType()));
         return ResponseEntity.ok(BonusChoiceResponse.from(result));
     }
 
