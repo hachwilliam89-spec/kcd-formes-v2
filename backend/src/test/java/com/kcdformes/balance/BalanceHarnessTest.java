@@ -65,8 +65,13 @@ class BalanceHarnessTest {
      */
     private record Setup(String name, List<Placement> placements, int targetLevel) {}
 
-    /** Résultat d'un run : deathWave = vague où le château tombe, ou MAX_WAVE + 1 si survécu. */
-    private record RunResult(int deathWave, int towersLost, int towersLostOnBossWaves, int finalGold) {}
+    /**
+     * Résultat d'un run : deathWave = vague où le château tombe, ou MAX_WAVE + 1 si
+     * survécu. hpByWave / towersLostByWave (indexés par numéro de vague - 1) tracent
+     * le déroulé pour localiser la vague qui tue, pas seulement quand on meurt.
+     */
+    private record RunResult(int deathWave, int towersLost, int towersLostOnBossWaves, int finalGold,
+                             List<Integer> hpByWave, List<Integer> towersLostByWave) {}
 
     // --- Setups de référence ---
     // Chemin : ligne y=7 de (0,7) à (19,7) — les tours sont posées en y=6/y=8,
@@ -121,6 +126,7 @@ class BalanceHarnessTest {
                 results.add(runGame(setup, seedIndex * 1_000_003L));
             }
             printAggregates(setup, results);
+            printWaveTrace(setup, results);
 
             int median = medianDeathWave(results);
             if (setup == BASELINE) {
@@ -146,6 +152,8 @@ class BalanceHarnessTest {
         int castleHp = CASTLE_MAX_HP;
         int towersLost = 0;
         int towersLostOnBossWaves = 0;
+        List<Integer> hpByWave = new ArrayList<>();
+        List<Integer> towersLostByWave = new ArrayList<>();
 
         for (int waveNumber = 1; waveNumber <= MAX_WAVE; waveNumber++) {
             gold = buyAndUpgrade(setup, map, gold);
@@ -162,15 +170,18 @@ class BalanceHarnessTest {
             int lost = (int) result.ticks().stream()
                     .mapToLong(t -> t.destroyedTowers().size()).sum();
             towersLost += lost;
+            towersLostByWave.add(lost);
             if (waveNumber % 10 == 0) {
                 towersLostOnBossWaves += lost;
             }
 
             gold += result.goldEarned();
             castleHp = castle.getHp();
+            hpByWave.add(castleHp);
 
             if (castle.isDestroyed()) {
-                return new RunResult(waveNumber, towersLost, towersLostOnBossWaves, gold);
+                return new RunResult(waveNumber, towersLost, towersLostOnBossWaves, gold,
+                        hpByWave, towersLostByWave);
             }
 
             // Palier de bonus : même heuristique qu'un joueur raisonnable —
@@ -186,7 +197,8 @@ class BalanceHarnessTest {
             }
         }
 
-        return new RunResult(MAX_WAVE + 1, towersLost, towersLostOnBossWaves, gold);
+        return new RunResult(MAX_WAVE + 1, towersLost, towersLostOnBossWaves, gold,
+                hpByWave, towersLostByWave);
     }
 
     /**
@@ -240,6 +252,33 @@ class BalanceHarnessTest {
                 pctSurvived(deaths, 10), pctSurvived(deaths, 20), pctSurvived(deaths, 30),
                 String.format("%.1f (boss %.1f)", avgTowersLost, avgBossLost),
                 medianGold);
+    }
+
+    /**
+     * Trace vague par vague : PV médians du château (les runs déjà morts comptent
+     * à 0, donc la médiane à 0 = la moitié des runs sont morts à ce stade) et
+     * tours perdues en moyenne sur cette vague — pour repérer LA vague qui tue
+     * (chute brutale des PV) et celle où la pression de siège explose, plutôt
+     * que de ne connaître que la vague de mort finale.
+     */
+    private void printWaveTrace(Setup setup, List<RunResult> results) {
+        int lastWave = results.stream().mapToInt(r -> r.hpByWave().size()).max().orElse(0);
+
+        StringBuilder hpLine = new StringBuilder("    PV château (méd) : ");
+        StringBuilder lostLine = new StringBuilder("    Tours perdues/vague : ");
+        for (int w = 0; w < lastWave; w++) {
+            final int wave = w;
+            List<Integer> hps = results.stream()
+                    .map(r -> wave < r.hpByWave().size() ? r.hpByWave().get(wave) : 0)
+                    .sorted().toList();
+            double avgLost = results.stream()
+                    .mapToInt(r -> wave < r.towersLostByWave().size() ? r.towersLostByWave().get(wave) : 0)
+                    .average().orElse(0);
+            hpLine.append(String.format("v%d:%d ", w + 1, hps.get(hps.size() / 2)));
+            lostLine.append(String.format("v%d:%.1f ", w + 1, avgLost));
+        }
+        System.out.println(hpLine);
+        System.out.println(lostLine);
     }
 
     private int medianDeathWave(List<RunResult> results) {
