@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 
 interface Tower {
     id: string
-    type: 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA'
+    type: 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA' | 'WALL'
     x: number
     y: number
     level: number
@@ -66,6 +66,9 @@ interface GameState {
         castleMaxHp: number
         map: GameMap
         awaitingBonusChoice?: boolean
+        // Fournies par le backend avec l'état (voir GameResponse) : sans elles,
+        // un rechargement pendant un palier rouvrait une modale de choix vide.
+        availableBonuses?: BonusOption[]
     }) => void
 
     addTower: (tower: Tower) => void
@@ -104,6 +107,7 @@ export const useGameStore = create<GameState>()(persist((set) => ({
             castleMaxHp: game.castleMaxHp,
             map: game.map,
             awaitingBonusChoice: game.awaitingBonusChoice ?? false,
+            availableBonuses: game.availableBonuses ?? [],
         }),
 
     addTower: (tower) =>

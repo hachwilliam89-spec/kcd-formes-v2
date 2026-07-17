@@ -91,6 +91,26 @@ class PlaceTowerServiceTest {
     }
 
     @Test
+    @DisplayName("Le mur-barrage se pose SUR le couloir (règle inverse des tours)")
+    void placeWall_onCorridor_accepted() {
+        Tower wall = service.placeTower(
+                new PlaceTowerCommand(gameId, playerId, TowerType.WALL, 10, 7));
+
+        assertThat(wall).isNotNull();
+        assertThat(gameRepository.findMapByGameId(gameId).orElseThrow()
+                .getTowerAt(10, 7)).isPresent();
+    }
+
+    @Test
+    @DisplayName("Le mur-barrage est refusé hors du couloir (il ne sert qu'à barrer le passage)")
+    void placeWall_outsideCorridor_rejected() {
+        assertThatThrownBy(() -> service.placeTower(
+                new PlaceTowerCommand(gameId, playerId, TowerType.WALL, 10, 5)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("corridor");
+    }
+
+    @Test
     @DisplayName("Une case déjà occupée hors couloir reste refusée (CellOccupied, pas CellOnPath)")
     void placeTower_occupiedCellOutsideCorridor_rejectedAsOccupied() {
         gameRepository.findMapByGameId(gameId).orElseThrow()

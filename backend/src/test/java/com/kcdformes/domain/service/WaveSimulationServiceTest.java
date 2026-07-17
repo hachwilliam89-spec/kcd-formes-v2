@@ -207,16 +207,18 @@ class WaveSimulationServiceTest {
         Tower tower = new Tower(TowerType.ARCHER, 3, 7); // proche de la position du Boss au tick de son 1er pulse (voir calcul ci-dessous)
         map.placeTower(tower);
 
-        // Boss : spawnDelay=0, avance donc dès le tick 1 (vitesse 0.07/tick). À son
-        // 1er pulse (tick = abilityIntervalTicks = 40), il a parcouru 40*0.07 = 2.8
-        // cases depuis (0,7), soit (2.8,7) — à moins de auraRadius (3.0) du Goblin
-        // resté immobile au spawn, et à moins de aoeRadius (2.0) de la tour en (3,7).
+        // Boss : spawnDelay=0, avance donc dès le tick 1 (vitesse 0.08/tick). À son
+        // 1er pulse (tick = abilityIntervalTicks = 40), il a parcouru 40*0.08 = 3.2
+        // cases depuis (0,7), soit (3.2,7) — à moins de aoeRadius (3.0) de la tour
+        // en (3,7), et à moins de auraRadius (3.0) du Goblin posté en (2,7).
         Enemy boss = new Enemy(EnemyType.BOSS_WARLORD, map.getPathStart().x(), map.getPathStart().y(), 0);
 
-        // Goblin endommagé, spawnDelay très élevé pour qu'il reste immobile au
-        // point de spawn pendant toute la fenêtre observée (sinon sa vitesse propre
-        // l'éloignerait du Boss avant le 1er pulse).
-        Enemy goblin = new Enemy(EnemyType.GOBLIN, map.getPathStart().x(), map.getPathStart().y(), 2000, 100);
+        // Goblin endommagé, spawnDelay très élevé pour qu'il reste immobile
+        // pendant toute la fenêtre observée (sinon sa vitesse propre l'éloignerait
+        // du Boss avant le 1er pulse). Posté en (2,7), à 1.2 case du point de
+        // pulse : le spawn (0,7) serait à 3.2 > auraRadius depuis le buff de
+        // vitesse du Boss (0.07 -> 0.08).
+        Enemy goblin = new Enemy(EnemyType.GOBLIN, 2, 7, 2000, 100);
         goblin.takeDamage(50); // 50/100 PV : doit être soigné par l'aura
 
         Wave wave = new Wave(1, List.of(boss, goblin));
@@ -241,6 +243,104 @@ class WaveSimulationServiceTest {
                 .flatMap(t -> t.towerDamageEvents().stream())
                 .anyMatch(e -> e.enemyId().equals(boss.getId()) && e.towerId().equals(tower.getId()));
         assertThat(towerDamageRecorded).isTrue();
+    }
+
+    @Test
+    @DisplayName("Un mur-barrage bloque les ennemis : aucun dégât au château tant qu'il tient, puis la vague passe")
+    void simulate_wall_blocksEnemiesUntilDestroyed() {
+        // Mur au milieu du chemin : le Goblin doit s'arrêter devant, l'attaquer
+        // au contact jusqu'à destruction, puis reprendre sa route.
+        Tower wall = new Tower(TowerType.WALL, 10, 7);
+        map.placeTower(wall);
+
+        Enemy goblin = new Enemy(EnemyType.GOBLIN, map.getPathStart().x(), map.getPathStart().y());
+        Wave wave = new Wave(1, List.of(goblin));
+        wave.start();
+
+        WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
+
+        // Le mur a été attaqué au contact (TowerDamageEvents du Goblin) puis détruit.
+        boolean wallAttacked = result.ticks().stream()
+                .flatMap(t -> t.towerDamageEvents().stream())
+                .anyMatch(e -> e.enemyId().equals(goblin.getId()) && e.towerId().equals(wall.getId()));
+        int wallDestroyedTick = result.ticks().stream()
+                .filter(t -> t.destroyedTowers().contains(wall.getId()))
+                .mapToInt(WaveSimulationService.TickSnapshot::tick)
+                .findFirst().orElseThrow(() -> new AssertionError("Le mur n'a jamais été détruit"));
+        assertThat(wallAttacked).isTrue();
+
+        // Aucun dégât au château AVANT la destruction du mur ; le Goblin finit
+        // néanmoins par passer et frapper le château — pas de blocage infini.
+        int castleHitTick = result.ticks().stream()
+                .filter(t -> !t.reachedCastle().isEmpty())
+                .mapToInt(WaveSimulationService.TickSnapshot::tick)
+                .findFirst().orElseThrow(() -> new AssertionError("Le Goblin n'a jamais atteint le château"));
+        assertThat(castleHitTick).isGreaterThan(wallDestroyedTick);
+        assertThat(result.castleDamageTaken()).isEqualTo(EnemyType.GOBLIN.castleDamage);
+        assertThat(map.getTowerAt(10, 7)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("La Baliste inflige des dégâts doublés aux cibles massives, pas à la piétaille")
+    void simulate_ballista_dealsDoubleDamageToHeavyTargets() {
+        Tower ballista = new Tower(TowerType.BALLISTA, 5, 5);
+        map.placeTower(ballista);
+
+        // Troll (massif : baseHp 250 >= HEAVY_TARGET_BASE_HP_THRESHOLD) : chaque
+        // tir de la Baliste doit valoir baseDamage x heavyTargetMultiplier.
+        Enemy troll = new Enemy(EnemyType.TROLL, map.getPathStart().x(), map.getPathStart().y());
+        Wave heavyWave = new Wave(1, List.of(troll));
+        heavyWave.start();
+        WaveSimulationService.SimulationResult heavyResult = simulationService.simulate(map, heavyWave, castle);
+
+        int doubled = (int) Math.round(TowerType.BALLISTA.baseDamage * TowerType.BALLISTA.heavyTargetMultiplier);
+        List<Integer> heavyShots = heavyResult.ticks().stream()
+                .flatMap(t -> t.damageEvents().stream())
+                .filter(e -> e.towerId().equals(ballista.getId()))
+                .map(WaveSimulationService.DamageEvent::damage)
+                .toList();
+        assertThat(heavyShots).isNotEmpty().allMatch(d -> d == doubled);
+
+        // Contraste : contre un Goblin (piétaille), dégâts de base inchangés.
+        Enemy goblin = new Enemy(EnemyType.GOBLIN, map.getPathStart().x(), map.getPathStart().y());
+        Wave lightWave = new Wave(2, List.of(goblin));
+        lightWave.start();
+        WaveSimulationService.SimulationResult lightResult = simulationService.simulate(map, lightWave, castle);
+
+        List<Integer> lightShots = lightResult.ticks().stream()
+                .flatMap(t -> t.damageEvents().stream())
+                .filter(e -> e.towerId().equals(ballista.getId()))
+                .map(WaveSimulationService.DamageEvent::damage)
+                .toList();
+        assertThat(lightShots).isNotEmpty().allMatch(d -> d == TowerType.BALLISTA.baseDamage);
+    }
+
+    @Test
+    @DisplayName("Le rayon continu du Boss canalise chaque tick sur la tour la plus proche à portée")
+    void simulate_bossRay_channelsEveryTickOnClosestTowerInRange() {
+        // À 2 cases perpendiculaires du chemin (position légale type) : dans le
+        // rayon de menace (3.0) pendant toute une fenêtre de passage du Boss.
+        Tower tower = new Tower(TowerType.ARCHER, 5, 5);
+        map.placeTower(tower);
+
+        Enemy boss = new Enemy(EnemyType.BOSS_WARLORD, map.getPathStart().x(), map.getPathStart().y(), 0);
+        Wave wave = new Wave(1, List.of(boss));
+        wave.start();
+
+        WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
+
+        // Rayon continu = un TowerDamageEvent à rayDamage par tick d'exposition :
+        // il doit y en avoir bien plus que les 1-2 pulses de la même fenêtre
+        // (fenêtre ~2.24 cases de part et d'autre à 0.08/tick ≈ 55 ticks).
+        long rayTicks = result.ticks().stream()
+                .flatMap(t -> t.towerDamageEvents().stream())
+                .filter(e -> e.enemyId().equals(boss.getId())
+                        && e.towerId().equals(tower.getId())
+                        && e.damage() == EnemyType.BOSS_WARLORD.rayDamage)
+                .count();
+
+        assertThat(rayTicks).isGreaterThan(10);
+        assertThat(tower.getHp()).isLessThan(tower.getMaxHp());
     }
 
     @Test

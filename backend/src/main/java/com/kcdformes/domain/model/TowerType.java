@@ -24,7 +24,28 @@ public enum TowerType {
     CATAPULT(27, 4.0, 150, 0.3, 0, DamageType.AOE, 1.5),
     // Tour débloquée par la progression de compte (meilleure vague atteinte),
     // pas par l'or de la partie en cours : voir GameService.placeTower().
-    BALLISTA(64, 5.0, 200, 0.22, 10, DamageType.SINGLE_TARGET, 0);
+    // PERCE-BLINDAGE (heavyTargetMultiplier x2) : dégâts doublés contre les
+    // cibles massives (voir WaveSimulationService.HEAVY_TARGET_HP_THRESHOLD —
+    // Troll, Chevalier noir, Sapeur, Boss), inchangés contre la piétaille.
+    // Sans ça, la baliste n'était qu'un archer cher (même profil, x5 le prix) :
+    // elle est désormais LE choix anti-élite, inutile contre les Goblins.
+    BALLISTA(64, 5.0, 200, 0.22, 10, DamageType.SINGLE_TARGET, 0, 0, 2.0),
+
+    /**
+     * Mur-barrage (voir GAME_DESIGN 2.7) : structure passive posée SUR le couloir
+     * des ennemis (seule exception au couloir strict, voir PlaceTowerService) —
+     * il ne tire pas (baseDamage 0), il bloque : les ennemis s'arrêtent devant et
+     * l'attaquent au contact jusqu'à le détruire (voir
+     * WaveSimulationService.handleWallBlocking ; Sapeur ×3, c'est son métier).
+     * Il ne force JAMAIS de contournement — le chemin reste fixe. Vendu au prix
+     * d'une case (barrer le couloir complet = 3 cases ≈ le prix d'une Mage) ;
+     * ses PV ne dérivent pas du coût (voir structureHp) sinon 35 d'or ne
+     * paieraient que ~105 PV, cassés en 2 pulses de boss.
+     * Débloqué vague 6 (avant la baliste) : c'est l'outil défensif de la crise
+     * des vagues 6-9 (arrivée du mix élite et des Sapeurs), là où la baliste
+     * reste la récompense du premier boss.
+     */
+    WALL(0, 0, 35, 0, 6, DamageType.SINGLE_TARGET, 0, 450);
 
     public final int baseDamage;
     public final double baseRange;
@@ -36,9 +57,32 @@ public enum TowerType {
     public final DamageType damageType;
     /** Rayon de l'effet de zone autour de la cible principale. Utilisé seulement si damageType == AOE. */
     public final double splashRadius;
+    /**
+     * PV de structure explicites : 0 = dérivés du coût comme pour toutes les
+     * tours (voir Tower.getMaxHp, baseCost x 3). Une valeur > 0 découple PV et
+     * prix — nécessaire pour le WALL, dont tout l'intérêt est d'être bien plus
+     * résistant que son coût à la case ne le permettrait.
+     */
+    public final int structureHp;
+    /**
+     * Multiplicateur de dégâts contre les cibles massives (maxHp au-delà de
+     * WaveSimulationService.HEAVY_TARGET_HP_THRESHOLD). 1.0 = pas de bonus.
+     * Identité de la Baliste (perce-blindage) : voir son commentaire.
+     */
+    public final double heavyTargetMultiplier;
 
     TowerType(int baseDamage, double baseRange, int baseCost, double attackSpeed, int unlockWave,
               DamageType damageType, double splashRadius) {
+        this(baseDamage, baseRange, baseCost, attackSpeed, unlockWave, damageType, splashRadius, 0, 1.0);
+    }
+
+    TowerType(int baseDamage, double baseRange, int baseCost, double attackSpeed, int unlockWave,
+              DamageType damageType, double splashRadius, int structureHp) {
+        this(baseDamage, baseRange, baseCost, attackSpeed, unlockWave, damageType, splashRadius, structureHp, 1.0);
+    }
+
+    TowerType(int baseDamage, double baseRange, int baseCost, double attackSpeed, int unlockWave,
+              DamageType damageType, double splashRadius, int structureHp, double heavyTargetMultiplier) {
         this.baseDamage = baseDamage;
         this.baseRange = baseRange;
         this.baseCost = baseCost;
@@ -46,5 +90,7 @@ public enum TowerType {
         this.unlockWave = unlockWave;
         this.damageType = damageType;
         this.splashRadius = splashRadius;
+        this.structureHp = structureHp;
+        this.heavyTargetMultiplier = heavyTargetMultiplier;
     }
 }

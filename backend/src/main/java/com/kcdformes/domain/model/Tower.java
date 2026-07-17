@@ -73,7 +73,10 @@ public class Tower {
      * aussi plus résistante à la destruction, pas seulement plus puissante.
      */
     public int getMaxHp() {
-        return (int) Math.round(type.baseCost * 3 * (1 + (level - 1) * 0.2));
+        // structureHp > 0 : PV explicites découplés du coût (cas du WALL, voir
+        // TowerType.structureHp) ; sinon formule standard dérivée du coût.
+        int base = type.structureHp > 0 ? type.structureHp : type.baseCost * 3;
+        return (int) Math.round(base * (1 + (level - 1) * 0.2));
     }
 
     public boolean isDestroyed() {

@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { TowerData } from '@/components/game/GameScene'
+import { CORRIDOR_MIN_Y, CORRIDOR_MAX_Y } from '@/components/game/GameScene'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
 import api from '@/lib/api'
 
@@ -21,7 +22,7 @@ const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
     ),
 })
 
-type TowerType = 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA'
+type TowerType = 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA' | 'WALL'
 
 const TOWER_INFO: Record<TowerType, { label: string; cost: number; color: string; unlockWave: number }> = {
     ARCHER:   { label: 'Archer',    cost: 50,  color: 'bg-green-600',  unlockWave: 0 },
@@ -29,6 +30,9 @@ const TOWER_INFO: Record<TowerType, { label: string; cost: number; color: string
     CATAPULT: { label: 'Catapulte', cost: 150, color: 'bg-orange-600', unlockWave: 0 },
     // Débloquée par la progression de compte (meilleure vague atteinte), pas par l'or.
     BALLISTA: { label: 'Baliste',   cost: 200, color: 'bg-slate-400',  unlockWave: 10 },
+    // Mur-barrage : seule structure posable SUR le couloir (règle inverse des
+    // tours, voir handleCellClick) — bloque les ennemis qui doivent le casser.
+    WALL:     { label: 'Mur',       cost: 35,  color: 'bg-stone-500',  unlockWave: 6 },
 }
 
 export default function GamePage() {
@@ -38,7 +42,7 @@ export default function GamePage() {
     const {
         gameId, map, waveNumber, gold, castleHp, castleMaxHp, status,
         awaitingBonusChoice, availableBonuses, hasHydrated: gameHydrated,
-        createGame, placeTower, upgradeTower, startWave, chooseBonus, refreshGame, resumeGame, resetGame,
+        createGame, placeTower, upgradeTower, startWave, chooseBonus, refreshGame, resumeGame, newGame,
     } = useGame()
 
     const canvasRef = useRef<GameCanvasHandle>(null)
@@ -129,12 +133,26 @@ export default function GamePage() {
             return
         }
 
+        // Règle du couloir, INVERSÉE selon le type (le backend reste l'arbitre
+        // final) : le mur-barrage se pose uniquement SUR le couloir des ennemis,
+        // les tours uniquement en dehors. Filtré ici pour un retour immédiat au
+        // lieu d'un aller-retour réseau voué au rejet.
+        const inCorridor = y >= CORRIDOR_MIN_Y && y <= CORRIDOR_MAX_Y
+        if (selectedTower === 'WALL' && !inCorridor) {
+            setMessage('Le mur se pose sur le couloir des ennemis (pour leur barrer la route)')
+            return
+        }
+        if (selectedTower !== 'WALL' && inCorridor) {
+            setMessage('Impossible de construire une tour sur le couloir des ennemis')
+            return
+        }
+
         const cost = TOWER_INFO[selectedTower].cost
         try {
             await placeTower(selectedTower, x, y, cost)
-            setMessage(`Tour ${TOWER_INFO[selectedTower].label} placée en (${x}, ${y})`)
+            setMessage(`${TOWER_INFO[selectedTower].label} placé(e) en (${x}, ${y})`)
         } catch {
-            setMessage('Impossible de placer la tour ici (or insuffisant ou chemin bloqué)')
+            setMessage('Impossible de placer ici (or insuffisant ou case invalide)')
         }
     }
 
@@ -278,11 +296,42 @@ export default function GamePage() {
                         {awaitingBonusChoice ? '⚔ Choisissez un bonus' : '⚔ Lancer vague'}
                     </Button>
 
+                    {/* Toujours disponible (hors combat) : abandonner et repartir sur
+                        une partie neuve — auparavant possible uniquement après une
+                        défaite, impossible de relancer une partie mal engagée. */}
+                    {!isGameOver && (
+                        <Button
+                            size="sm"
+                            onClick={() => {
+                                if (window.confirm('Abandonner cette partie et en commencer une nouvelle ?')) {
+                                    setIsGameOver(false)
+                                    setMessage(null)
+                                    newGame()
+                                }
+                            }}
+                            disabled={combatRunning || loading}
+                            className="bg-slate-700 hover:bg-slate-600 text-slate-200 disabled:opacity-40"
+                        >
+                            ↻ Nouvelle partie
+                        </Button>
+                    )}
+
                     {isGameOver && (
                         <Card className="bg-red-950 border-red-800">
                             <CardContent className="p-3 flex flex-col gap-2">
                                 <p className="text-sm font-semibold text-red-300">💀 Château détruit</p>
-                                <Button size="sm" onClick={resetGame} className="bg-slate-700 hover:bg-slate-600">
+                                <Button
+                                    size="sm"
+                                    onClick={() => {
+                                        // newGame plutôt que resetGame : on reste sur la page de jeu
+                                        // (l'effet de création relance aussitôt une partie) au lieu
+                                        // d'être renvoyé à l'écran d'accueil.
+                                        setIsGameOver(false)
+                                        setMessage(null)
+                                        newGame()
+                                    }}
+                                    className="bg-slate-700 hover:bg-slate-600"
+                                >
                                     Nouvelle partie
                                 </Button>
                             </CardContent>

@@ -1,5 +1,6 @@
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
+import { useGameStore } from '@/store/gameStore'
 import { login, register } from '@/lib/auth'
 
 export function useAuth() {
@@ -20,6 +21,11 @@ export function useAuth() {
 
     function handleLogout() {
         logout()
+        // Purge aussi l'état de jeu : gameId est persisté dans localStorage
+        // (reprise après F5, voir gameStore.partialize) — sans ce reset, une
+        // reconnexion reprendrait silencieusement la partie de la session
+        // précédente, y compris après un changement de compte.
+        useGameStore.getState().reset()
         router.push('/')
     }
 
