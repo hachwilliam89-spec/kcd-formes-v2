@@ -237,6 +237,18 @@ class WaveFactoryTest {
     }
 
     @Test
+    @DisplayName("Le Boss ouvre la vague : il est le premier spawn, jamais le dernier")
+    void createWave_boss_opensTheWave() {
+        for (long seed : List.of(0L, 1L, 2L, 42L, -7L)) {
+            Wave wave = waveFactory.createWave(10, spawn, seed);
+            // L'ordre de la liste = l'ordre de spawn (voir WaveFactory.toEnemies) :
+            // le Boss doit être en tête pour apparaître dès le début de la vague —
+            // l'escorte spawnée derrière le rattrape et profite de son aura.
+            assertThat(wave.getEnemies().get(0).getType()).isEqualTo(EnemyType.BOSS_WARLORD);
+        }
+    }
+
+    @Test
     @DisplayName("Le nombre de Boss augmente avec les récurrences (vague 30 >= vague 10)")
     void createWave_bossCount_growsWithRecurrence() {
         long seed = 5L;

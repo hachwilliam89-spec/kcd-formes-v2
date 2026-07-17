@@ -3,6 +3,7 @@ package com.kcdformes.domain.service;
 import com.kcdformes.domain.model.*;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
@@ -115,16 +116,33 @@ public class WaveFactory {
             new EnemyBurst(EnemyType.DARK_KNIGHT, darkKnightCount(waveNumber, darkKnightThreshold)).resolve(waveRng, order);
         }
 
+        // Mélange GLOBAL de l'ordre de spawn : les segments ci-dessus s'ajoutent
+        // en blocs (tous les Goblins, puis le mix élite, puis le Chevalier noir),
+        // donc la chair à canon ouvrait systématiquement la vague et mourait
+        // avant d'avoir servi à quoi que ce soit — les élites arrivaient ensuite
+        // face à des tours rechargées. Mélangés, les Goblins font écran AU MILIEU
+        // des menaces réelles et absorbent des tirs utiles. Reproductible : même
+        // seed => même mélange (waveRng). Le Boss reste hors du mélange, inséré
+        // en tête juste après (il ouvre la vague, voir ci-dessous).
+        Collections.shuffle(order, waveRng);
+
         // Premier Boss (EnemyType.BOSS_WARLORD) : toutes les BOSS_MILESTONE_INTERVAL
         // vagues, avec l'escorte classique déjà générée ci-dessus (goblins + mix
         // Orc/Troll/Sapeur). Le nombre de Boss augmente légèrement à chaque
         // récurrence (1 puis 2 à partir de la 3e apparition, etc.) ; ses PV
         // grimpent surtout via le scaling multiplicatif par vague (scaledHp),
         // déjà bien plus marqué après 10+ vagues que pour les autres ennemis.
+        // Inséré en TÊTE de vague, pas en queue : il apparaît dès le premier
+        // spawn (entrée théâtrale immédiate au lieu d'arriver après toute
+        // l'escorte), et — lent comme il est — l'escorte spawnée derrière le
+        // rattrape et traverse son aura de soin, au lieu de courir devant sans
+        // jamais en profiter.
         if (bossWave) {
             int recurrence = waveNumber / BOSS_MILESTONE_INTERVAL;
             int bossCount = 1 + (recurrence - 1) / 2;
-            new EnemyBurst(EnemyType.BOSS_WARLORD, bossCount).resolve(waveRng, order);
+            List<EnemyType> bossOrder = new ArrayList<>();
+            new EnemyBurst(EnemyType.BOSS_WARLORD, bossCount).resolve(waveRng, bossOrder);
+            order.addAll(0, bossOrder);
         }
 
         return toEnemies(order, waveNumber, spawn, waveRng);
@@ -138,7 +156,13 @@ public class WaveFactory {
 
         for (EnemyType type : order) {
             int hp = scaledHp(type, waveNumber);
-            double laneOffset = LANE_OFFSETS[spawnIndex % LANE_OFFSETS.length];
+            // Un Boss avance toujours PILE au centre du couloir (pas de file
+            // décalée) : sa zone de menace (pulse aoeRadius/auraRadius, voir
+            // EnemyType) reste symétrique et prévisible pour le joueur — et son
+            // rayon d'AoE est calibré depuis le centre du chemin (voir le
+            // commentaire de BOSS_WARLORD), un décalage de +/-0.8 fausserait
+            // cette géométrie d'un côté comme de l'autre.
+            double laneOffset = type.isBoss ? 0.0 : LANE_OFFSETS[spawnIndex % LANE_OFFSETS.length];
             enemies.add(new Enemy(type, spawn.x(), spawn.y(), delay, hp, laneOffset));
 
             // Cadence jitterée (+-1 tick autour de l'intervalle de base) plutôt
