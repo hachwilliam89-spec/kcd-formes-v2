@@ -65,6 +65,11 @@ Toute décision de gameplay ci-dessous doit rester cohérente avec ces trois pil
 - **Exception assumée** : le Sapeur reste le seul ennemi autorisé à sortir du couloir (c'est sa mécanique, voir 2.1) — une exception lisible plutôt qu'une règle molle.
 - **Implémentation** : `PathfindingService.findCorridorPath` (A* ignorant les tours) et `corridorCells` (bande chemin ±1) ; rejet dans `PlaceTowerService` ; la simulation suit le chemin de couloir ; le frontend filtre les clics sur la bande (`GameScene`, `CORRIDOR_MIN_Y/MAX_Y`). `findPath`/`hasPath` (tours = murs) sont conservés comme point de réentrée si un mode labyrinthe voit le jour.
 
+### 2.7 Mur-barrage (`WALL`) et identité de la Baliste
+
+- **Mur-barrage** : structure passive posée **sur le couloir** (seule exception au couloir strict — règle inverse des tours : jamais en dehors). Il ne dévie jamais le chemin : les ennemis s'arrêtent devant (`WALL_STANDOFF`) et l'attaquent au contact (`castleDamage / 5` par tick, min 1 — la hiérarchie des menaces se conserve) jusqu'à destruction, puis reprennent leur route. Tous les bloqués frappent simultanément : aucun blocage infini possible. Le Sapeur frappe **×3** contre les murs (son métier). Coût à la case (35 or — barrer le couloir complet = 3 cases ≈ une Mage) ; PV découplés du coût (`structureHp` 450, sinon 35 or ≈ 105 PV, cassés en 2 pulses de boss). Débloqué **vague 6** : l'outil défensif de la crise des vagues 6-9, avant la Baliste (récompense du boss, vague 10). Réparable par le bonus TOWER_REPAIR, ciblable par le rayon/pulse du boss et les Sapeurs.
+- **Baliste perce-blindage** : dégâts **×2 contre les cibles massives** (seuil sur les PV de *base* du type — Troll, Chevalier noir, Sapeur, Boss — pas sur les PV scalés, sinon tout deviendrait "massif" passé la vague 5), inchangés contre la piétaille. Avant ça, elle n'était qu'un archer cher au même profil : elle est désormais LE choix anti-élite réfléchi. Trait de tir épais à l'écran pour la démarquer de l'Archer.
+
 ## 3. Couche compétitive légère (avant le multi temps réel)
 
 - **Leaderboard** : classement global par meilleure vague atteinte.

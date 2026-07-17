@@ -7,7 +7,7 @@ const TICK_DELAY_MS = 120
 
 export interface TowerData {
     id: string
-    type: 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA'
+    type: 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA' | 'WALL'
     x: number
     y: number
     // Renvoyés par le backend (TowerResponse) — pilotent le rendu visuel des
@@ -79,6 +79,7 @@ const TOWER_COLORS: Record<string, number> = {
     MAGE: 0x8b5cf6,     // violet
     CATAPULT: 0xf97316, // orange
     BALLISTA: 0x94a3b8, // gris-bleu
+    WALL: 0x78716c,     // pierre — structure passive, volontairement terne
 }
 
 // Couleurs par type d'ennemi
@@ -95,6 +96,10 @@ const ENEMY_COLORS: Record<string, number> = {
 // de tir des tours pour ne jamais être confondue avec une attaque de tour.
 const SIEGE_LINE_COLOR = 0xdc2626
 
+// Rayon continu du Boss (profil "tour Mage" inversé, voir EnemyType.rayDamage) :
+// violet pour évoquer la magie du Mage tout en restant distinct du rouge Sapeur.
+const BOSS_RAY_COLOR = 0x8b5cf6
+
 // Couleurs des pulsations de Boss (voir drawBossAbilityEvents) : vert pour le
 // soin de zone, orange pour l'attaque de zone — pour rester cohérent avec les
 // codes couleur déjà utilisés ailleurs (vert = positif, orange/rouge = dégâts).
@@ -103,12 +108,13 @@ const BOSS_AOE_PULSE_COLOR = 0xf97316
 
 // COULOIR STRICT (décision de design, voir GAME_DESIGN 2.6 et
 // PathfindingService.corridorCells côté backend) : la bande y=6..8 est
-// inconstructible — chemin y=7 élargi d'une case de part et d'autre, là où
-// circulent les files d'ennemis (laneOffset ±0.8). Le backend rejette de toute
-// façon ces placements (400 CellOnPathException) ; ce filtre évite juste un
-// aller-retour réseau pour un clic qui ne peut pas aboutir.
-const CORRIDOR_MIN_Y = 6
-const CORRIDOR_MAX_Y = 8
+// inconstructible pour les tours — chemin y=7 élargi d'une case de part et
+// d'autre, là où circulent les files d'ennemis (laneOffset ±0.8). Exportées :
+// c'est la page (qui connaît le type sélectionné) qui applique la règle, car
+// elle s'INVERSE pour le mur-barrage (WALL, posable UNIQUEMENT sur le couloir).
+// Le backend reste l'arbitre final dans tous les cas.
+export const CORRIDOR_MIN_Y = 6
+export const CORRIDOR_MAX_Y = 8
 
 export class GameScene extends Phaser.Scene {
     private gridGraphics!: Phaser.GameObjects.Graphics
@@ -128,6 +134,12 @@ export class GameScene extends Phaser.Scene {
     // Lettres des tours : GameObjects indépendants de towersGraphics, à détruire
     // explicitement à chaque redraw (voir drawTowers) sous peine de fuite.
     private towerTexts: Phaser.GameObjects.Text[] = []
+    // Tours reçues AVANT que la scène soit prête (create() est asynchrone) :
+    // rejouées à la fin de create(). Cas typique : reprise de partie persistée
+    // (gameId en localStorage) où la réponse du serveur peut arriver avant
+    // l'initialisation de Phaser — sans ce tampon, le premier drawTowers était
+    // silencieusement perdu et les tours n'apparaissaient jamais à l'écran.
+    private pendingTowers: TowerData[] | null = null
 
     constructor() {
         super({ key: 'GameScene' })
@@ -146,17 +158,25 @@ export class GameScene extends Phaser.Scene {
         this.drawGrid()
         this.drawPath()
 
+        // Rejoue les tours arrivées pendant l'initialisation de la scène
+        // (reprise de partie : la réponse du serveur peut précéder ce create()).
+        if (this.pendingTowers) {
+            const pending = this.pendingTowers
+            this.pendingTowers = null
+            this.drawTowers(pending)
+        }
+
         // Écoute les clics sur le canvas
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             const cellX = Math.floor(pointer.x / CELL_SIZE)
             const cellY = Math.floor(pointer.y / CELL_SIZE)
 
-            // Vérifie que le clic est dans la grille, hors du couloir des ennemis
-            // (inconstructible — voir CORRIDOR_MIN_Y/MAX_Y).
+            // Vérifie seulement que le clic est dans la grille : la règle du
+            // couloir (interdit aux tours, obligatoire pour le mur) dépend du
+            // type sélectionné, que seule la page connaît — voir handleCellClick.
             if (
                 cellX >= 0 && cellX < GRID_WIDTH &&
-                cellY >= 0 && cellY < GRID_HEIGHT &&
-                (cellY < CORRIDOR_MIN_Y || cellY > CORRIDOR_MAX_Y)
+                cellY >= 0 && cellY < GRID_HEIGHT
             ) {
                 this.onCellClick?.(cellX, cellY)
             }
@@ -178,7 +198,12 @@ export class GameScene extends Phaser.Scene {
     }
 
     drawTowers(towers: TowerData[]) {
-        if (!this.towersGraphics) return
+        if (!this.towersGraphics) {
+            // Scène pas encore initialisée : mémoriser pour rejouer en fin de
+            // create() plutôt que de perdre silencieusement l'affichage.
+            this.pendingTowers = towers
+            return
+        }
         this.towersGraphics.clear()
 
         // Les textes Phaser sont des GameObjects indépendants du Graphics : sans
@@ -200,6 +225,19 @@ export class GameScene extends Phaser.Scene {
             const px = tower.x * CELL_SIZE
             const py = tower.y * CELL_SIZE
 
+            // Mur-barrage : bloc pleine case avec liseré (il OCCUPE le couloir,
+            // ce n'est pas une tour posée sur une case), sans lettre — sa forme
+            // suffit à l'identifier, et la barre de vie reste lisible dessus.
+            if (tower.type === 'WALL') {
+                this.towersGraphics.fillStyle(color, 1)
+                this.towersGraphics.fillRect(px, py, CELL_SIZE, CELL_SIZE)
+                this.towersGraphics.lineStyle(2, 0x57534e, 1) // stone-600, effet maçonnerie
+                this.towersGraphics.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2)
+                this.towersGraphics.lineBetween(px, py + CELL_SIZE / 2, px + CELL_SIZE, py + CELL_SIZE / 2)
+                this.drawStructureHpBar(tower, px, py)
+                return
+            }
+
             // Dessine un carré coloré pour la tour
             this.towersGraphics.fillStyle(color, 1)
             this.towersGraphics.fillRect(
@@ -215,22 +253,28 @@ export class GameScene extends Phaser.Scene {
                 { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }
             ).setOrigin(0.5))
 
-            // Barre de vie de la structure elle-même — affichée uniquement si la
-            // tour a déjà subi des dégâts de siège (Sapeur) ; une tour intacte ou
-            // dont le backend n'envoie pas encore hp/maxHp ne l'affiche pas, pour
-            // ne pas surcharger l'écran en l'absence de menace.
-            if (tower.hp != null && tower.maxHp != null && tower.hp < tower.maxHp) {
-                const hpRatio = tower.maxHp > 0 ? Math.max(0, tower.hp / tower.maxHp) : 0
-                const barWidth = CELL_SIZE * 0.8
-                const barX = px + CELL_SIZE / 2 - barWidth / 2
-                const barY = py - 6
-
-                this.towersGraphics.fillStyle(0x000000, 0.5)
-                this.towersGraphics.fillRect(barX, barY, barWidth, 4)
-                this.towersGraphics.fillStyle(hpRatio > 0.3 ? 0x22c55e : 0xef4444, 1)
-                this.towersGraphics.fillRect(barX, barY, barWidth * hpRatio, 4)
-            }
+            this.drawStructureHpBar(tower, px, py)
         })
+    }
+
+    /**
+     * Barre de vie de la structure (tour ou mur) — affichée uniquement si elle a
+     * déjà subi des dégâts (Sapeur, rayon/pulse de Boss, mêlée contre un mur) ;
+     * une structure intacte ou dont le backend n'envoie pas encore hp/maxHp ne
+     * l'affiche pas, pour ne pas surcharger l'écran en l'absence de menace.
+     */
+    private drawStructureHpBar(tower: TowerData, px: number, py: number) {
+        if (tower.hp == null || tower.maxHp == null || tower.hp >= tower.maxHp) return
+
+        const hpRatio = tower.maxHp > 0 ? Math.max(0, tower.hp / tower.maxHp) : 0
+        const barWidth = CELL_SIZE * 0.8
+        const barX = px + CELL_SIZE / 2 - barWidth / 2
+        const barY = py - 6
+
+        this.towersGraphics.fillStyle(0x000000, 0.5)
+        this.towersGraphics.fillRect(barX, barY, barWidth, 4)
+        this.towersGraphics.fillStyle(hpRatio > 0.3 ? 0x22c55e : 0xef4444, 1)
+        this.towersGraphics.fillRect(barX, barY, barWidth * hpRatio, 4)
     }
 
     /**
@@ -402,9 +446,11 @@ export class GameScene extends Phaser.Scene {
 
         const enemyById = new Map(enemies.map((e) => [e.id, e]))
 
-        // Ligne de siège : un Sapeur qui attaque une tour — sens inverse des
+        // Ligne de siège : un ennemi qui attaque une tour — sens inverse des
         // DamageEvent habituels (ennemi → tour, pas tour → ennemi), donc tracée
-        // à part avec sa propre couleur pour rester immédiatement identifiable.
+        // à part. Deux menaces distinctes, deux couleurs : rouge = Sapeur au
+        // corps à corps, violet = rayon continu du Boss (profil "tour Mage"
+        // inversé) qui canalise à distance en avançant.
         towerDamageEvents.forEach((event) => {
             const tower = this.towersById.get(event.towerId)
             const enemy = enemyById.get(event.enemyId)
@@ -415,7 +461,8 @@ export class GameScene extends Phaser.Scene {
             const enemyPx = enemy.x * CELL_SIZE + CELL_SIZE / 2
             const enemyPy = enemy.y * CELL_SIZE + CELL_SIZE / 2
 
-            this.effectsGraphics.lineStyle(3, SIEGE_LINE_COLOR, 0.9)
+            const isBossRay = enemy.type === 'BOSS_WARLORD'
+            this.effectsGraphics.lineStyle(3, isBossRay ? BOSS_RAY_COLOR : SIEGE_LINE_COLOR, 0.9)
             this.effectsGraphics.lineBetween(enemyPx, enemyPy, towerPx, towerPy)
         })
 
@@ -443,7 +490,12 @@ export class GameScene extends Phaser.Scene {
                 this.effectsGraphics.lineStyle(2, color, 0.8)
                 this.effectsGraphics.strokeCircle(targetPx, targetPy, radiusPx)
             } else {
-                this.effectsGraphics.lineStyle(1.5, color, 0.6)
+                // Trait de la Baliste nettement plus épais que celui de l'Archer :
+                // même profil mono-cible, mais son tir perce-blindage (x2 contre
+                // les cibles massives côté backend) doit se voir au premier coup
+                // d'œil — sinon les deux tours sont visuellement interchangeables.
+                const isBallista = tower.type === 'BALLISTA'
+                this.effectsGraphics.lineStyle(isBallista ? 4 : 1.5, color, isBallista ? 0.95 : 0.6)
                 this.effectsGraphics.lineBetween(towerPx, towerPy, targetPx, targetPy)
             }
         })

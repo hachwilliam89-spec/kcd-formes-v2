@@ -77,6 +77,14 @@ export function useGame() {
         router.push('/')
     }
 
+    // Abandonne la partie courante et repart sur une neuve, sans quitter la page :
+    // reset() vide gameId, et l'effet de création de la page (voir game/page.tsx)
+    // recrée aussitôt une partie. L'ancienne reste en base avec son statut — le
+    // bestWave du compte, lui, est déjà acquis.
+    function newGame() {
+        reset()
+    }
+
     // Reprise après un rechargement de page : le store ne persiste que le gameId,
     // l'état complet (map, or, PV, statut) est refetché ici depuis le backend.
     // Si la partie n'existe plus côté serveur (base réinitialisée, id d'un autre
@@ -120,5 +128,6 @@ export function useGame() {
         refreshGame,
         resumeGame,
         resetGame,
+        newGame,
     }
 }

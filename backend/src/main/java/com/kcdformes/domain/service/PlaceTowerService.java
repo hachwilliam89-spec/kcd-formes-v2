@@ -49,7 +49,19 @@ public class PlaceTowerService implements PlaceTowerUseCase {
         // complètement le chemin" du modèle labyrinthe abandonné : le couloir
         // étant inconstructible, il ne peut plus être bloqué du tout, et le chemin
         // reste identique pour toute la partie.
-        if (pathfindingService.corridorCells(map).contains(new Position(x, y))) {
+        //
+        // Exception unique : le MUR-BARRAGE (TowerType.WALL, voir GAME_DESIGN 2.7)
+        // suit la règle exactement INVERSE — uniquement sur le couloir (il ne sert
+        // qu'à barrer le passage), jamais en dehors. Il ne remet pas en cause le
+        // couloir strict : il ne dévie pas le chemin, les ennemis s'arrêtent
+        // devant et le cassent (voir WaveSimulationService.handleWallBlocking).
+        boolean onCorridor = pathfindingService.corridorCells(map).contains(new Position(x, y));
+        if (type == TowerType.WALL) {
+            if (!onCorridor) {
+                throw new IllegalStateException(
+                        "Wall must be placed on the enemy corridor (cell (%d, %d) is outside it)".formatted(x, y));
+            }
+        } else if (onCorridor) {
             throw new CellOnPathException(x, y);
         }
 

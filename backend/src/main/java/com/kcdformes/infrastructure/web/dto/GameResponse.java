@@ -18,7 +18,10 @@ public record GameResponse(
         MapResponse map,
         // Permet au frontend de re-proposer le choix de bonus après un rechargement
         // de page survenu pendant qu'un palier était en attente (voir BonusType).
-        boolean awaitingBonusChoice
+        // availableBonuses accompagne le flag : sans les options, la modale de
+        // choix rouvrait VIDE après un F5 pendant un palier et bloquait la partie.
+        boolean awaitingBonusChoice,
+        List<BonusOptionResponse> availableBonuses
 ) {
     public record MapResponse(
             int width,
@@ -32,7 +35,8 @@ public record GameResponse(
      */
     public static GameResponse from(GameEntity game, GameMap map, GameStateResult state) {
         return build(game.getId(), state.castleId(), game.getStatus(), game.getWaveNumber(),
-                game.getGold(), state.castleHp(), state.castleMaxHp(), map, state.awaitingBonusChoice());
+                game.getGold(), state.castleHp(), state.castleMaxHp(), map,
+                state.awaitingBonusChoice(), state.availableBonuses());
     }
 
     /**
@@ -42,12 +46,14 @@ public record GameResponse(
      */
     public static GameResponse from(GameStateResult state) {
         return build(state.gameId(), state.castleId(), state.status(), state.waveNumber(),
-                state.gold(), state.castleHp(), state.castleMaxHp(), state.map(), state.awaitingBonusChoice());
+                state.gold(), state.castleHp(), state.castleMaxHp(), state.map(),
+                state.awaitingBonusChoice(), state.availableBonuses());
     }
 
     private static GameResponse build(UUID gameId, UUID castleId, String status, int waveNumber,
                                        int gold, int castleHp, int castleMaxHp, GameMap map,
-                                       boolean awaitingBonusChoice) {
+                                       boolean awaitingBonusChoice,
+                                       List<com.kcdformes.domain.model.BonusType> availableBonuses) {
         List<TowerResponse> towers = map.getTowers().stream()
                 .map(TowerResponse::from)
                 .toList();
@@ -55,7 +61,8 @@ public record GameResponse(
         return new GameResponse(
                 gameId, castleId, status, waveNumber, gold, castleHp, castleMaxHp,
                 new MapResponse(map.getWidth(), map.getHeight(), towers),
-                awaitingBonusChoice
+                awaitingBonusChoice,
+                availableBonuses.stream().map(BonusOptionResponse::from).toList()
         );
     }
 }

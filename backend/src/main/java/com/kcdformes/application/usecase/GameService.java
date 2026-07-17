@@ -341,7 +341,11 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
                 game.getStatus(),
                 game.getCastle().getHp(),
                 100,
-                game.isAwaitingBonusChoice()
+                game.isAwaitingBonusChoice(),
+                // Mêmes options que startWave au moment du palier : indispensable
+                // pour re-proposer un choix COMPLET après un rechargement de page
+                // survenu pendant qu'un palier était en attente.
+                game.isAwaitingBonusChoice() ? List.of(BonusType.values()) : List.of()
         );
     }
 }

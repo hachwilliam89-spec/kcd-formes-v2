@@ -61,8 +61,19 @@ public enum EnemyType {
     // stunDurationTicks 25 sur un pulse de 40 : les tours au contact perdent
     // ~60 % de leur uptime tant que le boss est à portée — fort mais localisé,
     // et ça se dissipe dès qu'il s'éloigne.
-    BOSS_WARLORD(900, 0.07, 220, 40, false, 0,
-            true, 0.06, 3.0, 15, 2.0, 40, 25);
+    // aoeRadius 2.0 -> 3.0 (aligné sur auraRadius) : avec le couloir strict, les
+    // tours légales sont à 2 cases perpendiculaires du chemin — à 2.0, un boss
+    // centré ne pouvait les toucher qu'à dx=0 exactement : son AoE ne touchait en
+    // pratique jamais rien. À 3.0, la fenêtre est de +/-2.2 cases : chaque tour
+    // en première ligne prend au moins un pulse au passage du boss.
+    // rayDamage 2/tick (rayon continu type tour Mage, mais inversé : le boss
+    // canalise sur la tour la plus proche dans son rayon de menace) : une tour
+    // en première ligne encaisse ~90-110 dégâts sur tout le passage du boss —
+    // survivable pour une tour saine, fatal pour une tour déjà entamée.
+    // Vitesse 0.07 -> 0.08 : réduit d'autant la fenêtre d'exposition au rayon
+    // et rend le boss un peu moins facile à focaliser.
+    BOSS_WARLORD(900, 0.08, 220, 40, false, 0,
+            true, 0.06, 3.0, 15, 3.0, 40, 25, 2);
 
     public final int baseHp;
     public final double speed;
@@ -92,18 +103,27 @@ public enum EnemyType {
      * jamais persisté sur la tour.
      */
     public final int stunDurationTicks;
+    /**
+     * Dégâts par tick du rayon continu (profil "tour Mage" inversé, boss
+     * uniquement) : chaque tick, le boss canalise sur la tour non détruite la
+     * plus proche dans son rayon de menace (aoeRadius), sans cooldown, tout en
+     * avançant — pression constante entre deux pulses. 0 = pas de rayon.
+     */
+    public final int rayDamage;
 
     EnemyType(int baseHp, double speed, int goldReward, int castleDamage,
               boolean attacksTowers, int siegeDamage) {
         this(baseHp, speed, goldReward, castleDamage, attacksTowers, siegeDamage,
-                false, 0, 0, 0, 0, 0, 0);
+                false, 0, 0, 0, 0, 0, 0, 0);
     }
 
+    // NOTE : 14 paramètres — à la prochaine capacité de boss, basculer sur un
+    // objet BossProfile (ou un builder) plutôt que d'allonger encore la liste.
     EnemyType(int baseHp, double speed, int goldReward, int castleDamage,
               boolean attacksTowers, int siegeDamage,
               boolean isBoss, double auraHealRatio, double auraRadius,
               int aoeDamage, double aoeRadius, int abilityIntervalTicks,
-              int stunDurationTicks) {
+              int stunDurationTicks, int rayDamage) {
         this.baseHp = baseHp;
         this.speed = speed;
         this.goldReward = goldReward;
@@ -117,5 +137,6 @@ public enum EnemyType {
         this.aoeRadius = aoeRadius;
         this.abilityIntervalTicks = abilityIntervalTicks;
         this.stunDurationTicks = stunDurationTicks;
+        this.rayDamage = rayDamage;
     }
 }
