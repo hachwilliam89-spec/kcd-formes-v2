@@ -49,6 +49,10 @@ public record WaveResponse(
             // de l'animation de la vague.
             List<UUID> destroyedTowers,
             List<BossAbilityEventResponse> bossAbilityEvents,
+            // Tours étourdies par le pulse d'un Boss pendant ce tick (état complet
+            // par tick, voir WaveSimulationService.TickSnapshot) : le frontend les
+            // grise tant qu'elles y figurent, sans compter les durées lui-même.
+            List<UUID> stunnedTowers,
             int castleHp
     ) {}
 
@@ -94,6 +98,7 @@ public record WaveResponse(
                 tick.bossAbilityEvents().stream()
                         .map(b -> new BossAbilityEventResponse(b.bossId(), b.x(), b.y(), b.alliesHealed(), b.towersHit()))
                         .toList(),
+                tick.stunnedTowers(),
                 tick.castleHp()
         );
     }

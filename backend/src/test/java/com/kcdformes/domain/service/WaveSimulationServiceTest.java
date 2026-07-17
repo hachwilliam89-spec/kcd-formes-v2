@@ -244,6 +244,52 @@ class WaveSimulationServiceTest {
     }
 
     @Test
+    @DisplayName("Le pulse du Boss étourdit la tour touchée : elle cesse de tirer, puis l'effet expire")
+    void simulate_bossPulse_stunsTowerThenExpires() {
+        // Même géométrie que le test de pulse : tour à portée du Boss à son 1er
+        // pulse (tick 40, position ~(2.8, 7)), et à portée de tir du chemin.
+        Tower tower = new Tower(TowerType.ARCHER, 3, 7);
+        map.placeTower(tower);
+
+        Enemy boss = new Enemy(EnemyType.BOSS_WARLORD, map.getPathStart().x(), map.getPathStart().y(), 0);
+        Wave wave = new Wave(1, List.of(boss));
+        wave.start();
+
+        WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
+
+        int pulse = EnemyType.BOSS_WARLORD.abilityIntervalTicks;
+        int stun = EnemyType.BOSS_WARLORD.stunDurationTicks;
+
+        // Pendant l'étourdissement (du pulse inclus à l'expiration exclue) : la
+        // tour est signalée étourdie et ne tire jamais. Bornes calées sur la
+        // mécanique : le décompte se fait dans la boucle des tours, l'entrée
+        // disparaît de stunnedTowers au dernier tick d'effet (tir déjà sauté).
+        boolean stunnedDuring = result.ticks().stream()
+                .filter(t -> t.tick() >= pulse && t.tick() < pulse + stun - 1)
+                .allMatch(t -> t.stunnedTowers().contains(tower.getId()));
+        boolean firedDuring = result.ticks().stream()
+                .filter(t -> t.tick() >= pulse && t.tick() < pulse + stun)
+                .flatMap(t -> t.damageEvents().stream())
+                .anyMatch(e -> e.towerId().equals(tower.getId()));
+        assertThat(stunnedDuring).isTrue();
+        assertThat(firedDuring).isFalse();
+
+        // Avant le 1er pulse, elle tirait normalement (le Boss est à portée dès le départ).
+        boolean firedBefore = result.ticks().stream()
+                .filter(t -> t.tick() < pulse)
+                .flatMap(t -> t.damageEvents().stream())
+                .anyMatch(e -> e.towerId().equals(tower.getId()));
+        assertThat(firedBefore).isTrue();
+
+        // Entre l'expiration du stun (pulse + stun) et le pulse suivant (2 * pulse),
+        // la tour est libérée : plus dans stunnedTowers sur au moins un tick.
+        boolean releasedBetween = result.ticks().stream()
+                .filter(t -> t.tick() > pulse + stun && t.tick() < 2 * pulse)
+                .anyMatch(t -> !t.stunnedTowers().contains(tower.getId()));
+        assertThat(releasedBetween).isTrue();
+    }
+
+    @Test
     @DisplayName("La pulsation du Boss se répète toutes les abilityIntervalTicks (pas un effet ponctuel)")
     void simulate_bossPulse_repeatsOnEachInterval() {
         Enemy boss = new Enemy(EnemyType.BOSS_WARLORD, map.getPathStart().x(), map.getPathStart().y(), 0);
