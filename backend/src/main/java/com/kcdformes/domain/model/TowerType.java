@@ -29,7 +29,11 @@ public enum TowerType {
     // Troll, Chevalier noir, Sapeur, Boss), inchangés contre la piétaille.
     // Sans ça, la baliste n'était qu'un archer cher (même profil, x5 le prix) :
     // elle est désormais LE choix anti-élite, inutile contre les Goblins.
-    BALLISTA(64, 5.0, 200, 0.22, 10, DamageType.SINGLE_TARGET, 0, 0, 2.0),
+    // Profil "sniper de siège" (64/0.22 -> 110/0.12) : DPS soutenu quasi
+    // inchangé (14.1 -> 13.2/tick) mais chaque carreau est un événement —
+    // 220 sur un élite : un Sapeur de base tombe d'UN tir, un Troll en deux.
+    // Sa faiblesse assumée : la cadence — noyée sous la piétaille, elle perd.
+    BALLISTA(110, 5.0, 200, 0.12, 10, DamageType.SINGLE_TARGET, 0, 0, 2.0),
 
     /**
      * Mur-barrage (voir GAME_DESIGN 2.7) : structure passive posée SUR le couloir

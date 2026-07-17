@@ -316,6 +316,57 @@ class WaveSimulationServiceTest {
     }
 
     @Test
+    @DisplayName("La Baliste vise en priorité les cibles massives, et se replie sur la piétaille sinon")
+    void simulate_ballista_prioritizesHeavyTargetsWithFallback() {
+        Tower ballista = new Tower(TowerType.BALLISTA, 5, 5);
+        map.placeTower(ballista);
+
+        // Goblin surblindé via l'override de PV (type toujours "piétaille" : le
+        // seuil massif porte sur les PV de BASE du type, pas les PV effectifs) :
+        // il survit aux carreaux et reste la cible la plus PROCHE — parfait pour
+        // prouver que la priorité massive l'emporte sur la distance. Rapide
+        // (0.3/case), il entre à portée le premier : les premiers carreaux
+        // partent sur lui (repli), puis le Troll entre à portée et doit capter
+        // tous les tirs suivants malgré le Goblin plus proche.
+        Enemy tankyGoblin = new Enemy(EnemyType.GOBLIN, map.getPathStart().x(), map.getPathStart().y(), 0, 5000);
+        Enemy troll = new Enemy(EnemyType.TROLL, map.getPathStart().x(), map.getPathStart().y());
+        Wave wave = new Wave(1, List.of(tankyGoblin, troll));
+        wave.start();
+
+        WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
+
+        List<WaveSimulationService.DamageEvent> ballistaShots = result.ticks().stream()
+                .flatMap(t -> t.damageEvents().stream())
+                .filter(e -> e.towerId().equals(ballista.getId()))
+                .toList();
+
+        int firstGoblinShotTick = firstShotTickOn(result, ballista, tankyGoblin);
+        int firstTrollShotTick = firstShotTickOn(result, ballista, troll);
+        int lastGoblinShotTick = result.ticks().stream()
+                .filter(t -> t.damageEvents().stream().anyMatch(
+                        e -> e.towerId().equals(ballista.getId()) && e.enemyId().equals(tankyGoblin.getId())))
+                .mapToInt(WaveSimulationService.TickSnapshot::tick).max().orElseThrow();
+
+        assertThat(ballistaShots).isNotEmpty();
+        // Repli : la piétaille est visée tant qu'aucun massif n'est à portée...
+        assertThat(firstGoblinShotTick).isLessThan(firstTrollShotTick);
+        // ...priorité : dès que le Troll est à portée, il capte les carreaux
+        // alors que le Goblin (vivant, plus proche) reprend des tirs seulement
+        // une fois le Troll abattu.
+        assertThat(firstTrollShotTick).isLessThan(lastGoblinShotTick);
+        assertThat(troll.isDead()).isTrue();
+    }
+
+    private int firstShotTickOn(WaveSimulationService.SimulationResult result, Tower tower, Enemy enemy) {
+        return result.ticks().stream()
+                .filter(t -> t.damageEvents().stream().anyMatch(
+                        e -> e.towerId().equals(tower.getId()) && e.enemyId().equals(enemy.getId())))
+                .mapToInt(WaveSimulationService.TickSnapshot::tick)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Aucun tir sur " + enemy.getType()));
+    }
+
+    @Test
     @DisplayName("Le rayon continu du Boss canalise chaque tick sur la tour la plus proche à portée")
     void simulate_bossRay_channelsEveryTickOnClosestTowerInRange() {
         // À 2 cases perpendiculaires du chemin (position légale type) : dans le

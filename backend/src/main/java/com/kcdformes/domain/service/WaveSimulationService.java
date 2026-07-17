@@ -283,7 +283,7 @@ public class WaveSimulationService {
                     // Pas de cooldown : un rayon continu tape chaque tick tant qu'une
                     // cible est en portée (voir TowerType pour le rééquilibrage de
                     // baseDamage qui accompagne ce profil).
-                    Enemy target = findClosestTarget(tower, wave.getEnemies(), escaped, tick);
+                    Enemy target = findTarget(tower, wave.getEnemies(), escaped, tick);
                     if (target != null) {
                         applyDamage(tower, target, effectiveDamage(tower, target), wave, damageEvents, deaths);
                     }
@@ -296,7 +296,7 @@ public class WaveSimulationService {
                     continue;
                 }
 
-                Enemy target = findClosestTarget(tower, wave.getEnemies(), escaped, tick);
+                Enemy target = findTarget(tower, wave.getEnemies(), escaped, tick);
                 if (target == null) {
                     cooldowns.put(tower.getId(), 0.0);
                     continue;
@@ -393,7 +393,26 @@ public class WaveSimulationService {
         }
     }
 
-    private Enemy findClosestTarget(Tower tower, List<Enemy> enemies, Set<UUID> escaped, int tick) {
+    /**
+     * Sélection de cible d'une tour. Pour une tour perce-blindage (Baliste,
+     * heavyTargetMultiplier > 1), PRIORITÉ aux cibles massives : à un carreau
+     * toutes les ~8 ticks, chaque tir gaspillé sur un Goblin est une
+     * catastrophe — elle ne vise la piétaille qu'en l'absence de massif à
+     * portée (repli, plutôt qu'un ciblage exclusif qui la laisserait inerte
+     * devant une vague de piétaille : investissement mort et sentiment de bug).
+     */
+    private Enemy findTarget(Tower tower, List<Enemy> enemies, Set<UUID> escaped, int tick) {
+        if (tower.getType().heavyTargetMultiplier > 1.0) {
+            Enemy heavy = findClosestTarget(tower, enemies, escaped, tick, true);
+            if (heavy != null) {
+                return heavy;
+            }
+        }
+        return findClosestTarget(tower, enemies, escaped, tick, false);
+    }
+
+    private Enemy findClosestTarget(Tower tower, List<Enemy> enemies, Set<UUID> escaped, int tick,
+                                     boolean heavyOnly) {
         Enemy best = null;
         double bestDistSq = Double.MAX_VALUE;
 
@@ -402,6 +421,9 @@ public class WaveSimulationService {
                 continue;
             }
             if (tick <= enemy.getSpawnDelayTicks()) {
+                continue;
+            }
+            if (heavyOnly && enemy.getType().baseHp < HEAVY_TARGET_BASE_HP_THRESHOLD) {
                 continue;
             }
             if (!tower.canTarget(enemy)) {
