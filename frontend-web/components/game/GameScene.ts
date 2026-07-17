@@ -59,6 +59,10 @@ export interface BossAbilityEvent {
 
 export interface TickSnapshot {
     tick: number
+    // Tours étourdies par le pulse d'un Boss pendant ce tick (état complet par
+    // tick, recalculé côté backend) : grisées tant qu'elles y figurent — le
+    // frontend ne compte aucune durée lui-même.
+    stunnedTowers: string[]
     enemies: EnemySnapshot[]
     damageEvents: DamageEvent[]
     towerDamageEvents: TowerDamageEvent[]
@@ -260,6 +264,7 @@ export class GameScene extends Phaser.Scene {
             this.drawEnemies(tick.enemies)
             this.drawEffects(tick.damageEvents, tick.towerDamageEvents, tick.enemies)
             this.drawBossAbilityEvents(tick.bossAbilityEvents)
+            this.drawStunnedTowers(tick.stunnedTowers ?? [])
             onTick?.(tick.castleHp)
             index++
         }
@@ -306,6 +311,27 @@ export class GameScene extends Phaser.Scene {
             this.enemiesGraphics.fillRect(barX, barY, barWidth, 4)
             this.enemiesGraphics.fillStyle(hpRatio > 0.3 ? 0x22c55e : 0xef4444, 1)
             this.enemiesGraphics.fillRect(barX, barY, barWidth * hpRatio, 4)
+        })
+    }
+
+    /**
+     * Voile gris sur chaque tour étourdie par le pulse d'un Boss (voir
+     * TickSnapshot.stunnedTowers) : la tour est réduite au silence tant que le
+     * voile est visible — le joueur doit comprendre d'un coup d'œil pourquoi
+     * elle ne tire plus, sinon l'étourdissement passe pour un bug de tir.
+     */
+    private drawStunnedTowers(stunnedTowers: string[]) {
+        stunnedTowers.forEach((towerId) => {
+            const tower = this.towersById.get(towerId)
+            if (!tower) return
+
+            const px = tower.x * CELL_SIZE
+            const py = tower.y * CELL_SIZE
+
+            this.effectsGraphics.fillStyle(0x64748b, 0.55) // slate-500, voile semi-opaque
+            this.effectsGraphics.fillRect(px, py, CELL_SIZE, CELL_SIZE)
+            this.effectsGraphics.lineStyle(2, 0x94a3b8, 0.9) // slate-400
+            this.effectsGraphics.strokeRect(px + 2, py + 2, CELL_SIZE - 4, CELL_SIZE - 4)
         })
     }
 

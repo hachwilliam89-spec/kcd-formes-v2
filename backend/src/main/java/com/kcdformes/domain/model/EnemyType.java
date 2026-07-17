@@ -49,13 +49,20 @@ public enum EnemyType {
      * du chemin vers le château : à la place, toutes les abilityIntervalTicks,
      * il (1) soigne les ennemis proches d'une fraction (auraHealRatio) de leurs
      * PV max dans un rayon auraRadius, et (2) inflige aoeDamage à toutes les
-     * tours dans un rayon aoeRadius (voir
-     * WaveSimulationService.handleBossAbilityTick). PV de base très élevés,
-     * encore amplifiés par le scaling multiplicatif par vague (HP_GROWTH_RATE) :
-     * à la vague 10 il dépasse déjà largement les PV d'un Troll de la même vague.
+     * tours dans un rayon aoeRadius ET les étourdit stunDurationTicks (elles
+     * cessent de tirer — voir WaveSimulationService.handleBossAbilityTick).
+     * L'étourdissement fait du boss une zone morte MOBILE : plutôt que de
+     * gonfler ses PV, il neutralise temporairement la défense sur son passage —
+     * c'est en l'encadrant à distance ou en diversifiant les positions qu'on le
+     * gère, pas en empilant du DPS au contact. PV de base très élevés, encore
+     * amplifiés par le scaling multiplicatif par vague (HP_GROWTH_RATE) : à la
+     * vague 10 il dépasse déjà largement les PV d'un Troll de la même vague.
      */
+    // stunDurationTicks 25 sur un pulse de 40 : les tours au contact perdent
+    // ~60 % de leur uptime tant que le boss est à portée — fort mais localisé,
+    // et ça se dissipe dès qu'il s'éloigne.
     BOSS_WARLORD(900, 0.07, 220, 40, false, 0,
-            true, 0.06, 3.0, 15, 2.0, 40);
+            true, 0.06, 3.0, 15, 2.0, 40, 25);
 
     public final int baseHp;
     public final double speed;
@@ -78,17 +85,25 @@ public enum EnemyType {
     public final double aoeRadius;
     /** Intervalle (en ticks) entre deux pulsations d'aura/AoE (boss uniquement). */
     public final int abilityIntervalTicks;
+    /**
+     * Durée (en ticks) de l'étourdissement infligé aux tours touchées par le
+     * pulse : une tour étourdie cesse de tirer (boss uniquement). État de combat
+     * éphémère, géré dans la simulation (voir WaveSimulationService.towerStuns) —
+     * jamais persisté sur la tour.
+     */
+    public final int stunDurationTicks;
 
     EnemyType(int baseHp, double speed, int goldReward, int castleDamage,
               boolean attacksTowers, int siegeDamage) {
         this(baseHp, speed, goldReward, castleDamage, attacksTowers, siegeDamage,
-                false, 0, 0, 0, 0, 0);
+                false, 0, 0, 0, 0, 0, 0);
     }
 
     EnemyType(int baseHp, double speed, int goldReward, int castleDamage,
               boolean attacksTowers, int siegeDamage,
               boolean isBoss, double auraHealRatio, double auraRadius,
-              int aoeDamage, double aoeRadius, int abilityIntervalTicks) {
+              int aoeDamage, double aoeRadius, int abilityIntervalTicks,
+              int stunDurationTicks) {
         this.baseHp = baseHp;
         this.speed = speed;
         this.goldReward = goldReward;
@@ -101,5 +116,6 @@ public enum EnemyType {
         this.aoeDamage = aoeDamage;
         this.aoeRadius = aoeRadius;
         this.abilityIntervalTicks = abilityIntervalTicks;
+        this.stunDurationTicks = stunDurationTicks;
     }
 }

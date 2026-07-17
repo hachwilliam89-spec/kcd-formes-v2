@@ -67,6 +67,10 @@ public class WaveSimulationService {
             List<UUID> reachedCastle,
             List<UUID> destroyedTowers,
             List<BossAbilityEvent> bossAbilityEvents,
+            // Tours étourdies par le pulse d'un Boss PENDANT ce tick (état complet,
+            // pas un delta) : le frontend les grise tant qu'elles y figurent, sans
+            // avoir à recompter lui-même les durées (voir GameScene).
+            List<UUID> stunnedTowers,
             int castleHp
     ) {}
 
@@ -105,6 +109,14 @@ public class WaveSimulationService {
         // getOrDefault renvoie alors l'intervalle complet (premier pulse après
         // abilityIntervalTicks ticks suivant son apparition), voir plus bas.
         Map<UUID, Integer> bossCooldowns = new HashMap<>();
+
+        // Étourdissement des tours (towerId -> ticks restants) : infligé par le
+        // pulse d'un Boss (EnemyType.stunDurationTicks), une tour étourdie ne
+        // tire plus. État de COMBAT, local à cette simulation, comme cooldowns et
+        // siegeTargets — il ne vit jamais sur Tower et n'est donc jamais persisté
+        // (une tour étourdie au dernier tick d'une vague ne doit pas le rester
+        // au début de la suivante).
+        Map<UUID, Integer> towerStuns = new HashMap<>();
 
         Set<UUID> escaped = new HashSet<>();
         List<TickSnapshot> ticks = new ArrayList<>();
@@ -193,7 +205,8 @@ public class WaveSimulationService {
                 }
 
                 bossCooldowns.put(enemy.getId(), enemy.getType().abilityIntervalTicks);
-                bossAbilityEvents.add(handleBossAbilityTick(enemy, map, wave, towerDamageEvents, destroyedTowers));
+                bossAbilityEvents.add(handleBossAbilityTick(enemy, map, wave, towerDamageEvents,
+                        destroyedTowers, towerStuns));
             }
 
             // 2. Attaques des tours (cible : ennemi à portée le plus proche)
@@ -202,6 +215,20 @@ public class WaveSimulationService {
                     // Détruite par un Sapeur plus tôt dans la simulation (la liste
                     // `towers` capturée en début de méthode garde une référence
                     // vers l'objet, même après sa suppression de `map`) : ne tire plus.
+                    continue;
+                }
+
+                // Étourdie par le pulse d'un Boss : ne tire pas ce tick. Le
+                // décompte se fait ici (une seule fois par tour et par tick), et
+                // l'entrée est retirée à expiration pour que stunnedTowers
+                // (snapshot) reflète uniquement les étourdissements actifs.
+                Integer stun = towerStuns.get(tower.getId());
+                if (stun != null) {
+                    if (stun <= 1) {
+                        towerStuns.remove(tower.getId());
+                    } else {
+                        towerStuns.put(tower.getId(), stun - 1);
+                    }
                     continue;
                 }
 
@@ -262,7 +289,7 @@ public class WaveSimulationService {
                     .toList();
 
             ticks.add(new TickSnapshot(tick, snapshot, damageEvents, towerDamageEvents, deaths, reached,
-                    destroyedTowers, bossAbilityEvents, castle.getHp()));
+                    destroyedTowers, bossAbilityEvents, List.copyOf(towerStuns.keySet()), castle.getHp()));
 
             boolean allResolved = wave.getEnemies().stream()
                     .allMatch(enemy -> enemy.isDead() || escaped.contains(enemy.getId()));
@@ -394,12 +421,15 @@ public class WaveSimulationService {
      * ennemis vivants dans auraRadius (hors lui-même) d'une fraction de leurs PV
      * max, puis inflige aoeDamage à chaque tour dans aoeRadius — potentiellement
      * plusieurs tours en une seule pulsation, contrairement au Sapeur qui ne vise
-     * qu'une tour à la fois. Une tour détruite par ce pulse est retirée de la map
-     * (case libérée), comme pour le Sapeur (voir handleSapperTick).
+     * qu'une tour à la fois — et les ÉTOURDIT stunDurationTicks (elles cessent de
+     * tirer, voir towerStuns dans simulate) : le boss est une zone morte mobile,
+     * pas un simple sac de PV. Une tour détruite par ce pulse est retirée de la
+     * map (case libérée), comme pour le Sapeur (voir handleSapperTick).
      */
     private BossAbilityEvent handleBossAbilityTick(Enemy boss, GameMap map, Wave wave,
                                                      List<TowerDamageEvent> towerDamageEvents,
-                                                     List<UUID> destroyedTowers) {
+                                                     List<UUID> destroyedTowers,
+                                                     Map<UUID, Integer> towerStuns) {
         EnemyType type = boss.getType();
 
         int alliesHealed = 0;
@@ -431,6 +461,12 @@ public class WaveSimulationService {
                 if (tower.isDestroyed()) {
                     map.removeTower(tower.getX(), tower.getY());
                     destroyedTowers.add(tower.getId());
+                } else if (type.stunDurationTicks > 0) {
+                    // Étourdissement (voir EnemyType.stunDurationTicks) : merge en
+                    // MAX et non en addition — deux boss qui pulsent la même tour
+                    // rafraîchissent l'étourdissement, ils ne l'empilent pas
+                    // (sinon un duo de boss vague 30+ la verrouillerait sans fin).
+                    towerStuns.merge(tower.getId(), type.stunDurationTicks, Math::max);
                 }
             }
         }
