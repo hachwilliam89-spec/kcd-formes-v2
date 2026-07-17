@@ -121,8 +121,13 @@ export class GameScene extends Phaser.Scene {
     private onCellClick?: (x: number, y: number) => void
     private waveTimer?: Phaser.Time.TimerEvent
     // Indexées par id pour retrouver rapidement la tour à l'origine d'un
-    // DamageEvent pendant playWave (position + profil de dégâts).
+    // DamageEvent pendant playWave (position + profil de dégâts). Contient des
+    // COPIES des données React (voir drawTowers) : les PV y sont décrémentés en
+    // direct pendant l'animation (voir renderTick) sans toucher au store.
     private towersById = new Map<string, TowerData>()
+    // Lettres des tours : GameObjects indépendants de towersGraphics, à détruire
+    // explicitement à chaque redraw (voir drawTowers) sous peine de fuite.
+    private towerTexts: Phaser.GameObjects.Text[] = []
 
     constructor() {
         super({ key: 'GameScene' })
@@ -176,10 +181,21 @@ export class GameScene extends Phaser.Scene {
         if (!this.towersGraphics) return
         this.towersGraphics.clear()
 
-        this.towersById.clear()
-        towers.forEach((tower) => this.towersById.set(tower.id, tower))
+        // Les textes Phaser sont des GameObjects indépendants du Graphics : sans
+        // destruction explicite, chaque redraw empilait de nouvelles lettres sur
+        // les anciennes (leak), et une tour détruite laissait sa lettre fantôme
+        // à l'écran.
+        this.towerTexts.forEach((text) => text.destroy())
+        this.towerTexts = []
 
-        towers.forEach((tower) => {
+        this.towersById.clear()
+        // Copie défensive : playWave met à jour les PV en direct (voir renderTick)
+        // sur les objets de towersById — cloner isole ces mutations d'animation
+        // des données React/Zustand, qui restent la copie de référence jusqu'au
+        // refetch de fin de vague.
+        towers.forEach((tower) => this.towersById.set(tower.id, { ...tower }))
+
+        this.towersById.forEach((tower) => {
             const color = TOWER_COLORS[tower.type] ?? 0xffffff
             const px = tower.x * CELL_SIZE
             const py = tower.y * CELL_SIZE
@@ -192,12 +208,12 @@ export class GameScene extends Phaser.Scene {
             )
 
             // Lettre initiale du type
-            this.add.text(
+            this.towerTexts.push(this.add.text(
                 px + CELL_SIZE / 2,
                 py + CELL_SIZE / 2,
                 tower.type[0],
                 { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }
-            ).setOrigin(0.5)
+            ).setOrigin(0.5))
 
             // Barre de vie de la structure elle-même — affichée uniquement si la
             // tour a déjà subi des dégâts de siège (Sapeur) ; une tour intacte ou
@@ -250,12 +266,20 @@ export class GameScene extends Phaser.Scene {
 
             const tick = ticks[index]
 
-            // Une tour détruite par un Sapeur ce tick doit disparaître immédiatement
-            // de l'affichage (et de towersById, sinon drawEffects continuerait de lui
-            // trouver une position pour d'éventuels événements résiduels) — on
-            // redessine donc towersGraphics dès qu'une destruction survient, plutôt
-            // que d'attendre le prochain drawTowers() déclenché par React.
-            if (tick.destroyedTowers.length > 0) {
+            // Dégâts de siège de ce tick (Sapeur ou pulse de Boss) : appliqués en
+            // direct aux copies locales (voir towersById) pour que les jauges des
+            // tours baissent PENDANT l'animation — sans ça, les dégâts du Boss
+            // étaient invisibles jusqu'au refetch de fin de vague et son attaque
+            // de zone passait pour purement cosmétique. Une tour détruite doit en
+            // plus disparaître immédiatement de l'affichage (et de towersById,
+            // sinon drawEffects continuerait de lui trouver une position).
+            if (tick.towerDamageEvents.length > 0 || tick.destroyedTowers.length > 0) {
+                tick.towerDamageEvents.forEach((event) => {
+                    const tower = this.towersById.get(event.towerId)
+                    if (tower && tower.hp != null) {
+                        tower.hp = Math.max(0, tower.hp - event.damage)
+                    }
+                })
                 tick.destroyedTowers.forEach((towerId) => this.towersById.delete(towerId))
                 this.drawTowers(Array.from(this.towersById.values()))
             }
