@@ -281,6 +281,44 @@ class WaveSimulationServiceTest {
     }
 
     @Test
+    @DisplayName("Chaque type d'ennemi frappe un mur à sa propre valeur (wallDamage), pas un forfait commun")
+    void simulate_wall_takesTypeSpecificDamage() {
+        Tower wall = new Tower(TowerType.WALL, 10, 7);
+        map.placeTower(wall);
+
+        // Goblin et Troll bloqués ensemble devant le mur : chacun doit produire
+        // des TowerDamageEvents à SA valeur de wallDamage — c'est ce qui rend un
+        // mur périssable face aux Trolls et durable face à la piétaille.
+        Enemy goblin = new Enemy(EnemyType.GOBLIN, map.getPathStart().x(), map.getPathStart().y());
+        Enemy troll = new Enemy(EnemyType.TROLL, map.getPathStart().x(), map.getPathStart().y());
+        Wave wave = new Wave(1, List.of(goblin, troll));
+        wave.start();
+
+        WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
+
+        List<WaveSimulationService.TowerDamageEvent> wallHits = result.ticks().stream()
+                .flatMap(t -> t.towerDamageEvents().stream())
+                .filter(e -> e.towerId().equals(wall.getId()))
+                .toList();
+
+        assertThat(wallHits.stream().filter(e -> e.enemyId().equals(goblin.getId())))
+                .isNotEmpty().allMatch(e -> e.damage() == EnemyType.GOBLIN.wallDamage);
+        // Le Troll CUMULE deux sources contre le mur qui le bloque : ses coups
+        // de contact (wallDamage) et son rayon de démolition (Ray, le mur étant
+        // la tour la plus proche à portée) — interaction voulue, un Troll
+        // bloqué est plus dangereux pour le barrage qu'un Troll qui défile.
+        List<Integer> trollDamages = wallHits.stream()
+                .filter(e -> e.enemyId().equals(troll.getId()))
+                .map(WaveSimulationService.TowerDamageEvent::damage)
+                .toList();
+        assertThat(trollDamages).contains(EnemyType.TROLL.wallDamage);
+        assertThat(trollDamages).contains(EnemyType.TROLL.ray.damagePerTick());
+        assertThat(trollDamages)
+                .allMatch(d -> d == EnemyType.TROLL.wallDamage || d == EnemyType.TROLL.ray.damagePerTick());
+        assertThat(EnemyType.TROLL.wallDamage).isGreaterThan(EnemyType.GOBLIN.wallDamage);
+    }
+
+    @Test
     @DisplayName("La Baliste inflige des dégâts doublés aux cibles massives, pas à la piétaille")
     void simulate_ballista_dealsDoubleDamageToHeavyTargets() {
         Tower ballista = new Tower(TowerType.BALLISTA, 5, 5);
@@ -367,6 +405,36 @@ class WaveSimulationServiceTest {
     }
 
     @Test
+    @DisplayName("Le Chariot-baliste tire en avançant : il use les tours SANS jamais s'arrêter ni dévier")
+    void simulate_chariot_channelsWhileAdvancing() {
+        Tower front = new Tower(TowerType.ARCHER, 5, 5);
+        Tower back = new Tower(TowerType.ARCHER, 12, 9);
+        map.placeTower(front);
+        map.placeTower(back);
+
+        // PV surdimensionnés via l'override : on teste le COMPORTEMENT du rayon,
+        // pas la survie du Chariot sous le feu des deux archers.
+        Enemy chariot = new Enemy(EnemyType.CHARIOT, map.getPathStart().x(), map.getPathStart().y(), 0, 100000);
+        Wave wave = new Wave(1, List.of(chariot));
+        wave.start();
+
+        WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
+
+        // Il a canalisé sur les DEUX tours au fil de sa progression (retarget
+        // permanent sur la plus proche à portée — il ne se fixe sur aucune)...
+        List<WaveSimulationService.TowerDamageEvent> hits = result.ticks().stream()
+                .flatMap(t -> t.towerDamageEvents().stream())
+                .filter(e -> e.enemyId().equals(chariot.getId()))
+                .toList();
+        assertThat(hits).anyMatch(e -> e.towerId().equals(front.getId()));
+        assertThat(hits).anyMatch(e -> e.towerId().equals(back.getId()));
+        assertThat(hits).allMatch(e -> e.damage() == EnemyType.CHARIOT.ray.damagePerTick());
+
+        // ...et il a fini sa route : jamais arrêté, le château encaisse son passage.
+        assertThat(result.castleDamageTaken()).isEqualTo(EnemyType.CHARIOT.castleDamage);
+    }
+
+    @Test
     @DisplayName("Le rayon continu du Boss canalise chaque tick sur la tour la plus proche à portée")
     void simulate_bossRay_channelsEveryTickOnClosestTowerInRange() {
         // À 2 cases perpendiculaires du chemin (position légale type) : dans le
@@ -380,14 +448,14 @@ class WaveSimulationServiceTest {
 
         WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
 
-        // Rayon continu = un TowerDamageEvent à rayDamage par tick d'exposition :
-        // il doit y en avoir bien plus que les 1-2 pulses de la même fenêtre
-        // (fenêtre ~2.24 cases de part et d'autre à 0.08/tick ≈ 55 ticks).
+        // Rayon continu = un TowerDamageEvent à ray.damagePerTick par tick
+        // d'exposition : il doit y en avoir bien plus que les 1-2 pulses de la
+        // même fenêtre (~2.24 cases de part et d'autre à 0.08/tick ≈ 55 ticks).
         long rayTicks = result.ticks().stream()
                 .flatMap(t -> t.towerDamageEvents().stream())
                 .filter(e -> e.enemyId().equals(boss.getId())
                         && e.towerId().equals(tower.getId())
-                        && e.damage() == EnemyType.BOSS_WARLORD.rayDamage)
+                        && e.damage() == EnemyType.BOSS_WARLORD.ray.damagePerTick())
                 .count();
 
         assertThat(rayTicks).isGreaterThan(10);

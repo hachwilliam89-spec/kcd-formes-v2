@@ -54,13 +54,6 @@ public class WaveSimulationService {
     /** Distance (en index de chemin) à laquelle un ennemi s'arrête devant un mur intact. */
     private static final double WALL_STANDOFF = 0.6;
     /**
-     * Diviseur des dégâts de mêlée contre un mur : chaque ennemi bloqué inflige
-     * castleDamage / WALL_MELEE_DIVISOR (min 1) par tick. Dérivé de castleDamage
-     * pour que la hiérarchie des menaces se conserve (un Troll cogne plus fort
-     * qu'un Goblin) sans introduire une stat de plus par type.
-     */
-    private static final int WALL_MELEE_DIVISOR = 5;
-    /**
      * Multiplicateur des dégâts de siège d'un Sapeur contre un mur (voir
      * handleSapperTick) : casser les défenses est son métier — un mur ne doit
      * jamais être une meilleure réponse au Sapeur que de le tuer en route.
@@ -219,24 +212,30 @@ public class WaveSimulationService {
                 }
             }
 
-            // 1.5. Capacités des Boss (EnemyType.isBoss). Contrairement au Sapeur,
-            // le Boss ne dévie jamais du chemin : tout se déclenche sur place,
-            // où qu'il se trouve sur le chemin au moment du tick.
-            // (a) Rayon continu (rayDamage, profil "tour Mage" inversé) : chaque
-            //     tick, canalise sur la tour non détruite la plus proche dans son
-            //     rayon de menace (aoeRadius) — pression constante en marchant.
-            // (b) Pulsation tous les abilityIntervalTicks : soin de zone des
-            //     ennemis proches + dégâts et étourdissement des tours proches.
+            // 1.5a. Rayons de siège (EnemyType.Ray — Troll, Chevalier noir,
+            // Boss) : chaque tick, l'ennemi canalise sur la tour non détruite la
+            // plus proche à portée, sans dévier du chemin. Généralisé du Boss :
+            // le Sapeur ne doit pas être l'UNIQUE menace sur les tours, sinon
+            // son contre une fois construit, plus rien n'use la défense.
+            for (Enemy enemy : wave.getEnemies()) {
+                if (enemy.getType().ray == null || enemy.isDead() || escaped.contains(enemy.getId())) {
+                    continue;
+                }
+                if (tick <= enemy.getSpawnDelayTicks()) {
+                    continue;
+                }
+                handleSiegeRayTick(enemy, map, towerDamageEvents, destroyedTowers);
+            }
+
+            // 1.5b. Pulsation des Boss (EnemyType.isBoss), tous les
+            // abilityIntervalTicks : soin de zone des ennemis proches + dégâts
+            // et étourdissement des tours proches — sur place, sans dévier.
             for (Enemy enemy : wave.getEnemies()) {
                 if (!enemy.getType().isBoss || enemy.isDead() || escaped.contains(enemy.getId())) {
                     continue;
                 }
                 if (tick <= enemy.getSpawnDelayTicks()) {
                     continue;
-                }
-
-                if (enemy.getType().rayDamage > 0) {
-                    handleBossRayTick(enemy, map, towerDamageEvents, destroyedTowers);
                 }
 
                 int cooldown = bossCooldowns.getOrDefault(enemy.getId(), enemy.getType().abilityIntervalTicks) - 1;
@@ -536,8 +535,10 @@ public class WaveSimulationService {
     }
 
     /**
-     * Attaque de contact d'un ennemi bloqué contre le mur qui lui barre la route
-     * (voir WALL_MELEE_DIVISOR). Le mur détruit est retiré de la map (case à
+     * Attaque de contact d'un ennemi bloqué contre le mur qui lui barre la route :
+     * chaque type frappe à sa propre valeur (EnemyType.wallDamage — le Goblin
+     * gratte, le Troll démolit), la composition de la vague détermine donc la
+     * durée de vie du barrage. Le mur détruit est retiré de la map (case à
      * nouveau franchissable ET constructible), comme toute structure.
      */
     private void attackWall(Enemy enemy, Position wallCell, GameMap map,
@@ -546,7 +547,7 @@ public class WaveSimulationService {
         if (wall == null || wall.isDestroyed()) {
             return;
         }
-        int damage = Math.max(1, enemy.getType().castleDamage / WALL_MELEE_DIVISOR);
+        int damage = enemy.getType().wallDamage;
         wall.takeSiegeDamage(damage);
         towerDamageEvents.add(new TowerDamageEvent(enemy.getId(), wall.getId(), damage));
         if (wall.isDestroyed()) {
@@ -556,17 +557,17 @@ public class WaveSimulationService {
     }
 
     /**
-     * Rayon continu d'un Boss (EnemyType.rayDamage, profil "tour Mage" inversé) :
-     * canalise chaque tick, sans cooldown, sur la tour non détruite la plus
-     * proche dans le rayon de menace (aoeRadius) — retarget à chaque tick, comme
+     * Rayon de siège continu (EnemyType.Ray — Troll, Chevalier noir, Boss,
+     * profil "tour Mage" inversé) : canalise chaque tick, sans cooldown, sur la
+     * tour non détruite la plus proche à portée — retarget à chaque tick, comme
      * une tour CONTINUOUS retarget chaque tick l'ennemi le plus proche. Une tour
      * détruite par le rayon est retirée de la map (case libérée), comme pour le
      * Sapeur et le pulse.
      */
-    private void handleBossRayTick(Enemy boss, GameMap map,
-                                    List<TowerDamageEvent> towerDamageEvents,
-                                    List<UUID> destroyedTowers) {
-        EnemyType type = boss.getType();
+    private void handleSiegeRayTick(Enemy enemy, GameMap map,
+                                     List<TowerDamageEvent> towerDamageEvents,
+                                     List<UUID> destroyedTowers) {
+        EnemyType.Ray ray = enemy.getType().ray;
 
         Tower closest = null;
         double closestDist = Double.MAX_VALUE;
@@ -574,10 +575,10 @@ public class WaveSimulationService {
             if (tower.isDestroyed()) {
                 continue;
             }
-            double dx = tower.getX() - boss.getX();
-            double dy = tower.getY() - boss.getY();
+            double dx = tower.getX() - enemy.getX();
+            double dy = tower.getY() - enemy.getY();
             double dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist <= type.aoeRadius && dist < closestDist) {
+            if (dist <= ray.range() && dist < closestDist) {
                 closestDist = dist;
                 closest = tower;
             }
@@ -586,8 +587,8 @@ public class WaveSimulationService {
             return;
         }
 
-        closest.takeSiegeDamage(type.rayDamage);
-        towerDamageEvents.add(new TowerDamageEvent(boss.getId(), closest.getId(), type.rayDamage));
+        closest.takeSiegeDamage(ray.damagePerTick());
+        towerDamageEvents.add(new TowerDamageEvent(enemy.getId(), closest.getId(), ray.damagePerTick()));
         if (closest.isDestroyed()) {
             map.removeTower(closest.getX(), closest.getY());
             destroyedTowers.add(closest.getId());

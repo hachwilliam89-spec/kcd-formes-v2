@@ -154,6 +154,14 @@ export default function GamePage() {
             setMessage('Le mur se pose sur le couloir des ennemis (pour leur barrer la route)')
             return
         }
+        // 6 = PlaceTowerService.MAX_WALLS côté backend (anti-donjon : paver le
+        // couloir de murs entassait toute la vague sous le feu de la défense
+        // entière, victoire garantie). Le backend rejette de toute façon.
+        if (selectedTower === 'WALL' &&
+            (map?.towers ?? []).filter((t) => t.type === 'WALL').length >= 6) {
+            setMessage('Limite de 6 murs atteinte — le mur est un point de blocage, pas une forteresse')
+            return
+        }
         if (selectedTower !== 'WALL' && inCorridor) {
             setMessage('Impossible de construire une tour sur le couloir des ennemis')
             return

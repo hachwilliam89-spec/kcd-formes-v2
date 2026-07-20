@@ -254,21 +254,51 @@ class WaveFactoryTest {
     }
 
     @Test
-    @DisplayName("Le nombre de Sapeurs par vague est plafonné, même en vague profonde")
+    @DisplayName("Le nombre de Sapeurs par vague suit le plafond progressif, même en vague profonde")
     void createWave_sapeurCount_isCappedPerWave() {
         for (long seed : List.of(0L, 1L, 2L, 42L, -7L)) {
             for (int waveNumber : List.of(12, 15, 20, 30)) {
                 long sapeurs = waveFactory.createWave(waveNumber, spawn, seed).getEnemies().stream()
                         .filter(e -> e.getType() == EnemyType.SAPEUR)
                         .count();
-                // 5 = WaveFactory.SAPEUR_WAVE_CAP : sans plafond, le budget en
-                // finançait 7+ dès la v15 — churn de tours inreconstructible
-                // (mesuré au harnais, 9+ tours rasées par vague).
                 assertThat(sapeurs)
                         .as("vague %d (seed %d)", waveNumber, seed)
-                        .isLessThanOrEqualTo(5);
+                        .isLessThanOrEqualTo(WaveFactory.sapeurWaveCap(waveNumber));
             }
         }
+    }
+
+    @Test
+    @DisplayName("Le Chariot-baliste apparaît à partir de son seuil, jamais avant, plafonné à 3 par vague")
+    void createWave_chariot_appearsFromThresholdCapped() {
+        for (long seed : List.of(0L, 1L, 2L, 42L, -7L)) {
+            for (int waveNumber = 1; waveNumber < WaveFactory.CHARIOT_THRESHOLD; waveNumber++) {
+                assertThat(waveFactory.createWave(waveNumber, spawn, seed).getEnemies())
+                        .as("vague %d (seed %d)", waveNumber, seed)
+                        .noneMatch(e -> e.getType() == EnemyType.CHARIOT);
+            }
+            for (int waveNumber : List.of(WaveFactory.CHARIOT_THRESHOLD, 12, 20, 30)) {
+                long chariots = waveFactory.createWave(waveNumber, spawn, seed).getEnemies().stream()
+                        .filter(e -> e.getType() == EnemyType.CHARIOT).count();
+                assertThat(chariots)
+                        .as("vague %d (seed %d)", waveNumber, seed)
+                        .isBetween(1L, 4L);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Le plafond de Sapeurs est progressif : plat avant la cassure, +1 toutes les 4 vagues après")
+    void sapeurWaveCap_growsSlowlyAfterCurveBreak() {
+        // Plat jusqu'à la cassure (v12) : un plafond FIGE tuait la tension en
+        // late game (5 Sapeurs abattus = plus aucune menace sur les tours,
+        // victoire assurée — retour de partie réelle). Progressif ensuite,
+        // mais 8x plus lent que la croissance d'origine (+1/vague).
+        assertThat(WaveFactory.sapeurWaveCap(5)).isEqualTo(5);
+        assertThat(WaveFactory.sapeurWaveCap(12)).isEqualTo(5);
+        assertThat(WaveFactory.sapeurWaveCap(16)).isEqualTo(6);
+        assertThat(WaveFactory.sapeurWaveCap(20)).isEqualTo(7);
+        assertThat(WaveFactory.sapeurWaveCap(30)).isEqualTo(9);
     }
 
     @Test

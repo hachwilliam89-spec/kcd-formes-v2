@@ -14,6 +14,9 @@ import java.util.UUID;
 
 public class PlaceTowerService implements PlaceTowerUseCase {
 
+    /** Plafond de murs simultanés sur la map (voir le commentaire dans placeTower). Dupliqué côté front (TOWER_INFO). */
+    public static final int MAX_WALLS = 6;
+
     private final GameRepository gameRepository;
     private final PlayerRepository playerRepository;
     private final PathfindingService pathfindingService;
@@ -60,6 +63,18 @@ public class PlaceTowerService implements PlaceTowerUseCase {
             if (!onCorridor) {
                 throw new IllegalStateException(
                         "Wall must be placed on the enemy corridor (cell (%d, %d) is outside it)".formatted(x, y));
+            }
+            // Plafond de murs simultanés : sans lui, paver le couloir en donjon
+            // (30+ murs à 35 or) entassait toute la vague sous le feu de la
+            // défense entière — victoire garantie, build dégénéré constaté en
+            // partie réelle. 6 = deux barrages complets du couloir : la
+            // stratégie de chokepoint reste entière, le donjon disparaît.
+            long wallCount = map.getTowers().stream()
+                    .filter(t -> t.getType() == TowerType.WALL)
+                    .count();
+            if (wallCount >= MAX_WALLS) {
+                throw new IllegalStateException(
+                        "Wall limit reached (%d): destroy or lose one before building another".formatted(MAX_WALLS));
             }
         } else if (onCorridor) {
             throw new CellOnPathException(x, y);

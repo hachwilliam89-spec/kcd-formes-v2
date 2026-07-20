@@ -89,6 +89,7 @@ const ENEMY_COLORS: Record<string, number> = {
     TROLL: 0x6b7280,       // gris
     DARK_KNIGHT: 0x4338ca, // violet sombre
     SAPEUR: 0xdc2626,      // rouge — signale visuellement la menace sur les tours
+    CHARIOT: 0x0ea5e9,     // cyan acier — l'engin de siège qui tire en avançant
     BOSS_WARLORD: 0xeab308, // or — distinct de tout le reste, signale le premier boss
 }
 
@@ -363,7 +364,13 @@ export class GameScene extends Phaser.Scene {
             const radius = isBoss ? CELL_SIZE * 0.55 : CELL_SIZE / 3
 
             this.enemiesGraphics.fillStyle(color, 1)
-            this.enemiesGraphics.fillCircle(px, py, radius)
+            if (enemy.type === 'CHARIOT') {
+                // Silhouette carrée : un ENGIN, pas une créature — identifiable
+                // au premier coup d'œil au milieu des cercles.
+                this.enemiesGraphics.fillRect(px - radius, py - radius, radius * 2, radius * 2)
+            } else {
+                this.enemiesGraphics.fillCircle(px, py, radius)
+            }
             if (isBoss) {
                 this.enemiesGraphics.lineStyle(3, 0x000000, 0.8)
                 this.enemiesGraphics.strokeCircle(px, py, radius)
@@ -461,8 +468,13 @@ export class GameScene extends Phaser.Scene {
             const enemyPx = enemy.x * CELL_SIZE + CELL_SIZE / 2
             const enemyPy = enemy.y * CELL_SIZE + CELL_SIZE / 2
 
-            const isBossRay = enemy.type === 'BOSS_WARLORD'
-            this.effectsGraphics.lineStyle(3, isBossRay ? BOSS_RAY_COLOR : SIEGE_LINE_COLOR, 0.9)
+            // Chaque menace a sa couleur : rouge = Sapeur au corps à corps,
+            // violet = rayon du Boss, sinon la couleur du type (cyan Chariot,
+            // gris Troll) — on identifie l'agresseur d'une tour d'un coup d'œil.
+            const rayColor = enemy.type === 'SAPEUR' ? SIEGE_LINE_COLOR
+                : enemy.type === 'BOSS_WARLORD' ? BOSS_RAY_COLOR
+                : (ENEMY_COLORS[enemy.type] ?? SIEGE_LINE_COLOR)
+            this.effectsGraphics.lineStyle(3, rayColor, 0.9)
             this.effectsGraphics.lineBetween(enemyPx, enemyPy, towerPx, towerPy)
         })
 
