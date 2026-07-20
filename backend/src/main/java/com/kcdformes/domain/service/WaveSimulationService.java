@@ -282,7 +282,7 @@ public class WaveSimulationService {
                     // Pas de cooldown : un rayon continu tape chaque tick tant qu'une
                     // cible est en portée (voir TowerType pour le rééquilibrage de
                     // baseDamage qui accompagne ce profil).
-                    Enemy target = findTarget(tower, wave.getEnemies(), escaped, tick);
+                    Enemy target = findTarget(tower, wave.getEnemies(), escaped, tick, progress);
                     if (target != null) {
                         applyDamage(tower, target, effectiveDamage(tower, target), wave, damageEvents, deaths);
                     }
@@ -295,7 +295,7 @@ public class WaveSimulationService {
                     continue;
                 }
 
-                Enemy target = findTarget(tower, wave.getEnemies(), escaped, tick);
+                Enemy target = findTarget(tower, wave.getEnemies(), escaped, tick, progress);
                 if (target == null) {
                     cooldowns.put(tower.getId(), 0.0);
                     continue;
@@ -338,6 +338,11 @@ public class WaveSimulationService {
             final int currentTick = tick;
             List<EnemySnapshot> snapshot = wave.getEnemies().stream()
                     .filter(enemy -> !escaped.contains(enemy.getId()))
+                    // Un ennemi mort quitte le snapshot : sa mort est signalée par
+                    // tick.deaths (le frontend y déclenche l'animation d'agonie).
+                    // Sans ce filtre, les cadavres restaient inclus à 0 PV et
+                    // s'empilaient à l'écran (visible depuis le rendu par sprites).
+                    .filter(enemy -> !enemy.isDead())
                     .filter(enemy -> currentTick > enemy.getSpawnDelayTicks())
                     .map(enemy -> new EnemySnapshot(
                             enemy.getId(), enemy.getType().name(),
@@ -400,27 +405,30 @@ public class WaveSimulationService {
     }
 
     /**
-     * Sélection de cible d'une tour. Pour une tour perce-blindage (Baliste,
-     * heavyTargetMultiplier > 1), PRIORITÉ aux cibles massives : à un carreau
-     * toutes les ~8 ticks, chaque tir gaspillé sur un Goblin est une
-     * catastrophe — elle ne vise la piétaille qu'en l'absence de massif à
-     * portée (repli, plutôt qu'un ciblage exclusif qui la laisserait inerte
-     * devant une vague de piétaille : investissement mort et sentiment de bug).
+     * Sélection de cible d'une tour, selon son TargetingMode (choisi par le
+     * joueur) : CLOSEST (plus proche), FIRST (plus avancé sur le chemin),
+     * STRONGEST (plus de PV courants). Pour une tour perce-blindage (Baliste,
+     * heavyTargetMultiplier > 1), PRIORITÉ aux cibles massives : le mode
+     * s'applique d'abord PARMI les massives à portée, puis en repli sur le
+     * reste — à un carreau toutes les ~8 ticks, chaque tir gaspillé sur un
+     * Goblin est une catastrophe (repli plutôt que ciblage exclusif : une tour
+     * inerte devant une vague de piétaille serait vécue comme un bug).
      */
-    private Enemy findTarget(Tower tower, List<Enemy> enemies, Set<UUID> escaped, int tick) {
+    private Enemy findTarget(Tower tower, List<Enemy> enemies, Set<UUID> escaped, int tick,
+                              Map<UUID, Double> progress) {
         if (tower.getType().heavyTargetMultiplier > 1.0) {
-            Enemy heavy = findClosestTarget(tower, enemies, escaped, tick, true);
+            Enemy heavy = findBestTarget(tower, enemies, escaped, tick, progress, true);
             if (heavy != null) {
                 return heavy;
             }
         }
-        return findClosestTarget(tower, enemies, escaped, tick, false);
+        return findBestTarget(tower, enemies, escaped, tick, progress, false);
     }
 
-    private Enemy findClosestTarget(Tower tower, List<Enemy> enemies, Set<UUID> escaped, int tick,
-                                     boolean heavyOnly) {
+    private Enemy findBestTarget(Tower tower, List<Enemy> enemies, Set<UUID> escaped, int tick,
+                                  Map<UUID, Double> progress, boolean heavyOnly) {
         Enemy best = null;
-        double bestDistSq = Double.MAX_VALUE;
+        double bestScore = Double.NEGATIVE_INFINITY;
 
         for (Enemy enemy : enemies) {
             if (enemy.isDead() || escaped.contains(enemy.getId())) {
@@ -434,21 +442,28 @@ public class WaveSimulationService {
             }
             // Seule la passe PRIORITAIRE (perce-blindage de la Baliste) évite
             // l'armure enchantée : choisir délibérément une cible qu'on ne peut
-            // pas blesser serait absurde. En ciblage normal (plus proche), les
-            // tours physiques prennent bien le Chevalier noir pour cible — et
-            // leurs tirs ricochent (voir applyDamage) : il AGGRO la défense,
-            // c'est tout l'intérêt du leurre.
+            // pas blesser serait absurde. En ciblage normal, les tours physiques
+            // prennent bien le Chevalier noir pour cible — et leurs tirs
+            // ricochent (voir applyDamage) : il AGGRO la défense, c'est tout
+            // l'intérêt du leurre.
             if (heavyOnly && enemy.getType().magicArmor && tower.getType() != TowerType.MAGE) {
                 continue;
             }
             if (!tower.canTarget(enemy)) {
                 continue;
             }
+
+            // Score à MAXIMISER selon le mode : distance inversée (CLOSEST),
+            // progression sur le chemin (FIRST), PV courants (STRONGEST).
             double dx = tower.getX() - enemy.getX();
             double dy = tower.getY() - enemy.getY();
-            double distSq = dx * dx + dy * dy;
-            if (distSq < bestDistSq) {
-                bestDistSq = distSq;
+            double score = switch (tower.getTargetingMode()) {
+                case CLOSEST -> -(dx * dx + dy * dy);
+                case FIRST -> progress.getOrDefault(enemy.getId(), 0.0);
+                case STRONGEST -> enemy.getCurrentHp();
+            };
+            if (score > bestScore) {
+                bestScore = score;
                 best = enemy;
             }
         }
@@ -469,9 +484,8 @@ public class WaveSimulationService {
      * chaque tick au lieu d'avancer. Quand la tour tombe, elle est retirée de la
      * map (case définitivement libérée — confirmé) et l'entrée de siegeTargets
      * est retirée : au tick suivant, ce même Sapeur recherchera la tour la plus
-     * proche parmi celles qui restent et recommencera le cycle (confirmé : « après
-     * une tour détruite, les Sapeurs ciblent une autre »). Il ne reprend sa route
-     * vers le château que lorsqu'il ne reste plus aucune tour sur la map.
+     * proche parmi celles qui restent et recommencera le cycle. Il ne reprend sa
+     * route vers le château que lorsqu'il ne reste plus aucune tour sur la map.
      *
      * @return true si ce tick a été consommé par ce comportement (déplacement
      *         hors chemin ou attaque) ; false si aucune tour ne reste sur la map,
@@ -519,10 +533,9 @@ public class WaveSimulationService {
                 map.removeTower(target.getX(), target.getY());
                 destroyedTowers.add(target.getId());
                 // Libère la cible : le prochain tick recherchera la tour la plus
-                // proche parmi celles qui restent (voir javadoc ci-dessus). Tient
-                // aussi à jour le point du chemin le plus proche au cas où il ne
-                // resterait plus aucune tour — permet de reprendre la route vers
-                // le château sans téléportation si c'est le cas.
+                // proche parmi celles qui restent. Tient aussi à jour le point du
+                // chemin le plus proche au cas où il ne resterait plus aucune
+                // tour — permet de reprendre la route sans téléportation.
                 siegeTargets.remove(enemy.getId());
                 progress.put(enemy.getId(), nearestPathIndex(enemy, path));
             }

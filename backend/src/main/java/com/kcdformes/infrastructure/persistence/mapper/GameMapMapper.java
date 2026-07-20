@@ -35,7 +35,10 @@ public class GameMapMapper {
                         // PV courants de la structure (voir Tower.hp) : une tour endommagée
                         // par un Sapeur sans être détruite doit le rester après un
                         // rechargement de la map, pas revenir à pleine vie.
-                        "hp", t.getHp()
+                        "hp", t.getHp(),
+                        // Choix du joueur (voir TargetingMode) : doit survivre aux
+                        // vagues et aux rechargements, comme le niveau.
+                        "targetingMode", t.getTargetingMode().name()
                 ))
                 .toList();
         json.put("towers", towers);
@@ -78,6 +81,13 @@ public class GameMapMapper {
             Tower tower = rawHp != null
                     ? new Tower(id, type, x, y, level, ((Number) rawHp).intValue())
                     : new Tower(id, type, x, y, level);
+
+            // Fallback CLOSEST (défaut du constructeur) pour les parties
+            // persistées avant l'introduction des modes de ciblage.
+            Object rawMode = t.get("targetingMode");
+            if (rawMode != null) {
+                tower.setTargetingMode(TargetingMode.valueOf((String) rawMode));
+            }
             map.placeTower(tower);
         }
 

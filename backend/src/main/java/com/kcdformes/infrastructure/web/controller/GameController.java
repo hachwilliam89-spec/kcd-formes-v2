@@ -5,6 +5,7 @@ import com.kcdformes.domain.model.Tower;
 import com.kcdformes.domain.port.in.command.ChooseBonusUseCase.ChooseBonusCommand;
 import com.kcdformes.domain.port.in.command.ChooseBonusUseCase.ChooseBonusResult;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase.PlaceTowerCommand;
+import com.kcdformes.domain.port.in.command.SetTargetingModeUseCase.SetTargetingModeCommand;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase.StartWaveCommand;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase.StartWaveResult;
 import com.kcdformes.domain.port.in.command.UpgradeTowerUseCase.UpgradeTowerCommand;
@@ -62,6 +63,17 @@ public class GameController {
             @PathVariable UUID towerId,
             Authentication auth) {
         Tower tower = gameService.upgradeTower(new UpgradeTowerCommand(gameId, extractPlayerId(auth), towerId));
+        return ResponseEntity.ok(TowerResponse.from(tower));
+    }
+
+    @PostMapping("/{gameId}/towers/{towerId}/targeting")
+    public ResponseEntity<TowerResponse> setTargetingMode(
+            @PathVariable UUID gameId,
+            @PathVariable UUID towerId,
+            @Valid @RequestBody SetTargetingModeRequest request,
+            Authentication auth) {
+        Tower tower = gameService.setTargetingMode(new SetTargetingModeCommand(
+                gameId, extractPlayerId(auth), towerId, request.mode()));
         return ResponseEntity.ok(TowerResponse.from(tower));
     }
 

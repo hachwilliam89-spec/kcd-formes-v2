@@ -1,6 +1,7 @@
 package com.kcdformes.infrastructure.web.dto;
 
 import com.kcdformes.domain.model.DamageType;
+import com.kcdformes.domain.model.TargetingMode;
 import com.kcdformes.domain.model.Tower;
 import com.kcdformes.domain.model.TowerType;
 
@@ -23,7 +24,10 @@ public record TowerResponse(
         // ennemis) — permettent au frontend d'afficher une barre de vie de tour
         // et de refléter les dégâts de siège d'un Sapeur (voir Tower.hp/getMaxHp).
         int hp,
-        int maxHp
+        int maxHp,
+        // Mode de ciblage choisi par le joueur (voir TargetingMode) — affiché et
+        // modifiable depuis la carte de sélection de tour côté frontend.
+        TargetingMode targetingMode
 ) {
     public static TowerResponse from(Tower tower) {
         return new TowerResponse(
@@ -37,7 +41,8 @@ public record TowerResponse(
                 tower.getType().damageType,
                 tower.getType().splashRadius,
                 tower.getHp(),
-                tower.getMaxHp()
+                tower.getMaxHp(),
+                tower.getTargetingMode()
         );
     }
 }

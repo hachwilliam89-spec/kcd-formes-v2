@@ -18,6 +18,9 @@ interface Tower {
     // vague ; à 0, la tour est définitivement détruite côté backend.
     hp: number
     maxHp: number
+    // Mode de ciblage choisi par le joueur (voir backend TargetingMode) —
+    // absent (défaut CLOSEST) pour les tours d'une partie d'avant la feature.
+    targetingMode?: 'CLOSEST' | 'FIRST' | 'STRONGEST'
 }
 
 interface GameMap {

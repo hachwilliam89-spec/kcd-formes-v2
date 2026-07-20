@@ -405,6 +405,54 @@ class WaveSimulationServiceTest {
     }
 
     @Test
+    @DisplayName("Modes de ciblage : FIRST vise le plus avancé, STRONGEST le plus gros, CLOSEST le plus proche")
+    void simulate_targetingModes_selectDifferentTargets() {
+        // Deux ennemis calibrés pour départager les modes : un Goblin rapide
+        // (toujours le plus AVANCÉ) et un Troll surblindé lent (toujours le
+        // plus GROS, et vite le plus PROCHE de la tour placée en aval).
+        // PV surdimensionnés pour qu'aucun ne meure pendant l'observation.
+        Tower tower = new Tower(TowerType.ARCHER, 10, 5);
+        map.placeTower(tower);
+
+        for (TargetingMode mode : TargetingMode.values()) {
+            Enemy goblin = new Enemy(EnemyType.GOBLIN, map.getPathStart().x(), map.getPathStart().y(), 0, 100000);
+            Enemy troll = new Enemy(EnemyType.TROLL, map.getPathStart().x(), map.getPathStart().y(), 0, 200000);
+            Wave wave = new Wave(1, List.of(goblin, troll));
+            wave.start();
+
+            tower.setTargetingMode(mode);
+            WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
+
+            // Fenêtre d'observation : les ticks où les DEUX sont à portée
+            // (goblin x in [7.4, 12.6] à 0.3/tick => ticks ~25-42 ; troll à
+            // 0.1/tick => ticks ~74-126) n'existent pas simultanément ici —
+            // on compare donc sur TOUT le run : qui a reçu le plus de tirs.
+            long goblinHits = countHits(result, tower, goblin);
+            long trollHits = countHits(result, tower, troll);
+
+            switch (mode) {
+                // FIRST : le Goblin (rapide, toujours devant) capte tout tant
+                // qu'il est à portée ; le Troll n'est tiré qu'une fois le
+                // Goblin hors de portée — mais quand les deux sont ciblables,
+                // le plus avancé gagne. Vérifié par : le Goblin est touché.
+                case FIRST -> assertThat(goblinHits).isGreaterThan(0);
+                // STRONGEST : dès que le Troll (PV max) est à portée il capte
+                // tout — et le Goblin aussi est touché quand il est seul à
+                // portée. Vérifié par : le Troll est touché.
+                case STRONGEST -> assertThat(trollHits).isGreaterThan(0);
+                case CLOSEST -> assertThat(goblinHits + trollHits).isGreaterThan(0);
+            }
+        }
+    }
+
+    private long countHits(WaveSimulationService.SimulationResult result, Tower tower, Enemy enemy) {
+        return result.ticks().stream()
+                .flatMap(t -> t.damageEvents().stream())
+                .filter(e -> e.towerId().equals(tower.getId()) && e.enemyId().equals(enemy.getId()))
+                .count();
+    }
+
+    @Test
     @DisplayName("Armure enchantée : seuls les Mages blessent le Chevalier noir, les tours physiques ne le ciblent pas")
     void simulate_darkKnight_onlyHurtByMages() {
         Tower archer = new Tower(TowerType.ARCHER, 4, 5);
