@@ -405,6 +405,40 @@ class WaveSimulationServiceTest {
     }
 
     @Test
+    @DisplayName("Armure enchantée : seuls les Mages blessent le Chevalier noir, les tours physiques ne le ciblent pas")
+    void simulate_darkKnight_onlyHurtByMages() {
+        Tower archer = new Tower(TowerType.ARCHER, 4, 5);
+        Tower catapult = new Tower(TowerType.CATAPULT, 8, 9);
+        Tower mage = new Tower(TowerType.MAGE, 12, 5);
+        map.placeTower(archer);
+        map.placeTower(catapult);
+        map.placeTower(mage);
+
+        Enemy darkKnight = new Enemy(EnemyType.DARK_KNIGHT, map.getPathStart().x(), map.getPathStart().y());
+        Wave wave = new Wave(1, List.of(darkKnight));
+        wave.start();
+
+        WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
+
+        List<WaveSimulationService.DamageEvent> hitsOnKnight = result.ticks().stream()
+                .flatMap(t -> t.damageEvents().stream())
+                .filter(e -> e.enemyId().equals(darkKnight.getId()))
+                .toList();
+
+        // AGGRO voulu : les tours physiques le ciblent et tirent (les évènements
+        // existent — cadence consommée en pure perte, c'est son rôle de leurre)
+        // mais tout ricoche (damage 0). Seuls les tirs du Mage blessent.
+        List<WaveSimulationService.DamageEvent> physicalHits = hitsOnKnight.stream()
+                .filter(e -> !e.towerId().equals(mage.getId())).toList();
+        List<WaveSimulationService.DamageEvent> magicHits = hitsOnKnight.stream()
+                .filter(e -> e.towerId().equals(mage.getId())).toList();
+
+        assertThat(physicalHits).isNotEmpty().allMatch(e -> e.damage() == 0);
+        assertThat(magicHits).isNotEmpty().allMatch(e -> e.damage() > 0);
+        assertThat(darkKnight.getCurrentHp()).isLessThan(darkKnight.getMaxHp());
+    }
+
+    @Test
     @DisplayName("Le Chariot-baliste tire en avançant : il use les tours SANS jamais s'arrêter ni dévier")
     void simulate_chariot_channelsWhileAdvancing() {
         Tower front = new Tower(TowerType.ARCHER, 5, 5);
