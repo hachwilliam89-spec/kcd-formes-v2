@@ -72,7 +72,7 @@ Toute décision de gameplay ci-dessous doit rester cohérente avec ces trois pil
 
 ## 3. Couche compétitive légère (avant le multi temps réel)
 
-- **Leaderboard** : classement global par meilleure vague atteinte.
+- **Leaderboard** : classement global par meilleure vague atteinte. *Implémenté* : top N (borné à 50) + rang du joueur demandeur même hors du top (rang de compétition : 1 + nombre de joueurs strictement meilleurs), tri stable par username entre ex æquo. `GET /api/v1/leaderboard` (`LeaderboardService`), carte dans le panneau de jeu, rafraîchie à chaque fin de vague. L'elo de `PlayerEntity` reste réservé au futur PvP — ce classement n'en dépend pas.
 - **Défi "ghost"** : un joueur peut affronter la même vague (même seed) qu'une partie déjà enregistrée d'un autre joueur, en asynchrone — première étape vers le PvP avant d'investir dans le temps réel.
 
 ## 4. Mode multi — "Château contre château" (siège mutuel)

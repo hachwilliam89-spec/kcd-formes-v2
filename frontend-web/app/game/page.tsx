@@ -55,6 +55,10 @@ export default function GamePage() {
     const [bestWave, setBestWave] = useState(0)
     const [isGameOver, setIsGameOver] = useState(false)
     const [bonusChoiceLoading, setBonusChoiceLoading] = useState(false)
+    const [leaderboard, setLeaderboard] = useState<{
+        top: { rank: number; username: string; bestWave: number }[]
+        me: { rank: number; username: string; bestWave: number } | null
+    } | null>(null)
 
     // Redirection vers la connexion : UNIQUEMENT une fois le store relu depuis
     // localStorage (authHydrated). La réhydratation de persist est asynchrone —
@@ -93,6 +97,14 @@ export default function GamePage() {
             setBestWave(data.bestWave)
         } catch {
             // best-effort : un échec ne doit pas bloquer le jeu, juste retarder l'affichage du déblocage.
+        }
+        // Classement rafraîchi aux mêmes moments que le bestWave (montage + fin
+        // de vague) : c'est précisément quand le rang peut avoir changé.
+        try {
+            const { data } = await api.get('/api/v1/leaderboard?limit=5')
+            setLeaderboard(data)
+        } catch {
+            // best-effort également : sans réponse, la carte affiche l'état précédent.
         }
     }
 
@@ -342,6 +354,37 @@ export default function GamePage() {
                         <Card className="bg-slate-800 border-slate-700">
                             <CardContent className="p-3">
                                 <p className="text-xs text-slate-300">{message}</p>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Classement par meilleure vague (voir backend LeaderboardService).
+                        La ligne "toi" n'est ajoutée que si le joueur est hors du top
+                        affiché — sinon sa ligne du top est simplement surlignée. */}
+                    {leaderboard && leaderboard.top.length > 0 && (
+                        <Card className="bg-slate-800 border-slate-700">
+                            <CardContent className="p-3 flex flex-col gap-1">
+                                <p className="text-sm font-semibold text-yellow-400 mb-1">🏆 Classement</p>
+                                {leaderboard.top.map((entry) => (
+                                    <p
+                                        key={entry.rank + entry.username}
+                                        className={`text-xs flex justify-between ${
+                                            entry.username === player?.username
+                                                ? 'text-yellow-300 font-semibold'
+                                                : 'text-slate-300'
+                                        }`}
+                                    >
+                                        <span>#{entry.rank} {entry.username}</span>
+                                        <span>vague {entry.bestWave}</span>
+                                    </p>
+                                ))}
+                                {leaderboard.me &&
+                                    !leaderboard.top.some((e) => e.username === leaderboard.me!.username) && (
+                                    <p className="text-xs flex justify-between text-yellow-300 font-semibold border-t border-slate-700 pt-1 mt-1">
+                                        <span>#{leaderboard.me.rank} {leaderboard.me.username}</span>
+                                        <span>vague {leaderboard.me.bestWave}</span>
+                                    </p>
+                                )}
                             </CardContent>
                         </Card>
                     )}
