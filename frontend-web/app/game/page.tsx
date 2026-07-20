@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { TowerData } from '@/components/game/GameScene'
-import { CORRIDOR_MIN_Y, CORRIDOR_MAX_Y } from '@/components/game/GameScene'
+import { CORRIDOR_MIN_Y, CORRIDOR_MAX_Y } from '@/components/game/constants'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
 import api from '@/lib/api'
 
@@ -35,6 +35,13 @@ const TOWER_INFO: Record<TowerType, { label: string; cost: number; color: string
     WALL:     { label: 'Mur',       cost: 35,  color: 'bg-stone-500',  unlockWave: 6 },
 }
 
+// Modes de ciblage (voir backend TargetingMode) : libellés courts + explication.
+const TARGETING_MODES: { mode: 'CLOSEST' | 'FIRST' | 'STRONGEST'; label: string; hint: string }[] = [
+    { mode: 'CLOSEST', label: 'Le plus proche', hint: "Vise l'ennemi le plus près de la tour (défaut)" },
+    { mode: 'FIRST', label: 'Le plus avancé', hint: "Vise celui le plus près du château — stoppe les fuyards" },
+    { mode: 'STRONGEST', label: 'Le plus solide', hint: "Vise le plus de PV — concentre le feu sur les élites" },
+]
+
 export default function GamePage() {
     const router = useRouter()
     const { player, isAuthenticated, hasHydrated: authHydrated } = useAuthStore()
@@ -42,7 +49,7 @@ export default function GamePage() {
     const {
         gameId, map, waveNumber, gold, castleHp, castleMaxHp, status,
         awaitingBonusChoice, availableBonuses, hasHydrated: gameHydrated,
-        createGame, placeTower, upgradeTower, startWave, chooseBonus, refreshGame, resumeGame, newGame,
+        createGame, placeTower, upgradeTower, setTargetingMode, startWave, chooseBonus, refreshGame, resumeGame, newGame,
     } = useGame()
 
     const canvasRef = useRef<GameCanvasHandle>(null)
@@ -55,6 +62,8 @@ export default function GamePage() {
     const [bestWave, setBestWave] = useState(0)
     const [isGameOver, setIsGameOver] = useState(false)
     const [bonusChoiceLoading, setBonusChoiceLoading] = useState(false)
+    // Tour sélectionnée (clic) : ouvre la carte d'info (amélioration + ciblage).
+    const [selectedTowerId, setSelectedTowerId] = useState<string | null>(null)
     const [leaderboard, setLeaderboard] = useState<{
         top: { rank: number; username: string; bestWave: number }[]
         me: { rank: number; username: string; bestWave: number } | null
@@ -129,19 +138,13 @@ export default function GamePage() {
     async function handleCellClick(x: number, y: number) {
         if (isGameOver || combatRunning) return
 
-        // Cliquer sur une case déjà occupée améliore la tour en place plutôt que
-        // d'essayer (en vain) d'en poser une nouvelle par-dessus — c'est ce qui
-        // donne au joueur le choix permanent entre poser une tour neuve (faible)
-        // ailleurs ou investir dans une tour existante pour la renforcer.
+        // Cliquer sur une tour existante la SÉLECTIONNE (carte d'info : amélioration
+        // + mode de ciblage) au lieu de l'améliorer directement — un clic ne doit
+        // plus dépenser de l'or par surprise. Un mur n'a ni amélioration utile ni
+        // ciblage : cliquer dessus ne sélectionne rien.
         const existingTower = (map?.towers ?? []).find((t) => t.x === x && t.y === y)
         if (existingTower) {
-            const cost = TOWER_INFO[existingTower.type].cost * existingTower.level
-            try {
-                await upgradeTower(existingTower.id, cost)
-                setMessage(`${TOWER_INFO[existingTower.type].label} améliorée au niveau ${existingTower.level + 1} (-${cost} or)`)
-            } catch {
-                setMessage("Impossible d'améliorer cette tour (or insuffisant)")
-            }
+            setSelectedTowerId(existingTower.type === 'WALL' ? null : existingTower.id)
             return
         }
 
@@ -173,6 +176,24 @@ export default function GamePage() {
             setMessage(`${TOWER_INFO[selectedTower].label} placé(e) en (${x}, ${y})`)
         } catch {
             setMessage('Impossible de placer ici (or insuffisant ou case invalide)')
+        }
+    }
+
+    async function handleUpgradeSelected(tower: TowerData) {
+        const cost = TOWER_INFO[tower.type].cost * tower.level
+        try {
+            await upgradeTower(tower.id, cost)
+            setMessage(`${TOWER_INFO[tower.type].label} améliorée au niveau ${tower.level + 1} (-${cost} or)`)
+        } catch {
+            setMessage("Impossible d'améliorer cette tour (or insuffisant)")
+        }
+    }
+
+    async function handleSetTargeting(towerId: string, mode: string) {
+        try {
+            await setTargetingMode(towerId, mode)
+        } catch {
+            setMessage('Impossible de changer le mode de ciblage')
         }
     }
 
@@ -238,6 +259,12 @@ export default function GamePage() {
     }
 
     const towers: TowerData[] = map?.towers ?? []
+    // Tour sélectionnée (objet) : recalculée depuis la map à chaque rendu (le
+    // store est la source de vérité) — null si sa case a été libérée (détruite
+    // en combat). Distinct de `selectedTower` (state du TYPE à poser).
+    const selectedTowerObj = selectedTowerId
+        ? towers.find((t) => t.id === selectedTowerId) ?? null
+        : null
     const hpRatio = castleMaxHp > 0 ? Math.max(0, Math.min(1, liveCastleHp / castleMaxHp)) : 0
 
     if (loading && !gameId) {
@@ -278,6 +305,70 @@ export default function GamePage() {
                 </div>
 
                 <div className="flex flex-col gap-4 w-48">
+                    {/* Carte de la tour sélectionnée (clic) : remontée en TÊTE du
+                        panneau pour être associée sans ambiguïté à la tour cliquée.
+                        Chaque mode est décrit en toutes lettres (le libellé seul
+                        est muet), avec le mode actif surligné. Cachée en combat et
+                        pour les murs (non sélectionnables). */}
+                    {selectedTowerObj && !combatRunning && !isGameOver && (
+                        <Card className="bg-slate-800 border-blue-500">
+                            <CardContent className="p-4 flex flex-col gap-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm font-semibold text-white">
+                                        {TOWER_INFO[selectedTowerObj.type].label} · niveau {selectedTowerObj.level}
+                                    </span>
+                                    <button
+                                        onClick={() => setSelectedTowerId(null)}
+                                        className="text-slate-400 hover:text-white"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+
+                                <Button
+                                    size="sm"
+                                    onClick={() => handleUpgradeSelected(selectedTowerObj)}
+                                    className="bg-emerald-700 hover:bg-emerald-600 text-white"
+                                >
+                                    ⬆ Améliorer (-{TOWER_INFO[selectedTowerObj.type].cost * selectedTowerObj.level} or)
+                                </Button>
+
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-300">Priorité de tir</p>
+                                    <p className="text-[11px] text-slate-500 mb-2">
+                                        Sur quel ennemi cette tour vise en premier.
+                                    </p>
+                                    <div className="flex flex-col gap-1">
+                                        {TARGETING_MODES.map((m) => {
+                                            const active = (selectedTowerObj.targetingMode ?? 'CLOSEST') === m.mode
+                                            return (
+                                                <button
+                                                    key={m.mode}
+                                                    onClick={() => handleSetTargeting(selectedTowerObj.id, m.mode)}
+                                                    className={`text-left p-2 rounded transition-all ${
+                                                        active
+                                                            ? 'bg-blue-600 text-white ring-1 ring-white'
+                                                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                                    }`}
+                                                >
+                                                    <span className="block text-xs font-semibold">
+                                                        {active ? '✓ ' : ''}{m.label}
+                                                    </span>
+                                                    <span className="block text-[11px] opacity-80">{m.hint}</span>
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                    {selectedTowerObj.type === 'BALLISTA' && (
+                                        <p className="text-[11px] text-amber-400/90 mt-2">
+                                            ⚔ La Baliste vise toujours les grosses cibles (Troll, Chariot, Chevalier, Boss) en priorité — le réglage ci-dessus départage seulement quand plusieurs sont à portée.
+                                        </p>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     <Card className="bg-slate-800 border-slate-700">
                         <CardContent className="p-4">
                             <h3 className="text-sm font-semibold mb-3 text-slate-300">Tours</h3>

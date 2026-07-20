@@ -10,6 +10,12 @@ public class Tower {
     private final int y;
     private int level;
     private int hp;
+    /**
+     * Mode de ciblage choisi par le joueur (voir TargetingMode) — mutable et
+     * persisté avec la map (voir GameMapMapper) : le choix survit aux vagues
+     * et aux rechargements, contrairement aux états de combat éphémères.
+     */
+    private TargetingMode targetingMode = TargetingMode.CLOSEST;
 
     public Tower(TowerType type, int x, int y) {
         this.id = UUID.randomUUID();
@@ -108,6 +114,9 @@ public class Tower {
     public int getUpgradeCost() {
         return type.baseCost * level;
     }
+
+    public TargetingMode getTargetingMode() { return targetingMode; }
+    public void setTargetingMode(TargetingMode targetingMode) { this.targetingMode = targetingMode; }
 
     public UUID getId() { return id; }
     public TowerType getType() { return type; }

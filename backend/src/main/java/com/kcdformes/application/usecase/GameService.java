@@ -7,6 +7,7 @@ import com.kcdformes.domain.exception.TowerNotUnlockedException;
 import com.kcdformes.domain.model.*;
 import com.kcdformes.domain.port.in.command.ChooseBonusUseCase;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase;
+import com.kcdformes.domain.port.in.command.SetTargetingModeUseCase;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase;
 import com.kcdformes.domain.port.in.command.UpgradeTowerUseCase;
 import com.kcdformes.domain.port.in.query.GetGameStateUseCase;
@@ -34,7 +35,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGameStateUseCase,
-        UpgradeTowerUseCase, ChooseBonusUseCase {
+        UpgradeTowerUseCase, ChooseBonusUseCase, SetTargetingModeUseCase {
 
     /**
      * Or accordé à chaque nouvelle partie. Pas de report d'une partie à l'autre.
@@ -202,6 +203,27 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
 
         game.setGold(game.getGold() - cost);
         gameJpaRepository.save(game);
+
+        return tower;
+    }
+
+    @Override
+    @Transactional
+    public Tower setTargetingMode(SetTargetingModeCommand command) {
+        GameEntity game = loadOwnedGame(command.gameId(), command.playerId());
+        requireInProgress(game);
+
+        UUID castleId = game.getCastle().getId();
+        GameMap map = gameRepositoryAdapter.findMapByGameId(castleId)
+                .orElseThrow(() -> new IllegalArgumentException("Map not found for game: " + command.gameId()));
+        Tower tower = map.getTowerById(command.towerId())
+                .orElseThrow(() -> new IllegalArgumentException("Tower not found: " + command.towerId()));
+
+        // Gratuit et réversible à volonté (hors combat) : le mode de ciblage est
+        // un réglage tactique, pas un investissement — le rendre payant
+        // découragerait l'expérimentation qui fait tout son intérêt.
+        tower.setTargetingMode(command.mode());
+        gameRepositoryAdapter.saveMap(castleId, map);
 
         return tower;
     }

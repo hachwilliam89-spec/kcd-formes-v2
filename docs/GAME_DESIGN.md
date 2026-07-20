@@ -49,6 +49,12 @@ Toute décision de gameplay ci-dessous doit rester cohérente avec ces trois pil
 - **Montée en puissance entre récurrences** : le nombre de boss augmente légèrement à chaque réapparition (1 puis 2 à partir de la 3ᵉ occurrence, vague 30) ; ses PV grimpent surtout via le scaling par vague déjà existant.
 - **Implémentation** : `EnemyType.BOSS_WARLORD` porte les paramètres d'aura/AoE ; `WaveSimulationService.handleBossAbilityTick` exécute la pulsation (modélisé sur `handleSapperTick`, le même fichier) ; le frontend l'anime via `BossAbilityEvent` (anneau vert pour le soin, orange pour l'attaque de zone) et le distingue visuellement par une couleur et une taille dédiées (`GameScene`).
 
+### 2.35 Modes de ciblage des tours
+
+- Chaque tour a un **mode de ciblage** choisi par le joueur (`TargetingMode`, persisté avec la map) : **Proche** (`CLOSEST`, défaut — maximise l'uptime), **Avancé** (`FIRST`, le plus près du château — arrête les fuyards), **Costaud** (`STRONGEST`, le plus de PV — focalise les élites qui traversent sous les tirs éparpillés). Gratuit et réversible à volonté hors combat : c'est un réglage tactique, pas un investissement.
+- La **priorité perce-blindage de la Baliste** (voir 2.7) reste une surcouche : elle applique le mode choisi *parmi* les cibles massives d'abord, puis en repli sur le reste.
+- UX : cliquer une tour la **sélectionne** (carte d'info : amélioration + choix du mode) au lieu de l'améliorer directement — un clic ne dépense plus d'or par surprise. Endpoint `POST /{gameId}/towers/{towerId}/targeting`.
+
 ### 2.4 Palier de bonus (toutes les 5 vagues)
 
 - Tous les 5 paliers de vague (`GameService.BONUS_MILESTONE_INTERVAL`), le lancement de la vague suivante est bloqué jusqu'à ce que le joueur choisisse un bonus parmi plusieurs options (`BonusType`) : injection d'or proportionnelle à la vague atteinte, réparation complète du château, ou réparation de toutes les tours endommagées.

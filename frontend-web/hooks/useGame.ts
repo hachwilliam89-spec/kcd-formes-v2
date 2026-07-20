@@ -41,6 +41,17 @@ export function useGame() {
         return data
     }
 
+    // Change le mode de ciblage d'une tour (voir backend TargetingMode) : gratuit
+    // et réversible, c'est un réglage tactique, pas un achat — d'où l'absence de
+    // spendGold. La tour renvoyée (mode à jour) remplace celle du store.
+    async function setTargetingMode(towerId: string, mode: string) {
+        if (!gameId) throw new Error('Aucune partie en cours')
+        const { data } = await api.post(
+            `/api/v1/games/${gameId}/towers/${towerId}/targeting`, { mode })
+        upgradeTowerInStore(data)
+        return data
+    }
+
     async function startWave() {
         if (!gameId) throw new Error('Aucune partie en cours')
         const { data } = await api.post(`/api/v1/games/${gameId}/waves/start`)
@@ -123,6 +134,7 @@ export function useGame() {
         createGame,
         placeTower,
         upgradeTower,
+        setTargetingMode,
         startWave,
         chooseBonus,
         refreshGame,
