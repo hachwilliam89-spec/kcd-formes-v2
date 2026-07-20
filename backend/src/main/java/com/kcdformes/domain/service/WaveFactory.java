@@ -51,12 +51,19 @@ public class WaveFactory {
     private static final double HP_LATE_GROWTH_RATE = 1.08;
 
     /**
-     * Vague d'apparition du Chariot-baliste (EnemyType.CHARIOT) : après le mix
-     * élite (v2-4) et le déblocage du mur côté joueur (v6), avant le premier
-     * boss (v10) — la menace "tire en avançant" arrive quand la défense est
-     * installée. Package-private : exposé pour les tests.
+     * CALENDRIER D'APPARITION FIXE (décision de design) : une nouveauté par
+     * vague en début de partie — Orc v2, Troll v3, Sapeur v4, Chariot v5,
+     * Chevalier noir v6, premier Boss v10. Remplace les seuils jitterés par
+     * seed : la progression pédagogique (le joueur découvre une menace à la
+     * fois) prime sur la variation des premières vagues — l'aléa reste entier
+     * sur la COMPOSITION au-delà des minimums garantis (voir eliteBudget et
+     * ThreatBudgetMix). Package-private : exposé pour les tests.
      */
-    static final int CHARIOT_THRESHOLD = 8;
+    static final int ORC_THRESHOLD = 2;
+    static final int TROLL_THRESHOLD = 3;
+    static final int SAPEUR_THRESHOLD = 4;
+    static final int CHARIOT_THRESHOLD = 5;
+    static final int DARK_KNIGHT_THRESHOLD = 6;
     /** Plafond de Chariots par vague (3 -> 4, retour de partie : trop rares pour peser). */
     private static final int CHARIOT_WAVE_CAP = 4;
 
@@ -78,20 +85,64 @@ public class WaveFactory {
     }
 
     /**
+     * Vague "effective" pour toute croissance d'effectifs : suit le numéro réel
+     * jusqu'à la cassure (v12), puis avance à demi-vitesse — même philosophie
+     * deux-pentes que les PV (voir HP_CURVE_BREAK_WAVE), pour que le NOMBRE
+     * d'ennemis ne suive pas une croissance pleine à l'infini.
+     */
+    static int effectiveThreatWave(int waveNumber) {
+        return waveNumber <= HP_CURVE_BREAK_WAVE
+                ? waveNumber
+                : HP_CURVE_BREAK_WAVE + (waveNumber - HP_CURVE_BREAK_WAVE) / 2;
+    }
+
+    /**
+     * MINIMUMS GARANTIS CROISSANTS (calendrier de design) : chaque type a un
+     * effectif plancher qui grandit à son propre rythme — Sapeur +1 toutes les
+     * 2 vagues (le plus rapide : c'est la pression de siège), Orc +1/3, Troll
+     * +1/4, Chariot +1/5, Chevalier noir +1/6. Le budget aléatoire ajoute de la
+     * variation PAR-DESSUS ces planchers (voir eliteBudget). Les plafonds
+     * (sapeurWaveCap, CHARIOT_WAVE_CAP...) restent prioritaires sur les minimums.
+     * Package-private : exposés pour les tests.
+     */
+    static int orcMin(int waveNumber) {
+        return waveNumber < ORC_THRESHOLD ? 0
+                : 1 + Math.max(0, effectiveThreatWave(waveNumber) - ORC_THRESHOLD) / 3;
+    }
+
+    static int trollMin(int waveNumber) {
+        return waveNumber < TROLL_THRESHOLD ? 0
+                : 1 + Math.max(0, effectiveThreatWave(waveNumber) - TROLL_THRESHOLD) / 4;
+    }
+
+    static int sapeurMin(int waveNumber) {
+        if (waveNumber < SAPEUR_THRESHOLD) {
+            return 0;
+        }
+        int growth = 1 + Math.max(0, effectiveThreatWave(waveNumber) - SAPEUR_THRESHOLD) / 2;
+        return Math.min(growth, sapeurWaveCap(waveNumber));
+    }
+
+    static int chariotMin(int waveNumber) {
+        if (waveNumber < CHARIOT_THRESHOLD) {
+            return 0;
+        }
+        int growth = 1 + Math.max(0, effectiveThreatWave(waveNumber) - CHARIOT_THRESHOLD) / 5;
+        return Math.min(growth, CHARIOT_WAVE_CAP);
+    }
+
+    static int darkKnightMin(int waveNumber) {
+        return waveNumber < DARK_KNIGHT_THRESHOLD ? 0
+                : 1 + Math.max(0, effectiveThreatWave(waveNumber) - DARK_KNIGHT_THRESHOLD) / 6;
+    }
+
+    /**
      * Décalages perpendiculaires au chemin (en cases), répartis cycliquement
      * entre ennemis successifs pour qu'ils avancent sur plusieurs files de
      * front dans un couloir élargi, plutôt qu'en une seule file strictement
      * alignée. Appliqué pendant le déplacement par WaveSimulationService.
      */
     private static final double[] LANE_OFFSETS = { 0.0, -0.8, 0.8 };
-
-    /**
-     * Décalage XOR appliqué au seed de partie pour dériver le seuil du
-     * Chevalier noir sans corréler son tirage à celui du seuil Orc/Troll/Sapeur
-     * (un même seed, sur un même appel Random.nextInt, donnerait sinon
-     * exactement la même valeur jitterée pour les deux seuils).
-     */
-    private static final long DARK_KNIGHT_SALT = 0xD1B54A32D192ED03L;
 
     /** Constante de mélange (façon SplitMix) pour dériver un seed par vague à partir du seed de partie. */
     private static final long WAVE_MIX_CONSTANT = 0x9E3779B97F4A7C15L;
@@ -123,54 +174,47 @@ public class WaveFactory {
     private List<Enemy> generateEnemies(int waveNumber, Position spawn, long gameSeed) {
         Random waveRng = new Random(mixSeed(gameSeed, waveNumber));
 
-        int eliteThreshold = eliteThreshold(gameSeed);
-        int darkKnightThreshold = darkKnightThreshold(gameSeed);
-
         List<EnemyType> order = new ArrayList<>();
 
         // Goblin : toujours présent (chair à canon), léger jitter +-1 autour du
         // compte de base — pas de variation au-delà, ce type n'est pas l'enjeu
-        // de la randomisation (voir le mix Orc/Troll/Sapeur ci-dessous).
+        // de la randomisation (voir le mix ci-dessous).
         int goblinBase = 3 + waveNumber * 2;
         int goblinCount = Math.max(1, goblinBase + (waveRng.nextInt(3) - 1));
         new EnemyBurst(EnemyType.GOBLIN, goblinCount).resolve(waveRng, order);
 
-        if (waveNumber >= eliteThreshold) {
-            List<ThreatBudgetMix.Entry> mixEntries = new ArrayList<>(List.of(
-                    // Poids de tirage : l'Orc (le moins coûteux/dangereux) sort le
-                    // plus souvent, le Sapeur modérément, le Troll (le plus
-                    // dangereux) le plus rarement.
-                    new ThreatBudgetMix.Entry(EnemyType.ORC, EnemyType.ORC.goldReward, 5, 1),
-                    // Plafond progressif (voir sapeurWaveCap) : sans plafond, le
-                    // tirage finançait 7+ Sapeurs dès la v15 (~1160 PV chacun,
-                    // ~25 ticks d'exposition avant contact) — 9+ tours rasées
-                    // par vague, mort de toute défense vers la v15-16 quel que
-                    // soit l'or investi. Le budget excédentaire se reporte sur
-                    // Orcs/Trolls (cibles pour la Baliste).
-                    new ThreatBudgetMix.Entry(EnemyType.SAPEUR, EnemyType.SAPEUR.goldReward, 3, 1,
-                            sapeurWaveCap(waveNumber)),
-                    new ThreatBudgetMix.Entry(EnemyType.TROLL, EnemyType.TROLL.goldReward, 2, 1)
-            ));
-            // Chariot-baliste : seconde menace anti-tours (voir EnemyType.CHARIOT),
-            // toujours au moins un dès son seuil, plafonné (son rayon cumule vite).
-            if (waveNumber >= CHARIOT_THRESHOLD) {
-                // Poids 2 -> 3 (retour de partie) : le tirage doit en financer
-                // plus souvent — l'engin de siège est un pilier de la pression
-                // anti-tours, pas une curiosité occasionnelle.
-                mixEntries.add(new ThreatBudgetMix.Entry(EnemyType.CHARIOT, EnemyType.CHARIOT.goldReward,
-                        3, 1, CHARIOT_WAVE_CAP));
-            }
-            ThreatBudgetMix eliteMix = new ThreatBudgetMix(eliteBudget(waveNumber, eliteThreshold), mixEntries);
-            eliteMix.resolve(waveRng, order);
-        }
-
-        // Chevalier noir : cadence fixe conservée (tous les 5 vagues une fois
-        // débloqué) — le "mini-boss" actuel de la vague. Absent des vagues à
-        // Boss (voir ci-dessous) pour laisser le Boss être la seule menace
-        // spéciale mise en avant sur ces vagues-là, plutôt que d'empiler les deux.
+        // Mix unique piloté par le CALENDRIER (voir ORC_THRESHOLD et suivants) :
+        // chaque type entre à sa vague avec son minimum garanti croissant
+        // (voir orcMin...) ; le budget aléatoire distribue le surplus entre les
+        // types débloqués (poids : Orc courant, Sapeur/Chariot modérés, Troll
+        // rare, Chevalier noir exceptionnel), dans le respect des plafonds.
         boolean bossWave = waveNumber % BOSS_MILESTONE_INTERVAL == 0;
-        if (waveNumber >= darkKnightThreshold && waveNumber % 5 == 0 && !bossWave) {
-            new EnemyBurst(EnemyType.DARK_KNIGHT, darkKnightCount(waveNumber, darkKnightThreshold)).resolve(waveRng, order);
+        if (waveNumber >= ORC_THRESHOLD) {
+            List<ThreatBudgetMix.Entry> mixEntries = new ArrayList<>();
+            mixEntries.add(new ThreatBudgetMix.Entry(EnemyType.ORC, EnemyType.ORC.goldReward,
+                    5, orcMin(waveNumber)));
+            if (waveNumber >= TROLL_THRESHOLD) {
+                mixEntries.add(new ThreatBudgetMix.Entry(EnemyType.TROLL, EnemyType.TROLL.goldReward,
+                        2, trollMin(waveNumber)));
+            }
+            if (waveNumber >= SAPEUR_THRESHOLD) {
+                // Plafond progressif (voir sapeurWaveCap) : sans plafond, 7+
+                // Sapeurs dès la v15 rasaient 9+ tours/vague — inreconstructible.
+                mixEntries.add(new ThreatBudgetMix.Entry(EnemyType.SAPEUR, EnemyType.SAPEUR.goldReward,
+                        3, sapeurMin(waveNumber), sapeurWaveCap(waveNumber)));
+            }
+            if (waveNumber >= CHARIOT_THRESHOLD) {
+                mixEntries.add(new ThreatBudgetMix.Entry(EnemyType.CHARIOT, EnemyType.CHARIOT.goldReward,
+                        3, chariotMin(waveNumber), CHARIOT_WAVE_CAP));
+            }
+            // Chevalier noir : unité régulière du mix depuis le calendrier fixe
+            // (plus un burst tous les 5 vagues). Absent des vagues à Boss, pour
+            // laisser le Boss être la seule menace spéciale mise en avant.
+            if (waveNumber >= DARK_KNIGHT_THRESHOLD && !bossWave) {
+                mixEntries.add(new ThreatBudgetMix.Entry(EnemyType.DARK_KNIGHT, EnemyType.DARK_KNIGHT.goldReward,
+                        1, darkKnightMin(waveNumber)));
+            }
+            new ThreatBudgetMix(eliteBudget(waveNumber), mixEntries).resolve(waveRng, order);
         }
 
         // Mélange GLOBAL de l'ordre de spawn : les segments ci-dessus s'ajoutent
@@ -253,46 +297,24 @@ public class WaveFactory {
      * Package-private : exposé pour les tests (WaveFactoryTest) qui ont besoin
      * de connaître le seuil exact attendu pour un seed donné.
      */
-    static int eliteThreshold(long gameSeed) {
-        return 3 + (new Random(gameSeed).nextInt(3) - 1);
-    }
-
-    /** Même principe que {@link #eliteThreshold}, pour le Chevalier noir (9, 10 ou 11). */
-    static int darkKnightThreshold(long gameSeed) {
-        return 10 + (new Random(gameSeed ^ DARK_KNIGHT_SALT).nextInt(3) - 1);
-    }
-
     /**
-     * Budget de menace alloué au mix Orc/Troll/Sapeur pour une vague donnée :
-     * calculé à partir des anciens comptes fixes par type (multipliés par leur
-     * goldReward, déjà calibré au fil des passes d'équilibrage précédentes)
-     * afin que le niveau de difficulté global reste cohérent avec les
-     * réglages existants — seule la répartition entre types devient aléatoire.
-     * Package-private : exposé pour les tests.
+     * Budget de menace de la vague : coût des MINIMUMS garantis de tous les
+     * types débloqués (voir orcMin et suivants), majoré de BUDGET_MARGIN pour
+     * financer la part aléatoire distribuée par ThreatBudgetMix par-dessus les
+     * planchers. La croissance suit effectiveThreatWave (deux pentes), comme
+     * les effectifs. Package-private : exposé pour les tests.
      */
-    static int eliteBudget(int waveNumber, int eliteThreshold) {
-        // Deux pentes, comme pour les PV (voir HP_CURVE_BREAK_WAVE) : au-delà de
-        // la cassure, le budget ne progresse plus qu'à demi-vitesse. Mesuré au
-        // harnais : la pente douce des PV seule ne changeait RIEN à la mort
-        // médiane (v15) de la forteresse — le tueur late-game n'était pas les PV
-        // mais le NOMBRE de Sapeurs (+1/vague sans fin : ~9 par vague dès la
-        // v15, churn de 4-5 tours/vague, inreconstructible quel que soit l'or).
-        int effectiveWave = waveNumber <= HP_CURVE_BREAK_WAVE
-                ? waveNumber
-                : HP_CURVE_BREAK_WAVE + (waveNumber - HP_CURVE_BREAK_WAVE) / 2;
-
-        int orcCountRef = effectiveWave - (eliteThreshold - 1);
-        int trollCountRef = 1 + (effectiveWave - eliteThreshold) / 4;
-        int sapeurCountRef = 1 + (effectiveWave - eliteThreshold);
-        return orcCountRef * EnemyType.ORC.goldReward
-                + trollCountRef * EnemyType.TROLL.goldReward
-                + sapeurCountRef * EnemyType.SAPEUR.goldReward;
+    static int eliteBudget(int waveNumber) {
+        int guaranteedCost = orcMin(waveNumber) * EnemyType.ORC.goldReward
+                + trollMin(waveNumber) * EnemyType.TROLL.goldReward
+                + sapeurMin(waveNumber) * EnemyType.SAPEUR.goldReward
+                + chariotMin(waveNumber) * EnemyType.CHARIOT.goldReward
+                + darkKnightMin(waveNumber) * EnemyType.DARK_KNIGHT.goldReward;
+        return (int) Math.round(guaranteedCost * BUDGET_MARGIN);
     }
 
-    /** Compte de Chevaliers noirs pour une vague donnée, une fois le seuil atteint. Package-private : exposé pour les tests. */
-    static int darkKnightCount(int waveNumber, int darkKnightThreshold) {
-        return 1 + (waveNumber - darkKnightThreshold) / 15;
-    }
+    /** Marge du budget au-delà des minimums garantis : la part d'aléa des vagues. */
+    private static final double BUDGET_MARGIN = 1.25;
 
     private long mixSeed(long gameSeed, int waveNumber) {
         return gameSeed ^ (waveNumber * WAVE_MIX_CONSTANT);

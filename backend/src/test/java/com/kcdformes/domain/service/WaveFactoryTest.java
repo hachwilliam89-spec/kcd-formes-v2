@@ -31,9 +31,9 @@ class WaveFactoryTest {
     @Test
     @DisplayName("Wave 1 — only goblins, quel que soit le seed")
     void createWave_wave1_containsOnlyGoblins() {
-        // Le seuil Orc/Troll/Sapeur est jitteré mais jamais sous 2 (voir
-        // WaveFactory.eliteThreshold) : la vague 1 doit donc toujours rester
-        // 100% Goblin, peu importe le seed de la partie.
+        // Calendrier fixe (voir WaveFactory.ORC_THRESHOLD) : la première
+        // menace n'arrive qu'en vague 2 — la vague 1 reste 100 % Goblin,
+        // peu importe le seed de la partie.
         for (long seed : List.of(0L, 1L, 2L, 42L, -7L, Long.MAX_VALUE, Long.MIN_VALUE)) {
             Wave wave = waveFactory.createWave(1, spawn, seed);
 
@@ -46,10 +46,9 @@ class WaveFactoryTest {
     @Test
     @DisplayName("Wave 6 — contient toujours au moins un Orc, un Troll et un Sapeur")
     void createWave_wave6_alwaysContainsEliteMix() {
-        // Le seuil jitteré vaut au plus 4 (voir eliteThreshold) : la vague 6 est
-        // donc toujours au-delà du seuil, quel que soit le seed, et le minimum
-        // garanti (minGuaranteed=1, voir ThreatBudgetMix) assure la présence
-        // d'au moins une occurrence de chaque type du mix.
+        // Calendrier fixe : Orc (v2), Troll (v3) et Sapeur (v4) sont tous
+        // débloqués bien avant la vague 6, et leurs minimums garantis (voir
+        // WaveFactory.orcMin...) assurent au moins une occurrence de chacun.
         for (long seed : List.of(0L, 1L, 2L, 42L, -7L)) {
             Wave wave = waveFactory.createWave(6, spawn, seed);
 
@@ -96,82 +95,77 @@ class WaveFactoryTest {
     }
 
     @Test
-    @DisplayName("Le budget de menace Orc/Troll/Sapeur augmente avec le numéro de vague")
+    @DisplayName("Le budget de menace augmente avec le numéro de vague")
     void eliteBudget_growsWithWaveNumber() {
-        int threshold = 3; // valeur arbitraire fixe, seule la formule est testée ici
-        int budgetAtThreshold = WaveFactory.eliteBudget(threshold, threshold);
-        int budgetMuchLater = WaveFactory.eliteBudget(threshold + 14, threshold);
-
-        assertThat(budgetMuchLater).isGreaterThan(budgetAtThreshold);
+        assertThat(WaveFactory.eliteBudget(20)).isGreaterThan(WaveFactory.eliteBudget(6));
+        assertThat(WaveFactory.eliteBudget(6)).isGreaterThan(WaveFactory.eliteBudget(2));
     }
 
     @Test
-    @DisplayName("Le mix Orc/Troll/Sapeur ne dépasse jamais son budget de menace")
+    @DisplayName("Le mix ne dépasse jamais son budget de menace (tous types confondus)")
     void eliteMix_neverExceedsBudget() {
         for (long seed : List.of(0L, 1L, 2L, 42L, -7L)) {
-            int threshold = WaveFactory.eliteThreshold(seed);
-            for (int waveNumber = threshold; waveNumber <= threshold + 20; waveNumber++) {
+            for (int waveNumber = 2; waveNumber <= 30; waveNumber++) {
                 Wave wave = waveFactory.createWave(waveNumber, spawn, seed);
 
-                long orcCount = wave.getEnemies().stream().filter(e -> e.getType() == EnemyType.ORC).count();
-                long trollCount = wave.getEnemies().stream().filter(e -> e.getType() == EnemyType.TROLL).count();
-                long sapeurCount = wave.getEnemies().stream().filter(e -> e.getType() == EnemyType.SAPEUR).count();
+                int spent = wave.getEnemies().stream()
+                        .filter(e -> e.getType() != EnemyType.GOBLIN
+                                && e.getType() != EnemyType.BOSS_WARLORD)
+                        .mapToInt(e -> e.getType().goldReward)
+                        .sum();
 
-                int spent = (int) (orcCount * EnemyType.ORC.goldReward
-                        + trollCount * EnemyType.TROLL.goldReward
-                        + sapeurCount * EnemyType.SAPEUR.goldReward);
-
-                assertThat(spent).isLessThanOrEqualTo(WaveFactory.eliteBudget(waveNumber, threshold));
+                assertThat(spent)
+                        .as("vague %d (seed %d)", waveNumber, seed)
+                        .isLessThanOrEqualTo(WaveFactory.eliteBudget(waveNumber));
             }
         }
     }
 
     @Test
-    @DisplayName("Le nombre de Chevaliers noirs augmente avec le numéro de vague (formule)")
-    void darkKnightCount_growsWithWaveNumber() {
-        int threshold = 10; // valeur arbitraire fixe, seule la formule est testée ici
-        int countAtThreshold = WaveFactory.darkKnightCount(threshold, threshold);
-        int countMuchLater = WaveFactory.darkKnightCount(threshold + 30, threshold);
+    @DisplayName("Calendrier d'apparition : Orc v2, Troll v3, Sapeur v4, Chariot v5, Chevalier noir v6")
+    void createWave_unitCalendar_isRespected() {
+        record Entry(EnemyType type, int threshold) {}
+        List<Entry> calendar = List.of(
+                new Entry(EnemyType.ORC, WaveFactory.ORC_THRESHOLD),
+                new Entry(EnemyType.TROLL, WaveFactory.TROLL_THRESHOLD),
+                new Entry(EnemyType.SAPEUR, WaveFactory.SAPEUR_THRESHOLD),
+                new Entry(EnemyType.CHARIOT, WaveFactory.CHARIOT_THRESHOLD),
+                new Entry(EnemyType.DARK_KNIGHT, WaveFactory.DARK_KNIGHT_THRESHOLD));
 
-        assertThat(countAtThreshold).isEqualTo(1);
-        assertThat(countMuchLater).isGreaterThan(countAtThreshold);
-    }
-
-    @Test
-    @DisplayName("Aucun Orc/Troll/Sapeur avant le seuil jitteré (pour un seed donné)")
-    void createWave_beforeEliteThreshold_noEliteEnemies() {
-        long seed = 7L;
-        int threshold = WaveFactory.eliteThreshold(seed);
-
-        for (int waveNumber = 1; waveNumber < threshold; waveNumber++) {
-            Wave wave = waveFactory.createWave(waveNumber, spawn, seed);
-
-            assertThat(wave.getEnemies()).noneMatch(e -> e.getType() == EnemyType.ORC);
-            assertThat(wave.getEnemies()).noneMatch(e -> e.getType() == EnemyType.TROLL);
-            assertThat(wave.getEnemies()).noneMatch(e -> e.getType() == EnemyType.SAPEUR);
+        for (long seed : List.of(0L, 1L, 2L, 42L, -7L)) {
+            for (Entry entry : calendar) {
+                // Jamais avant sa vague d'apparition...
+                for (int waveNumber = 1; waveNumber < entry.threshold(); waveNumber++) {
+                    final EnemyType type = entry.type();
+                    assertThat(waveFactory.createWave(waveNumber, spawn, seed).getEnemies())
+                            .as("%s en vague %d (seed %d)", type, waveNumber, seed)
+                            .noneMatch(e -> e.getType() == type);
+                }
+                // ...toujours présent dès sa vague d'apparition (minimum garanti >= 1).
+                final EnemyType type = entry.type();
+                assertThat(waveFactory.createWave(entry.threshold(), spawn, seed).getEnemies())
+                        .as("%s dès la vague %d (seed %d)", type, entry.threshold(), seed)
+                        .anyMatch(e -> e.getType() == type);
+            }
         }
     }
 
     @Test
-    @DisplayName("Orc/Troll/Sapeur apparaissent dès le seuil jitteré (pour un seed donné)")
-    void createWave_atEliteThreshold_containsEliteMix() {
-        long seed = 7L;
-        int threshold = WaveFactory.eliteThreshold(seed);
-
-        Wave wave = waveFactory.createWave(threshold, spawn, seed);
-
-        assertThat(wave.getEnemies()).anyMatch(e -> e.getType() == EnemyType.ORC);
-        assertThat(wave.getEnemies()).anyMatch(e -> e.getType() == EnemyType.TROLL);
-        assertThat(wave.getEnemies()).anyMatch(e -> e.getType() == EnemyType.SAPEUR);
-    }
-
-    @Test
-    @DisplayName("Le seuil Orc/Troll/Sapeur est jitteré entre 2 et 4 selon le seed, jamais en dehors")
-    void eliteThreshold_isWithinJitterBounds() {
-        IntStream.range(-50, 50).forEach(i -> {
-            int threshold = WaveFactory.eliteThreshold((long) i);
-            assertThat(threshold).isBetween(2, 4);
-        });
+    @DisplayName("Les minimums garantis croissent au rythme du calendrier (Sapeur +1 toutes les 2 vagues)")
+    void guaranteedMinimums_growProgressively() {
+        // Sapeur : 1 en v4, 2 en v6, 3 en v8 — le rythme voulu par le design.
+        assertThat(WaveFactory.sapeurMin(4)).isEqualTo(1);
+        assertThat(WaveFactory.sapeurMin(6)).isEqualTo(2);
+        assertThat(WaveFactory.sapeurMin(8)).isEqualTo(3);
+        // Les autres types croissent aussi, plus lentement, et 0 avant leur seuil.
+        assertThat(WaveFactory.orcMin(1)).isZero();
+        assertThat(WaveFactory.orcMin(12)).isGreaterThan(WaveFactory.orcMin(2));
+        assertThat(WaveFactory.chariotMin(4)).isZero();
+        assertThat(WaveFactory.darkKnightMin(5)).isZero();
+        assertThat(WaveFactory.darkKnightMin(12)).isGreaterThanOrEqualTo(1);
+        // Les plafonds priment toujours sur la croissance des minimums.
+        assertThat(WaveFactory.sapeurMin(40)).isLessThanOrEqualTo(WaveFactory.sapeurWaveCap(40));
+        assertThat(WaveFactory.chariotMin(40)).isLessThanOrEqualTo(4);
     }
 
     @Test
