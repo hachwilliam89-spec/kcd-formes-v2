@@ -111,6 +111,20 @@ class PlaceTowerServiceTest {
     }
 
     @Test
+    @DisplayName("Le nombre de murs simultanés est plafonné (anti-donjon : le spam pavait le couloir)")
+    void placeWall_beyondCap_rejected() {
+        // Remplit le plafond : MAX_WALLS murs sur des cases de couloir distinctes.
+        for (int i = 0; i < PlaceTowerService.MAX_WALLS; i++) {
+            service.placeTower(new PlaceTowerCommand(gameId, playerId, TowerType.WALL, 3 + i, 7));
+        }
+
+        assertThatThrownBy(() -> service.placeTower(
+                new PlaceTowerCommand(gameId, playerId, TowerType.WALL, 12, 7)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("limit");
+    }
+
+    @Test
     @DisplayName("Une case déjà occupée hors couloir reste refusée (CellOccupied, pas CellOnPath)")
     void placeTower_occupiedCellOutsideCorridor_rejectedAsOccupied() {
         gameRepository.findMapByGameId(gameId).orElseThrow()

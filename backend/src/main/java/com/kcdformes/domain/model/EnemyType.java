@@ -24,10 +24,14 @@ public enum EnemyType {
     // Troll démolit (8) : un mur qui tient 3 vagues de piétaille tombe en une
     // vague de Trolls. Remplace l'ancien dérivé castleDamage/5, trop plat pour
     // se ressentir en jeu.
-    GOBLIN(38, 0.3, 9, 5, false, 0, 1),
-    ORC(100, 0.16, 21, 10, false, 0, 3),
-    TROLL(250, 0.1, 48, 20, false, 0, 8),
-    DARK_KNIGHT(188, 0.2, 63, 15, false, 0, 4),
+    GOBLIN(38, 0.3, 9, 5, false, 0, 1, null),
+    ORC(100, 0.16, 21, 10, false, 0, 3, null),
+    // Ray(1, 2.5) : démolisseur d'appoint — en défilant, le Troll grignote la
+    // tour la plus proche (~30-45 dégâts par passage, il est lent). Pression
+    // diffuse qui s'ajoute au Chariot (rayon dédié, plus fort et plus long) :
+    // une vague à Trolls use la première ligne même sans Sapeur ni Chariot.
+    TROLL(250, 0.1, 48, 20, false, 0, 8, new Ray(1, 2.5)),
+    DARK_KNIGHT(188, 0.2, 63, 15, false, 0, 4, null),
     /**
      * Nouvel ennemi (à partir de la vague 3, voir WaveFactory) : au lieu de
      * suivre le chemin jusqu'au château, dévie pour foncer sur la tour la plus
@@ -50,7 +54,24 @@ public enum EnemyType {
     // s'il est déjà en train de suivre le chemin ; face aux structures, son
     // vrai outil reste le siège en déviation (8 x3 contre les murs, voir
     // WALL_SAPPER_MULTIPLIER).
-    SAPEUR(180, 0.12, 28, 8, true, 8, 2),
+    SAPEUR(180, 0.12, 28, 8, true, 8, 2, null),
+
+    /**
+     * Engin de siège (à partir de la vague 8, voir WaveFactory.CHARIOT_THRESHOLD,
+     * plafonné à 3/vague) : descend le couloir SANS jamais dévier ni s'arrêter,
+     * en canalisant son rayon (Ray 3/tick, portée 3.0) sur la tour non détruite
+     * la plus proche — retarget permanent, il tire sur ce qui passe à portée,
+     * il ne se fixe sur rien. Décision de design : le Sapeur ne doit pas être
+     * l'UNIQUE menace sur les tours, sinon son contre une fois construit, plus
+     * rien n'use la défense et la partie est gagnée d'avance (constaté en
+     * partie réelle). Trois vecteurs, trois contres : le Sapeur se snipe avant
+     * contact, le Chariot se tue à distance (massif : cible x2 de la Baliste)
+     * ou s'encaisse en réparant, le Boss se gère au positionnement.
+     * Lent et blindé : ~150 dégâts de rayon par passage en première ligne.
+     * PV 300 -> 450 (retour de partie : mourait trop vite pour peser) — le
+     * blindage est son identité, la Baliste (x2) reste son bourreau attitré.
+     */
+    CHARIOT(450, 0.09, 55, 12, false, 0, 6, new Ray(3, 3.0)),
 
     /**
      * Premier boss du jeu (voir WaveFactory.BOSS_MILESTONE_INTERVAL) : apparaît
@@ -85,8 +106,8 @@ public enum EnemyType {
     // wallDamage 10 : au contact d'un mur qui lui barre la route, le Boss le
     // démonte vite — s'ajoutent son rayon (2/tick) et son pulse (15), un mur
     // ne le retient qu'une poignée de secondes, c'est voulu.
-    BOSS_WARLORD(900, 0.08, 220, 40, false, 0, 10,
-            true, 0.06, 3.0, 15, 3.0, 40, 25, 2);
+    BOSS_WARLORD(900, 0.08, 220, 40, false, 0, 10, new Ray(2, 3.0),
+            true, 0.06, 3.0, 15, 3.0, 40, 25);
 
     public final int baseHp;
     public final double speed;
@@ -119,26 +140,31 @@ public enum EnemyType {
      */
     public final int stunDurationTicks;
     /**
-     * Dégâts par tick du rayon continu (profil "tour Mage" inversé, boss
-     * uniquement) : chaque tick, le boss canalise sur la tour non détruite la
-     * plus proche dans son rayon de menace (aoeRadius), sans cooldown, tout en
-     * avançant — pression constante entre deux pulses. 0 = pas de rayon.
+     * Rayon de siège continu (profil "tour Mage" inversé) : chaque tick, sans
+     * cooldown et tout en avançant, l'ennemi canalise damagePerTick sur la tour
+     * non détruite la plus proche dans range (voir
+     * WaveSimulationService.handleSiegeRayTick). Généralisé du Boss au Troll et
+     * au Chevalier noir : le Sapeur ne doit pas être l'unique menace sur les
+     * tours. Null = pas de rayon.
      */
-    public final int rayDamage;
+    public record Ray(int damagePerTick, double range) {}
+
+    public final Ray ray;
 
     EnemyType(int baseHp, double speed, int goldReward, int castleDamage,
-              boolean attacksTowers, int siegeDamage, int wallDamage) {
-        this(baseHp, speed, goldReward, castleDamage, attacksTowers, siegeDamage, wallDamage,
-                false, 0, 0, 0, 0, 0, 0, 0);
+              boolean attacksTowers, int siegeDamage, int wallDamage, Ray ray) {
+        this(baseHp, speed, goldReward, castleDamage, attacksTowers, siegeDamage, wallDamage, ray,
+                false, 0, 0, 0, 0, 0, 0);
     }
 
-    // NOTE : 14 paramètres — à la prochaine capacité de boss, basculer sur un
-    // objet BossProfile (ou un builder) plutôt que d'allonger encore la liste.
+    // NOTE : liste de paramètres toujours longue — le record Ray a montré la
+    // voie : à la prochaine capacité, regrouper le bloc boss (aura/pulse/stun)
+    // dans un record BossProfile du même genre.
     EnemyType(int baseHp, double speed, int goldReward, int castleDamage,
-              boolean attacksTowers, int siegeDamage, int wallDamage,
+              boolean attacksTowers, int siegeDamage, int wallDamage, Ray ray,
               boolean isBoss, double auraHealRatio, double auraRadius,
               int aoeDamage, double aoeRadius, int abilityIntervalTicks,
-              int stunDurationTicks, int rayDamage) {
+              int stunDurationTicks) {
         this.baseHp = baseHp;
         this.speed = speed;
         this.goldReward = goldReward;
@@ -146,6 +172,7 @@ public enum EnemyType {
         this.attacksTowers = attacksTowers;
         this.siegeDamage = siegeDamage;
         this.wallDamage = wallDamage;
+        this.ray = ray;
         this.isBoss = isBoss;
         this.auraHealRatio = auraHealRatio;
         this.auraRadius = auraRadius;
@@ -153,6 +180,5 @@ public enum EnemyType {
         this.aoeRadius = aoeRadius;
         this.abilityIntervalTicks = abilityIntervalTicks;
         this.stunDurationTicks = stunDurationTicks;
-        this.rayDamage = rayDamage;
     }
 }

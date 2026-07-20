@@ -50,8 +50,32 @@ public class WaveFactory {
     private static final int HP_CURVE_BREAK_WAVE = 12;
     private static final double HP_LATE_GROWTH_RATE = 1.08;
 
-    /** Plafond de Sapeurs par vague (voir le commentaire de l'Entry SAPEUR dans generateEnemies). */
-    private static final int SAPEUR_WAVE_CAP = 5;
+    /**
+     * Vague d'apparition du Chariot-baliste (EnemyType.CHARIOT) : après le mix
+     * élite (v2-4) et le déblocage du mur côté joueur (v6), avant le premier
+     * boss (v10) — la menace "tire en avançant" arrive quand la défense est
+     * installée. Package-private : exposé pour les tests.
+     */
+    static final int CHARIOT_THRESHOLD = 8;
+    /** Plafond de Chariots par vague (3 -> 4, retour de partie : trop rares pour peser). */
+    private static final int CHARIOT_WAVE_CAP = 4;
+
+    /**
+     * Plafond de Sapeurs par vague : PROGRESSIF, pas plat. Un plafond figé à 5
+     * (première version) tuait la tension en late game — une fois les 5 abattus,
+     * plus rien ne menaçait les tours pendant 9 vagues sur 10, victoire quasi
+     * assurée (retour de partie). La pente douce (+1 toutes les 4 vagues après
+     * la cassure : v20 -> 7, v30 -> 9) maintient une pression de siège
+     * croissante mais reconstructible — contre +1 PAR vague avant plafond, qui
+     * rasait 9+ tours/vague dès la v15. Package-private : exposé pour les tests.
+     */
+    static int sapeurWaveCap(int waveNumber) {
+        int base = 5;
+        if (waveNumber <= HP_CURVE_BREAK_WAVE) {
+            return base;
+        }
+        return base + (waveNumber - HP_CURVE_BREAK_WAVE) / 4;
+    }
 
     /**
      * Décalages perpendiculaires au chemin (en cases), répartis cycliquement
@@ -112,21 +136,31 @@ public class WaveFactory {
         new EnemyBurst(EnemyType.GOBLIN, goblinCount).resolve(waveRng, order);
 
         if (waveNumber >= eliteThreshold) {
-            int budget = eliteBudget(waveNumber, eliteThreshold);
-            ThreatBudgetMix eliteMix = new ThreatBudgetMix(budget, List.of(
+            List<ThreatBudgetMix.Entry> mixEntries = new ArrayList<>(List.of(
                     // Poids de tirage : l'Orc (le moins coûteux/dangereux) sort le
                     // plus souvent, le Sapeur modérément, le Troll (le plus
                     // dangereux) le plus rarement.
                     new ThreatBudgetMix.Entry(EnemyType.ORC, EnemyType.ORC.goldReward, 5, 1),
-                    // Plafond à SAPEUR_WAVE_CAP par vague (voir Entry.maxCount) :
-                    // sans lui, le tirage en finançait 7+ dès la v15 (~1160 PV
-                    // chacun, ~25 ticks d'exposition avant contact) — 9+ tours
-                    // rasées par vague, mort de toute défense vers la v15-16
-                    // quel que soit l'or investi. Le budget excédentaire se
-                    // reporte sur Orcs/Trolls (cibles pour la Baliste).
-                    new ThreatBudgetMix.Entry(EnemyType.SAPEUR, EnemyType.SAPEUR.goldReward, 3, 1, SAPEUR_WAVE_CAP),
+                    // Plafond progressif (voir sapeurWaveCap) : sans plafond, le
+                    // tirage finançait 7+ Sapeurs dès la v15 (~1160 PV chacun,
+                    // ~25 ticks d'exposition avant contact) — 9+ tours rasées
+                    // par vague, mort de toute défense vers la v15-16 quel que
+                    // soit l'or investi. Le budget excédentaire se reporte sur
+                    // Orcs/Trolls (cibles pour la Baliste).
+                    new ThreatBudgetMix.Entry(EnemyType.SAPEUR, EnemyType.SAPEUR.goldReward, 3, 1,
+                            sapeurWaveCap(waveNumber)),
                     new ThreatBudgetMix.Entry(EnemyType.TROLL, EnemyType.TROLL.goldReward, 2, 1)
             ));
+            // Chariot-baliste : seconde menace anti-tours (voir EnemyType.CHARIOT),
+            // toujours au moins un dès son seuil, plafonné (son rayon cumule vite).
+            if (waveNumber >= CHARIOT_THRESHOLD) {
+                // Poids 2 -> 3 (retour de partie) : le tirage doit en financer
+                // plus souvent — l'engin de siège est un pilier de la pression
+                // anti-tours, pas une curiosité occasionnelle.
+                mixEntries.add(new ThreatBudgetMix.Entry(EnemyType.CHARIOT, EnemyType.CHARIOT.goldReward,
+                        3, 1, CHARIOT_WAVE_CAP));
+            }
+            ThreatBudgetMix eliteMix = new ThreatBudgetMix(eliteBudget(waveNumber, eliteThreshold), mixEntries);
             eliteMix.resolve(waveRng, order);
         }
 
