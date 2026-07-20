@@ -24,8 +24,20 @@ public final class ThreatBudgetMix implements WaveSegment {
      *             déjà calibré au fil des passes d'équilibrage précédentes)
      * @param weight poids de tirage relatif parmi les types encore finançables
      * @param minGuaranteed nombre d'occurrences garanties avant toute randomisation
+     * @param maxCount plafond d'occurrences par vague (0 = illimité). Le budget
+     *                 non dépensé sur un type plafonné se reporte naturellement
+     *                 sur les autres types finançables. Introduit pour le Sapeur :
+     *                 mesuré au harnais, son compte illimité (+1/vague de
+     *                 référence) rasait 9+ tours par vague dès la v15 — un churn
+     *                 qu'aucune économie ne peut reconstruire.
      */
-    public record Entry(EnemyType type, int cost, int weight, int minGuaranteed) {}
+    public record Entry(EnemyType type, int cost, int weight, int minGuaranteed, int maxCount) {
+
+        /** Variante sans plafond (la majorité des types). */
+        public Entry(EnemyType type, int cost, int weight, int minGuaranteed) {
+            this(type, cost, weight, minGuaranteed, 0);
+        }
+    }
 
     private final int budget;
     private final List<Entry> entries;
@@ -38,10 +50,12 @@ public final class ThreatBudgetMix implements WaveSegment {
     @Override
     public void resolve(Random rng, List<EnemyType> output) {
         int remaining = budget;
+        java.util.Map<EnemyType, Integer> counts = new java.util.HashMap<>();
 
         for (Entry entry : entries) {
             for (int i = 0; i < entry.minGuaranteed(); i++) {
                 output.add(entry.type());
+                counts.merge(entry.type(), 1, Integer::sum);
                 remaining -= entry.cost();
             }
         }
@@ -51,7 +65,10 @@ public final class ThreatBudgetMix implements WaveSegment {
             // Copie locale effectively-final : `remaining` est réassigné plus bas
             // dans la boucle, donc inutilisable directement dans le lambda du filter.
             int budgetLeft = remaining;
-            List<Entry> affordable = entries.stream().filter(e -> e.cost() <= budgetLeft).toList();
+            List<Entry> affordable = entries.stream()
+                    .filter(e -> e.cost() <= budgetLeft)
+                    .filter(e -> e.maxCount() == 0 || counts.getOrDefault(e.type(), 0) < e.maxCount())
+                    .toList();
             if (affordable.isEmpty()) {
                 break;
             }
@@ -69,6 +86,7 @@ public final class ThreatBudgetMix implements WaveSegment {
             }
 
             output.add(picked.type());
+            counts.merge(picked.type(), 1, Integer::sum);
             remaining -= picked.cost();
         }
     }

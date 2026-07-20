@@ -70,24 +70,29 @@ class WaveFactoryTest {
     }
 
     @Test
-    @DisplayName("La croissance des PV est composée : la vague 20 dépasse largement ce qu'un facteur additif donnerait")
+    @DisplayName("La croissance des PV est composée sur le segment early (avant la cassure de la vague 12)")
     void createWave_hpGrowth_isCompoundedNotLinear() {
+        // Mesuré sur v1 -> v12 : depuis la courbe à deux pentes (voir
+        // WaveFactory.HP_CURVE_BREAK_WAVE), la vague 20 ne suit volontairement
+        // PLUS l'exponentielle pleine — l'ancienne borne (multiplicateur > 10.5
+        // à la v20) est donc périmée par design, pas par régression. Le
+        // comportement composé reste garanti sur le segment early, et la
+        // cassure elle-même est couverte par createWave_hpGrowth_slowsAfterCurveBreak.
         Wave wave1 = waveFactory.createWave(1, spawn, 1L);
-        Wave wave20 = waveFactory.createWave(20, spawn, 1L);
+        Wave wave12 = waveFactory.createWave(12, spawn, 1L);
 
         int goblinHpWave1 = wave1.getEnemies().get(0).getMaxHp();
-        int goblinHpWave20 = wave20.getEnemies().stream()
+        int goblinHpWave12 = wave12.getEnemies().stream()
                 .filter(e -> e.getType() == EnemyType.GOBLIN)
                 .findFirst().orElseThrow()
                 .getMaxHp();
 
-        // Avec l'ancien facteur additif (+50 %/vague), la vague 20 aurait eu un
-        // multiplicateur de 1 + 19*0.5 = 10.5. Le facteur composé doit le dépasser
-        // nettement — c'est tout l'objet du changement (voir WaveFactory).
-        double additiveMultiplierWave20 = 1 + (20 - 1) * 0.5;
-        double actualMultiplier = (double) goblinHpWave20 / goblinHpWave1;
+        // Facteur additif équivalent à la v12 : 1 + 11*0.16 = 2.76. Le composé
+        // (1.16^11 ≈ 5.1) doit le dépasser nettement.
+        double additiveMultiplierWave12 = 1 + (12 - 1) * 0.16;
+        double actualMultiplier = (double) goblinHpWave12 / goblinHpWave1;
 
-        assertThat(actualMultiplier).isGreaterThan(additiveMultiplierWave20);
+        assertThat(actualMultiplier).isGreaterThan(additiveMultiplierWave12 * 1.5);
     }
 
     @Test
@@ -246,6 +251,49 @@ class WaveFactoryTest {
             // l'escorte spawnée derrière le rattrape et profite de son aura.
             assertThat(wave.getEnemies().get(0).getType()).isEqualTo(EnemyType.BOSS_WARLORD);
         }
+    }
+
+    @Test
+    @DisplayName("Le nombre de Sapeurs par vague est plafonné, même en vague profonde")
+    void createWave_sapeurCount_isCappedPerWave() {
+        for (long seed : List.of(0L, 1L, 2L, 42L, -7L)) {
+            for (int waveNumber : List.of(12, 15, 20, 30)) {
+                long sapeurs = waveFactory.createWave(waveNumber, spawn, seed).getEnemies().stream()
+                        .filter(e -> e.getType() == EnemyType.SAPEUR)
+                        .count();
+                // 5 = WaveFactory.SAPEUR_WAVE_CAP : sans plafond, le budget en
+                // finançait 7+ dès la v15 — churn de tours inreconstructible
+                // (mesuré au harnais, 9+ tours rasées par vague).
+                assertThat(sapeurs)
+                        .as("vague %d (seed %d)", waveNumber, seed)
+                        .isLessThanOrEqualTo(5);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Courbe de PV à deux pentes : la croissance ralentit après la vague 12, sans discontinuité")
+    void createWave_hpGrowth_slowsAfterCurveBreak() {
+        // PV d'un Goblin (présent à toutes les vagues) comme sonde de la courbe.
+        double hp11 = goblinHpAtWave(11);
+        double hp12 = goblinHpAtWave(12);
+        double hp13 = goblinHpAtWave(13);
+        double hp14 = goblinHpAtWave(14);
+
+        // Avant la cassure : pente forte (~1.16). Après : pente douce (~1.08).
+        // Tolérances larges (arrondis sur de petits PV de base).
+        assertThat(hp12 / hp11).isBetween(1.12, 1.20);
+        assertThat(hp13 / hp12).isBetween(1.04, 1.12);
+        assertThat(hp14 / hp13).isBetween(1.04, 1.12);
+        // Continuité : les PV ne chutent jamais d'une vague à l'autre.
+        assertThat(hp13).isGreaterThan(hp12);
+    }
+
+    private double goblinHpAtWave(int waveNumber) {
+        return waveFactory.createWave(waveNumber, spawn, 7L).getEnemies().stream()
+                .filter(e -> e.getType() == EnemyType.GOBLIN)
+                .findFirst().orElseThrow()
+                .getMaxHp();
     }
 
     @Test

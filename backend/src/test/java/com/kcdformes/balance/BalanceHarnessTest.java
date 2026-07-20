@@ -66,12 +66,16 @@ class BalanceHarnessTest {
     private record Setup(String name, List<Placement> placements, int targetLevel) {}
 
     /**
-     * Résultat d'un run : deathWave = vague où le château tombe, ou MAX_WAVE + 1 si
-     * survécu. hpByWave / towersLostByWave (indexés par numéro de vague - 1) tracent
-     * le déroulé pour localiser la vague qui tue, pas seulement quand on meurt.
+     * Résultat d'un run : deathWave = vague où le château tombe, ou maxWave + 1 si
+     * survécu. hpByWave / towersLostByWave / castleDamageByWave (indexés par
+     * numéro de vague - 1) tracent le déroulé pour localiser la vague qui tue,
+     * pas seulement quand on meurt. castleDamageByWave est mesuré directement
+     * (SimulationResult.castleDamageTaken) plutôt que dérivé de hpByWave : les
+     * réparations de palier faussent les deltas de PV.
      */
     private record RunResult(int deathWave, int towersLost, int towersLostOnBossWaves, int finalGold,
-                             List<Integer> hpByWave, List<Integer> towersLostByWave) {}
+                             List<Integer> hpByWave, List<Integer> towersLostByWave,
+                             List<Integer> castleDamageByWave) {}
 
     // --- Setups de référence ---
     // Chemin : ligne y=7 de (0,7) à (19,7). COULOIR STRICT (GAME_DESIGN 2.6) :
@@ -106,6 +110,31 @@ class BalanceHarnessTest {
             new Placement(TowerType.MAGE, 14, 9),
             new Placement(TowerType.BALLISTA, 16, 5)
     ), 3);
+
+    /**
+     * Setup du scénario boss (voir bossImpactReport) : défense dense et mixte,
+     * pensée pour être installée en quasi-totalité dès les premières vagues
+     * grâce à l'or de départ enrichi — le but est d'atteindre les vagues à boss
+     * de façon fiable pour mesurer LE BOSS, pas l'économie ni la survie.
+     */
+    private static final Setup FORTRESS = new Setup("forteresse", List.of(
+            new Placement(TowerType.ARCHER, 3, 5),
+            new Placement(TowerType.MAGE, 5, 9),
+            new Placement(TowerType.CATAPULT, 7, 5),
+            new Placement(TowerType.BALLISTA, 9, 9),
+            new Placement(TowerType.ARCHER, 11, 5),
+            new Placement(TowerType.MAGE, 13, 9),
+            new Placement(TowerType.BALLISTA, 15, 5),
+            new Placement(TowerType.CATAPULT, 16, 9),
+            new Placement(TowerType.ARCHER, 5, 5),
+            new Placement(TowerType.MAGE, 9, 5),
+            new Placement(TowerType.ARCHER, 13, 5),
+            new Placement(TowerType.CATAPULT, 11, 9)
+    // targetLevel 5 (vs 3 pour les setups économiques) : première mesure à 3,
+    // la forteresse mourait v14 (churn 4-5 tours/vague dès v10) sans jamais
+    // approcher le double-boss de la v20 — la survie profonde passe par des
+    // upgrades hauts, pas par plus de tours.
+    ), 5);
 
     private final WaveFactory waveFactory = new WaveFactory();
     private final WaveSimulationService simulationService =
@@ -147,17 +176,103 @@ class BalanceHarnessTest {
         }
     }
 
-    /** Joue une partie complète avec le bot d'achat, et retourne ses métriques. */
+    /**
+     * Scénario dédié au boss : le rapport général (balanceReport) mesure mal le
+     * Warlord parce que trop peu de runs l'atteignent avec une défense digne de
+     * ce nom. Ici : or de départ enrichi (défense FORTRESS installée d'emblée),
+     * et métriques PAR VAGUE autour des paliers 10/20/30 — dégâts au château et
+     * tours perdues d'une vague à boss, comparés à ses voisines directes. C'est
+     * ce tableau qui dit si un ajustement du boss (PV, pulse, stun, rayon) le
+     * rend plus ou moins cher à encaisser, indépendamment du reste du tuning.
+     */
+    @Test
+    @DisplayName("Rapport boss : impact mesuré des vagues à Warlord sur une défense installée")
+    void bossImpactReport() {
+        // 5000 (vs 2000 en première mesure) : finance les upgrades niveau 5 —
+        // nécessaire pour que la fenêtre v18-22 (double-boss) soit peuplée.
+        int startingGold = 5000;
+        int maxWave = 32;
+
+        List<RunResult> results = new ArrayList<>();
+        for (int seedIndex = 0; seedIndex < RUNS_PER_SETUP; seedIndex++) {
+            results.add(runGame(FORTRESS, seedIndex * 1_000_003L, startingGold, maxWave));
+        }
+
+        System.out.printf("%n=== Rapport boss — setup forteresse, or de départ %d, %d runs ===%n",
+                startingGold, RUNS_PER_SETUP);
+        System.out.printf("%-14s %-22s %-20s %-14s%n",
+                "Vague", "Dégâts château (méd)", "Tours perdues (moy)", "Runs présents");
+
+        // 13-17 : la zone de mort observée de la forteresse — fenêtre de
+        // diagnostic pour comprendre CE QUI tue (dégâts château = fuite de
+        // piétaille ; tours perdues = churn de siège), pas seulement quand.
+        int[][] windows = { {8, 12}, {13, 17}, {18, 22}, {28, 32} };
+        for (int[] window : windows) {
+            for (int wave = window[0]; wave <= window[1]; wave++) {
+                final int w = wave;
+                List<RunResult> present = results.stream()
+                        .filter(r -> w <= r.castleDamageByWave().size())
+                        .toList();
+                if (present.isEmpty()) {
+                    continue;
+                }
+                List<Integer> damages = present.stream()
+                        .map(r -> r.castleDamageByWave().get(w - 1)).sorted().toList();
+                double avgLost = present.stream()
+                        .mapToInt(r -> r.towersLostByWave().get(w - 1)).average().orElse(0);
+
+                System.out.printf("%-14s %-22d %-20.1f %d/%d%n",
+                        "v" + w + (w % 10 == 0 ? " (BOSS)" : ""),
+                        damages.get(damages.size() / 2), avgLost,
+                        present.size(), results.size());
+            }
+            System.out.println();
+        }
+
+        // Trace PV/tours complète de la forteresse : mêmes lignes que le rapport
+        // général, pour voir la forme de l'effondrement.
+        printWaveTrace(FORTRESS, results);
+
+        List<Integer> deaths = results.stream().map(RunResult::deathWave).sorted().toList();
+        int medianDeath = deaths.get(deaths.size() / 2);
+        System.out.printf("Survie : @10 %s  @20 %s  @30 %s — mort méd. %s%n",
+                pctSurvived(deaths, 10), pctSurvived(deaths, 20), pctSurvived(deaths, 30),
+                // fmtWave compare au MAX_WAVE global (40) : ce scénario s'arrête
+                // à maxWave (32), on formate donc localement.
+                medianDeath > maxWave ? ">" + maxWave : String.valueOf(medianDeath));
+
+        // Invariant lâche : le scénario n'a d'intérêt que si la forteresse
+        // atteint le premier boss dans la majorité des runs. S'il casse, ce
+        // n'est pas le boss qu'il faut regarder mais la défense de référence
+        // (ou un rééquilibrage global qui a tout durci).
+        long reachedBoss = deaths.stream().filter(d -> d >= 10).count();
+        assertThat(reachedBoss)
+                .as("la forteresse doit atteindre la vague 10 dans la majorité des runs")
+                .isGreaterThanOrEqualTo(results.size() / 2L);
+    }
+
+    /** Joue une partie complète avec le bot d'achat et l'économie de production. */
     private RunResult runGame(Setup setup, long seed) {
+        return runGame(setup, seed, STARTING_GOLD, MAX_WAVE);
+    }
+
+    /**
+     * Variante paramétrée : le scénario boss (voir bossImpactReport) démarre
+     * avec un or de départ artificiellement élevé pour garantir une défense
+     * installée dès les premières vagues — on ne mesure pas l'économie, on
+     * mesure le boss.
+     */
+    private RunResult runGame(Setup setup, long seed, int startingGold, int maxWave) {
         GameMap map = new GameMap(20, 15, new Position(0, 7), new Position(19, 7));
-        int gold = STARTING_GOLD;
+        int gold = startingGold;
         int castleHp = CASTLE_MAX_HP;
         int towersLost = 0;
         int towersLostOnBossWaves = 0;
         List<Integer> hpByWave = new ArrayList<>();
         List<Integer> towersLostByWave = new ArrayList<>();
+        List<Integer> castleDamageByWave = new ArrayList<>();
 
-        for (int waveNumber = 1; waveNumber <= MAX_WAVE; waveNumber++) {
+        for (int waveNumber = 1; waveNumber <= maxWave; waveNumber++) {
             gold = buyAndUpgrade(setup, map, gold);
 
             Wave wave = waveFactory.createWave(waveNumber, map.getPathStart(), seed);
@@ -180,10 +295,11 @@ class BalanceHarnessTest {
             gold += result.goldEarned();
             castleHp = castle.getHp();
             hpByWave.add(castleHp);
+            castleDamageByWave.add(result.castleDamageTaken());
 
             if (castle.isDestroyed()) {
                 return new RunResult(waveNumber, towersLost, towersLostOnBossWaves, gold,
-                        hpByWave, towersLostByWave);
+                        hpByWave, towersLostByWave, castleDamageByWave);
             }
 
             // Palier de bonus : même heuristique qu'un joueur raisonnable —
@@ -199,8 +315,8 @@ class BalanceHarnessTest {
             }
         }
 
-        return new RunResult(MAX_WAVE + 1, towersLost, towersLostOnBossWaves, gold,
-                hpByWave, towersLostByWave);
+        return new RunResult(maxWave + 1, towersLost, towersLostOnBossWaves, gold,
+                hpByWave, towersLostByWave, castleDamageByWave);
     }
 
     /**
