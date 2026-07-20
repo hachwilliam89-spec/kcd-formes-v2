@@ -24,14 +24,24 @@ public enum EnemyType {
     // Troll démolit (8) : un mur qui tient 3 vagues de piétaille tombe en une
     // vague de Trolls. Remplace l'ancien dérivé castleDamage/5, trop plat pour
     // se ressentir en jeu.
-    GOBLIN(38, 0.3, 9, 5, false, 0, 1, null),
-    ORC(100, 0.16, 21, 10, false, 0, 3, null),
+    GOBLIN(38, 0.3, 9, 5, false, 0, 1, null, false),
+    ORC(100, 0.16, 21, 10, false, 0, 3, null, false),
     // Ray(1, 2.5) : démolisseur d'appoint — en défilant, le Troll grignote la
     // tour la plus proche (~30-45 dégâts par passage, il est lent). Pression
     // diffuse qui s'ajoute au Chariot (rayon dédié, plus fort et plus long) :
     // une vague à Trolls use la première ligne même sans Sapeur ni Chariot.
-    TROLL(250, 0.1, 48, 20, false, 0, 8, new Ray(1, 2.5)),
-    DARK_KNIGHT(188, 0.2, 63, 15, false, 0, 4, null),
+    TROLL(250, 0.1, 48, 20, false, 0, 8, new Ray(1, 2.5), false),
+    // ARMURE ENCHANTÉE (magicArmor) : seuls les Mages le blessent. Les tours
+    // physiques le ciblent et tirent quand même — tout RICOCHE (dégâts 0,
+    // éclats de Catapulte compris) : c'est un LEURRE qui aspire la cadence de
+    // la défense pendant que la piétaille défile derrière. Double punition
+    // pour un build sans Mage : il fuit ET gaspille vos tirs. Synergie voulue :
+    // le mur le bloque pendant qu'un Mage le dissout (voir wallDamage ci-dessous).
+    // wallDamage 4 -> 12 (x3 façon Sapeur) : le Chevalier noir défonce les
+    // portes — un mur qui le bloque tombe vite, et on ne peut le dissoudre
+    // qu'à la magie pendant qu'il cogne. Le duo mur+Mage reste son contre,
+    // mais le mur seul n'achète que quelques secondes.
+    DARK_KNIGHT(188, 0.2, 63, 15, false, 0, 12, null, true),
     /**
      * Nouvel ennemi (à partir de la vague 3, voir WaveFactory) : au lieu de
      * suivre le chemin jusqu'au château, dévie pour foncer sur la tour la plus
@@ -54,7 +64,7 @@ public enum EnemyType {
     // s'il est déjà en train de suivre le chemin ; face aux structures, son
     // vrai outil reste le siège en déviation (8 x3 contre les murs, voir
     // WALL_SAPPER_MULTIPLIER).
-    SAPEUR(180, 0.12, 28, 8, true, 8, 2, null),
+    SAPEUR(180, 0.12, 28, 8, true, 8, 2, null, false),
 
     /**
      * Engin de siège (à partir de la vague 8, voir WaveFactory.CHARIOT_THRESHOLD,
@@ -71,7 +81,7 @@ public enum EnemyType {
      * PV 300 -> 450 (retour de partie : mourait trop vite pour peser) — le
      * blindage est son identité, la Baliste (x2) reste son bourreau attitré.
      */
-    CHARIOT(450, 0.09, 55, 12, false, 0, 6, new Ray(3, 3.0)),
+    CHARIOT(450, 0.09, 55, 12, false, 0, 6, new Ray(3, 3.0), false),
 
     /**
      * Premier boss du jeu (voir WaveFactory.BOSS_MILESTONE_INTERVAL) : apparaît
@@ -106,7 +116,7 @@ public enum EnemyType {
     // wallDamage 10 : au contact d'un mur qui lui barre la route, le Boss le
     // démonte vite — s'ajoutent son rayon (2/tick) et son pulse (15), un mur
     // ne le retient qu'une poignée de secondes, c'est voulu.
-    BOSS_WARLORD(900, 0.08, 220, 40, false, 0, 10, new Ray(2, 3.0),
+    BOSS_WARLORD(900, 0.08, 220, 40, false, 0, 10, new Ray(2, 3.0), false,
             true, 0.06, 3.0, 15, 3.0, 40, 25);
 
     public final int baseHp;
@@ -150,10 +160,19 @@ public enum EnemyType {
     public record Ray(int damagePerTick, double range) {}
 
     public final Ray ray;
+    /**
+     * Armure enchantée : seules les tours de type MAGE peuvent blesser cet
+     * ennemi. Les tours physiques le ciblent et tirent quand même — leurs
+     * dégâts sont annulés au point d'impact (voir
+     * WaveSimulationService.applyDamage) : rôle de LEURRE, il consomme la
+     * cadence de la défense. Seule la passe prioritaire perce-blindage de la
+     * Baliste l'évite.
+     */
+    public final boolean magicArmor;
 
     EnemyType(int baseHp, double speed, int goldReward, int castleDamage,
-              boolean attacksTowers, int siegeDamage, int wallDamage, Ray ray) {
-        this(baseHp, speed, goldReward, castleDamage, attacksTowers, siegeDamage, wallDamage, ray,
+              boolean attacksTowers, int siegeDamage, int wallDamage, Ray ray, boolean magicArmor) {
+        this(baseHp, speed, goldReward, castleDamage, attacksTowers, siegeDamage, wallDamage, ray, magicArmor,
                 false, 0, 0, 0, 0, 0, 0);
     }
 
@@ -161,7 +180,7 @@ public enum EnemyType {
     // voie : à la prochaine capacité, regrouper le bloc boss (aura/pulse/stun)
     // dans un record BossProfile du même genre.
     EnemyType(int baseHp, double speed, int goldReward, int castleDamage,
-              boolean attacksTowers, int siegeDamage, int wallDamage, Ray ray,
+              boolean attacksTowers, int siegeDamage, int wallDamage, Ray ray, boolean magicArmor,
               boolean isBoss, double auraHealRatio, double auraRadius,
               int aoeDamage, double aoeRadius, int abilityIntervalTicks,
               int stunDurationTicks) {
@@ -173,6 +192,7 @@ public enum EnemyType {
         this.siegeDamage = siegeDamage;
         this.wallDamage = wallDamage;
         this.ray = ray;
+        this.magicArmor = magicArmor;
         this.isBoss = isBoss;
         this.auraHealRatio = auraHealRatio;
         this.auraRadius = auraRadius;

@@ -384,6 +384,13 @@ public class WaveSimulationService {
 
     private void applyDamage(Tower tower, Enemy target, int damage,
                               Wave wave, List<DamageEvent> damageEvents, List<UUID> deaths) {
+        // Armure enchantée (EnemyType.magicArmor) : tout dégât non-Mage ricoche.
+        // Le tir PART quand même (l'ennemi aggro les tours et consomme leur
+        // cadence — c'est son rôle de leurre) : l'évènement est émis à 0 pour
+        // que le front montre l'impact sans perte de PV.
+        if (target.getType().magicArmor && tower.getType() != TowerType.MAGE) {
+            damage = 0;
+        }
         target.takeDamage(damage);
         damageEvents.add(new DamageEvent(tower.getId(), target.getId(), damage));
         if (target.isDead()) {
@@ -423,6 +430,15 @@ public class WaveSimulationService {
                 continue;
             }
             if (heavyOnly && enemy.getType().baseHp < HEAVY_TARGET_BASE_HP_THRESHOLD) {
+                continue;
+            }
+            // Seule la passe PRIORITAIRE (perce-blindage de la Baliste) évite
+            // l'armure enchantée : choisir délibérément une cible qu'on ne peut
+            // pas blesser serait absurde. En ciblage normal (plus proche), les
+            // tours physiques prennent bien le Chevalier noir pour cible — et
+            // leurs tirs ricochent (voir applyDamage) : il AGGRO la défense,
+            // c'est tout l'intérêt du leurre.
+            if (heavyOnly && enemy.getType().magicArmor && tower.getType() != TowerType.MAGE) {
                 continue;
             }
             if (!tower.canTarget(enemy)) {

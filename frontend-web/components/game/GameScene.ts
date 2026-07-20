@@ -374,6 +374,13 @@ export class GameScene extends Phaser.Scene {
             if (isBoss) {
                 this.enemiesGraphics.lineStyle(3, 0x000000, 0.8)
                 this.enemiesGraphics.strokeCircle(px, py, radius)
+            } else if (enemy.type === 'DARK_KNIGHT') {
+                // Liseré arcane : armure enchantée — les tirs physiques le
+                // touchent mais RICOCHENT (dégâts 0, voir EnemyType.magicArmor) ;
+                // seuls les Mages le blessent. Le joueur doit comprendre au
+                // premier coup d'œil pourquoi sa barre de vie ne bouge pas.
+                this.enemiesGraphics.lineStyle(2, 0xa78bfa, 0.9)
+                this.enemiesGraphics.strokeCircle(px, py, radius + 2)
             }
 
             // Barre de vie au-dessus de l'ennemi
