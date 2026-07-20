@@ -18,10 +18,16 @@ public enum EnemyType {
     //
     // goldReward remonté de +25 % supplémentaires :
     // GOBLIN 7->9, ORC 17->21, TROLL 38->48, DARK_KNIGHT 50->63, SAPEUR 22->28.
-    GOBLIN(38, 0.3, 9, 5, false, 0),
-    ORC(100, 0.16, 21, 10, false, 0),
-    TROLL(250, 0.1, 48, 20, false, 0),
-    DARK_KNIGHT(188, 0.2, 63, 15, false, 0),
+    // wallDamage (7e paramètre) : dégâts de contact contre un mur-barrage, par
+    // tick, PAR TYPE — écarts volontairement marqués pour que la composition de
+    // la vague détermine la durée de vie d'un mur. Le Goblin gratte (1), le
+    // Troll démolit (8) : un mur qui tient 3 vagues de piétaille tombe en une
+    // vague de Trolls. Remplace l'ancien dérivé castleDamage/5, trop plat pour
+    // se ressentir en jeu.
+    GOBLIN(38, 0.3, 9, 5, false, 0, 1),
+    ORC(100, 0.16, 21, 10, false, 0, 3),
+    TROLL(250, 0.1, 48, 20, false, 0, 8),
+    DARK_KNIGHT(188, 0.2, 63, 15, false, 0, 4),
     /**
      * Nouvel ennemi (à partir de la vague 3, voir WaveFactory) : au lieu de
      * suivre le chemin jusqu'au château, dévie pour foncer sur la tour la plus
@@ -40,7 +46,11 @@ public enum EnemyType {
     // mort médiane vague 7 quel que soit le build, boss vague 10 inatteignable).
     // À 8, un Archer (150 PV) tient 19 ticks de siège au lieu de 13 — le temps
     // pour la défense de tuer le Sapeur avant de perdre la tour.
-    SAPEUR(180, 0.12, 28, 8, true, 8),
+    // wallDamage 2 : cas rare — un Sapeur ne subit le blocage d'un mur que
+    // s'il est déjà en train de suivre le chemin ; face aux structures, son
+    // vrai outil reste le siège en déviation (8 x3 contre les murs, voir
+    // WALL_SAPPER_MULTIPLIER).
+    SAPEUR(180, 0.12, 28, 8, true, 8, 2),
 
     /**
      * Premier boss du jeu (voir WaveFactory.BOSS_MILESTONE_INTERVAL) : apparaît
@@ -72,7 +82,10 @@ public enum EnemyType {
     // survivable pour une tour saine, fatal pour une tour déjà entamée.
     // Vitesse 0.07 -> 0.08 : réduit d'autant la fenêtre d'exposition au rayon
     // et rend le boss un peu moins facile à focaliser.
-    BOSS_WARLORD(900, 0.08, 220, 40, false, 0,
+    // wallDamage 10 : au contact d'un mur qui lui barre la route, le Boss le
+    // démonte vite — s'ajoutent son rayon (2/tick) et son pulse (15), un mur
+    // ne le retient qu'une poignée de secondes, c'est voulu.
+    BOSS_WARLORD(900, 0.08, 220, 40, false, 0, 10,
             true, 0.06, 3.0, 15, 3.0, 40, 25, 2);
 
     public final int baseHp;
@@ -84,6 +97,8 @@ public enum EnemyType {
     public final boolean attacksTowers;
     /** Dégâts de siège infligés à la tour ciblée, par tick, une fois à portée de mêlée. */
     public final int siegeDamage;
+    /** Dégâts de contact contre un mur-barrage qui bloque cet ennemi, par tick (voir les valeurs sur l'enum). */
+    public final int wallDamage;
     /** Si vrai, c'est un boss : déclenche le pulse d'aura/AoE (voir WaveSimulationService.handleBossAbilityTick). */
     public final boolean isBoss;
     /** Fraction des PV max soignée à chaque ennemi proche à chaque pulsation (boss uniquement). */
@@ -112,15 +127,15 @@ public enum EnemyType {
     public final int rayDamage;
 
     EnemyType(int baseHp, double speed, int goldReward, int castleDamage,
-              boolean attacksTowers, int siegeDamage) {
-        this(baseHp, speed, goldReward, castleDamage, attacksTowers, siegeDamage,
+              boolean attacksTowers, int siegeDamage, int wallDamage) {
+        this(baseHp, speed, goldReward, castleDamage, attacksTowers, siegeDamage, wallDamage,
                 false, 0, 0, 0, 0, 0, 0, 0);
     }
 
     // NOTE : 14 paramètres — à la prochaine capacité de boss, basculer sur un
     // objet BossProfile (ou un builder) plutôt que d'allonger encore la liste.
     EnemyType(int baseHp, double speed, int goldReward, int castleDamage,
-              boolean attacksTowers, int siegeDamage,
+              boolean attacksTowers, int siegeDamage, int wallDamage,
               boolean isBoss, double auraHealRatio, double auraRadius,
               int aoeDamage, double aoeRadius, int abilityIntervalTicks,
               int stunDurationTicks, int rayDamage) {
@@ -130,6 +145,7 @@ public enum EnemyType {
         this.castleDamage = castleDamage;
         this.attacksTowers = attacksTowers;
         this.siegeDamage = siegeDamage;
+        this.wallDamage = wallDamage;
         this.isBoss = isBoss;
         this.auraHealRatio = auraHealRatio;
         this.auraRadius = auraRadius;

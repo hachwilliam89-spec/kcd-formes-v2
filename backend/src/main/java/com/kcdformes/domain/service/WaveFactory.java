@@ -37,6 +37,23 @@ public class WaveFactory {
     private static final double HP_GROWTH_RATE = 1.16;
 
     /**
+     * COURBE À DEUX PENTES (décision d'équilibrage, mesurée au harnais — voir
+     * GAME_DESIGN 2.2) : au-delà de HP_CURVE_BREAK_WAVE, la croissance des PV
+     * passe de HP_GROWTH_RATE à HP_LATE_GROWTH_RATE. À 1.16/vague partout, les
+     * PV ennemis étaient x8 à la v15 et x17 à la v20 face à une défense aux
+     * moyens linéaires (dégâts +50 %/niveau, revenus ~linéaires) : mort médiane
+     * v15 même avec 5000 d'or et des tours niveau 5 — le double-boss de la v20
+     * était mathématiquement inaccessible, pour le bot comme pour un humain.
+     * La pente douce rend les vagues profondes affaire de skill et d'économie,
+     * sans toucher au early game (v1-12), déjà calibré et validé.
+     */
+    private static final int HP_CURVE_BREAK_WAVE = 12;
+    private static final double HP_LATE_GROWTH_RATE = 1.08;
+
+    /** Plafond de Sapeurs par vague (voir le commentaire de l'Entry SAPEUR dans generateEnemies). */
+    private static final int SAPEUR_WAVE_CAP = 5;
+
+    /**
      * Décalages perpendiculaires au chemin (en cases), répartis cycliquement
      * entre ennemis successifs pour qu'ils avancent sur plusieurs files de
      * front dans un couloir élargi, plutôt qu'en une seule file strictement
@@ -101,7 +118,13 @@ public class WaveFactory {
                     // plus souvent, le Sapeur modérément, le Troll (le plus
                     // dangereux) le plus rarement.
                     new ThreatBudgetMix.Entry(EnemyType.ORC, EnemyType.ORC.goldReward, 5, 1),
-                    new ThreatBudgetMix.Entry(EnemyType.SAPEUR, EnemyType.SAPEUR.goldReward, 3, 1),
+                    // Plafond à SAPEUR_WAVE_CAP par vague (voir Entry.maxCount) :
+                    // sans lui, le tirage en finançait 7+ dès la v15 (~1160 PV
+                    // chacun, ~25 ticks d'exposition avant contact) — 9+ tours
+                    // rasées par vague, mort de toute défense vers la v15-16
+                    // quel que soit l'or investi. Le budget excédentaire se
+                    // reporte sur Orcs/Trolls (cibles pour la Baliste).
+                    new ThreatBudgetMix.Entry(EnemyType.SAPEUR, EnemyType.SAPEUR.goldReward, 3, 1, SAPEUR_WAVE_CAP),
                     new ThreatBudgetMix.Entry(EnemyType.TROLL, EnemyType.TROLL.goldReward, 2, 1)
             ));
             eliteMix.resolve(waveRng, order);
@@ -177,7 +200,13 @@ public class WaveFactory {
     }
 
     private int scaledHp(EnemyType type, int waveNumber) {
-        double multiplier = Math.pow(HP_GROWTH_RATE, waveNumber - 1);
+        // Deux pentes avec continuité au point de cassure : la seconde repart
+        // exactement du multiplicateur atteint à HP_CURVE_BREAK_WAVE (pas de
+        // saut ni de chute de PV entre la v12 et la v13).
+        double multiplier = waveNumber <= HP_CURVE_BREAK_WAVE
+                ? Math.pow(HP_GROWTH_RATE, waveNumber - 1)
+                : Math.pow(HP_GROWTH_RATE, HP_CURVE_BREAK_WAVE - 1)
+                        * Math.pow(HP_LATE_GROWTH_RATE, waveNumber - HP_CURVE_BREAK_WAVE);
         return (int) Math.round(type.baseHp * multiplier);
     }
 
@@ -208,9 +237,19 @@ public class WaveFactory {
      * Package-private : exposé pour les tests.
      */
     static int eliteBudget(int waveNumber, int eliteThreshold) {
-        int orcCountRef = waveNumber - (eliteThreshold - 1);
-        int trollCountRef = 1 + (waveNumber - eliteThreshold) / 4;
-        int sapeurCountRef = 1 + (waveNumber - eliteThreshold);
+        // Deux pentes, comme pour les PV (voir HP_CURVE_BREAK_WAVE) : au-delà de
+        // la cassure, le budget ne progresse plus qu'à demi-vitesse. Mesuré au
+        // harnais : la pente douce des PV seule ne changeait RIEN à la mort
+        // médiane (v15) de la forteresse — le tueur late-game n'était pas les PV
+        // mais le NOMBRE de Sapeurs (+1/vague sans fin : ~9 par vague dès la
+        // v15, churn de 4-5 tours/vague, inreconstructible quel que soit l'or).
+        int effectiveWave = waveNumber <= HP_CURVE_BREAK_WAVE
+                ? waveNumber
+                : HP_CURVE_BREAK_WAVE + (waveNumber - HP_CURVE_BREAK_WAVE) / 2;
+
+        int orcCountRef = effectiveWave - (eliteThreshold - 1);
+        int trollCountRef = 1 + (effectiveWave - eliteThreshold) / 4;
+        int sapeurCountRef = 1 + (effectiveWave - eliteThreshold);
         return orcCountRef * EnemyType.ORC.goldReward
                 + trollCountRef * EnemyType.TROLL.goldReward
                 + sapeurCountRef * EnemyType.SAPEUR.goldReward;
