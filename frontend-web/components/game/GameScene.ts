@@ -134,6 +134,11 @@ const TOWER_IMPACT: Record<string, string> = {
 // continu sans chevauchement excessif.
 const MAGIC_FX_PERIOD = 3
 
+// Tours à sprite (bâtiments statiques, public/sprites/towers/). Les 5 types y
+// figurent : le rendu géométrique (carrés) n'est plus qu'un repli si l'image
+// manque.
+const TOWER_SPRITE_TYPES = ['ARCHER', 'MAGE', 'CATAPULT', 'BALLISTA', 'WALL']
+
 export class GameScene extends Phaser.Scene {
     private gridGraphics!: Phaser.GameObjects.Graphics
     private towersGraphics!: Phaser.GameObjects.Graphics
@@ -163,6 +168,11 @@ export class GameScene extends Phaser.Scene {
     // fin de vague. Seuls les types listés dans SPRITE_ENEMY_TYPES ont un atlas
     // chargé ; les autres retombent sur les formes géométriques (drawEnemies).
     private enemySprites = new Map<string, Phaser.GameObjects.Sprite>()
+    // Images statiques des tours (bâtiments), indexées par id — réutilisées et
+    // réconciliées à chaque drawTowers (créées à la pose, retirées à la
+    // destruction). Le tir est porté par les effets d'impact, pas par une anim
+    // de la tour (voir drawEffects).
+    private towerSprites = new Map<string, Phaser.GameObjects.Image>()
     // Dernier tick où chaque Mage a émis son éclat de magie (cadencé pour un
     // scintillement continu sans spawn à chaque tick — voir drawEffects).
     private magicFxTick = new Map<string, number>()
@@ -188,6 +198,10 @@ export class GameScene extends Phaser.Scene {
                 frameWidth: EFFECT_CELL,
                 frameHeight: EFFECT_CELL,
             })
+        })
+        // Sprites de tours (bâtiments statiques, une image par type).
+        TOWER_SPRITE_TYPES.forEach((type) => {
+            this.load.image(`tower-${type}`, `/sprites/towers/${type}.png`)
         })
     }
 
@@ -237,6 +251,17 @@ export class GameScene extends Phaser.Scene {
             }
         })
 
+        // Préchauffage : Phaser n'envoie une texture au GPU qu'à son premier
+        // AFFICHAGE (rendu). On joue donc chaque effet une fois DANS le canvas
+        // (hors écran il serait "cull" et jamais uploadé), minuscule et quasi
+        // transparent — invisible à l'œil mais rendu, ce qui force l'upload.
+        // Sans ça, le premier tir montre le trait mais pas encore le sprite.
+        EFFECT_KEYS.forEach((key) => {
+            const warm = this.add.sprite(2, 2, `fx-${key}`).setScale(0.02).setAlpha(0.02).setDepth(-1)
+            warm.play(`fx-${key}`)
+            warm.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => warm.destroy())
+        })
+
         this.drawGrid()
         this.drawPath()
 
@@ -272,6 +297,8 @@ export class GameScene extends Phaser.Scene {
     shutdown() {
         this.waveTimer?.remove()
         this.clearEnemySprites()
+        for (const sprite of this.towerSprites.values()) sprite.destroy()
+        this.towerSprites.clear()
     }
 
     // ── API publique appelée depuis React ────────────────────────────────
@@ -303,39 +330,57 @@ export class GameScene extends Phaser.Scene {
         // refetch de fin de vague.
         towers.forEach((tower) => this.towersById.set(tower.id, { ...tower }))
 
+        // Réconcilie les sprites de tours : retire ceux dont la tour n'existe plus.
+        const present = new Set(towers.map((t) => t.id))
+        for (const [id, sprite] of this.towerSprites) {
+            if (!present.has(id)) {
+                sprite.destroy()
+                this.towerSprites.delete(id)
+            }
+        }
+
         this.towersById.forEach((tower) => {
-            const color = TOWER_COLORS[tower.type] ?? 0xffffff
             const px = tower.x * CELL_SIZE
             const py = tower.y * CELL_SIZE
+            const hasSprite = TOWER_SPRITE_TYPES.includes(tower.type)
 
-            // Mur-barrage : bloc pleine case avec liseré (il OCCUPE le couloir,
-            // ce n'est pas une tour posée sur une case), sans lettre — sa forme
-            // suffit à l'identifier, et la barre de vie reste lisible dessus.
-            if (tower.type === 'WALL') {
-                this.towersGraphics.fillStyle(color, 1)
-                this.towersGraphics.fillRect(px, py, CELL_SIZE, CELL_SIZE)
-                this.towersGraphics.lineStyle(2, 0x57534e, 1) // stone-600, effet maçonnerie
-                this.towersGraphics.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2)
-                this.towersGraphics.lineBetween(px, py + CELL_SIZE / 2, px + CELL_SIZE, py + CELL_SIZE / 2)
+            if (hasSprite) {
+                const isWall = tower.type === 'WALL'
+                let sprite = this.towerSprites.get(tower.id)
+                if (!sprite) {
+                    sprite = this.add.image(0, 0, `tower-${tower.type}`)
+                    if (isWall) {
+                        // Mur : barricade CENTRÉE et PIVOTÉE de 90° — le couloir
+                        // étant horizontal, une barricade verticale barre le
+                        // passage (3 empilées = muraille continue). Échelle sur la
+                        // largeur d'origine : après rotation, ce grand axe devient
+                        // la hauteur et remplit la case (×1.3), l'épaisseur reste
+                        // fine — ça lit comme un vrai barrage.
+                        sprite.setOrigin(0.5, 0.5)
+                        // -90° : les pointes de la barricade (vers le haut dans le
+                        // sprite d'origine) se retrouvent tournées vers la GAUCHE,
+                        // face aux ennemis qui arrivent de ce côté.
+                        sprite.setAngle(-90)
+                        sprite.setScale((CELL_SIZE * 1.3) / sprite.width)
+                    } else {
+                        // Tour : ancrée en bas-centre, base au bas de la case, la
+                        // structure déborde vers le haut (comme les ennemis).
+                        sprite.setOrigin(0.5, 1)
+                        sprite.setScale((CELL_SIZE * 1.25) / sprite.width)
+                    }
+                    this.towerSprites.set(tower.id, sprite)
+                }
+                sprite.setPosition(
+                    px + CELL_SIZE / 2,
+                    isWall ? py + CELL_SIZE / 2 : py + CELL_SIZE + 2,
+                )
                 this.drawStructureHpBar(tower, px, py)
                 return
             }
 
-            // Dessine un carré coloré pour la tour
-            this.towersGraphics.fillStyle(color, 1)
-            this.towersGraphics.fillRect(
-                px + 4, py + 4,
-                CELL_SIZE - 8, CELL_SIZE - 8
-            )
-
-            // Lettre initiale du type
-            this.towerTexts.push(this.add.text(
-                px + CELL_SIZE / 2,
-                py + CELL_SIZE / 2,
-                tower.type[0],
-                { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }
-            ).setOrigin(0.5))
-
+            // Repli géométrique (type sans sprite) : carré coloré.
+            this.towersGraphics.fillStyle(TOWER_COLORS[tower.type] ?? 0xffffff, 1)
+            this.towersGraphics.fillRect(px + 4, py + 4, CELL_SIZE - 8, CELL_SIZE - 8)
             this.drawStructureHpBar(tower, px, py)
         })
     }
@@ -378,6 +423,10 @@ export class GameScene extends Phaser.Scene {
             return
         }
         this.waveTimer?.remove()
+        // Remise à zéro de la cadence des éclats de magie : sinon les valeurs de
+        // la vague précédente (grands numéros de tick) bloquent les premiers
+        // éclats du Mage au début de cette vague-ci (index repart de 0).
+        this.magicFxTick.clear()
 
         let index = 0
 
