@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { CORRIDOR_MIN_Y, CORRIDOR_MAX_Y } from './constants'
 
 const CELL_SIZE = 40
 const GRID_WIDTH = 20
@@ -203,9 +204,23 @@ export class GameScene extends Phaser.Scene {
         TOWER_SPRITE_TYPES.forEach((type) => {
             this.load.image(`tower-${type}`, `/sprites/towers/${type}.png`)
         })
+        // Terrain : herbe (champ) + terre (couloir), textures tuilables 512x512.
+        this.load.image('terrain-grass', '/sprites/terrain/grass.png')
+        this.load.image('terrain-dirt', '/sprites/terrain/dirt.png')
     }
 
     create() {
+        // Terrain tuilé, sous tout le reste (depth très négatif) : herbe sur tout
+        // le champ, bande de terre sur le couloir des ennemis (y=6..8). Remplace
+        // le fond bleu nu — un vrai décor de tower defense.
+        this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'terrain-grass')
+            .setOrigin(0, 0).setDepth(-20)
+        this.add.tileSprite(
+            0, CORRIDOR_MIN_Y * CELL_SIZE,
+            GRID_WIDTH * CELL_SIZE, (CORRIDOR_MAX_Y - CORRIDOR_MIN_Y + 1) * CELL_SIZE,
+            'terrain-dirt',
+        ).setOrigin(0, 0).setDepth(-19)
+
         this.gridGraphics = this.add.graphics()
         this.towersGraphics = this.add.graphics()
         this.enemiesGraphics = this.add.graphics()
@@ -756,7 +771,9 @@ export class GameScene extends Phaser.Scene {
     // ── Dessin de la grille ──────────────────────────────────────────────
 
     private drawGrid() {
-        this.gridGraphics.lineStyle(1, 0x334155, 0.8) // slate-700
+        // Grille discrète par-dessus le terrain texturé : juste assez visible
+        // pour repérer les cases constructibles, sans masquer le décor.
+        this.gridGraphics.lineStyle(1, 0x000000, 0.15)
 
         for (let x = 0; x <= GRID_WIDTH; x++) {
             this.gridGraphics.lineBetween(
@@ -774,27 +791,20 @@ export class GameScene extends Phaser.Scene {
     }
 
     private drawPath() {
-        // Chemin de spawn à destination — bande sur les lignes y=6 à y=8 (3 cases
-        // de haut, centrée sur y=7) : élargie par rapport à la case unique
-        // d'origine pour accueillir visuellement les ennemis qui avancent
-        // maintenant de front sur plusieurs files (voir Enemy.laneOffset côté
-        // backend, décalages ±0.8 case).
-        this.gridGraphics.fillStyle(0x1e293b, 0.6) // slate-800
-        this.gridGraphics.fillRect(
-            0, 6 * CELL_SIZE,
-            GRID_WIDTH * CELL_SIZE, CELL_SIZE * 3
-        )
+        // Le couloir est désormais matérialisé par la bande de terre tuilée (voir
+        // create). On ne garde que les bords de route (lisérés sombres) et les
+        // marqueurs d'entrée/sortie, dessinés par-dessus.
+        const top = CORRIDOR_MIN_Y * CELL_SIZE
+        const bottom = (CORRIDOR_MAX_Y + 1) * CELL_SIZE
+        const right = GRID_WIDTH * CELL_SIZE
+        this.gridGraphics.lineStyle(3, 0x3a2a1a, 0.7) // brun sombre = bordure de terre
+        this.gridGraphics.lineBetween(0, top, right, top)
+        this.gridGraphics.lineBetween(0, bottom, right, bottom)
 
-        // Marqueur spawn (gauche) — reste centré sur la case y=7, seule la
-        // bande de fond est élargie.
-        this.gridGraphics.fillStyle(0xef4444, 0.8) // rouge
-        this.gridGraphics.fillRect(0, 7 * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-
-        // Marqueur destination (droite)
-        this.gridGraphics.fillStyle(0x3b82f6, 0.8) // bleu
-        this.gridGraphics.fillRect(
-            (GRID_WIDTH - 1) * CELL_SIZE, 7 * CELL_SIZE,
-            CELL_SIZE, CELL_SIZE
-        )
+        // Marqueur spawn (gauche, rouge) et destination/château (droite, bleu).
+        this.gridGraphics.fillStyle(0xef4444, 0.85)
+        this.gridGraphics.fillRect(0, 7 * CELL_SIZE, CELL_SIZE * 0.25, CELL_SIZE)
+        this.gridGraphics.fillStyle(0x3b82f6, 0.85)
+        this.gridGraphics.fillRect(right - CELL_SIZE * 0.25, 7 * CELL_SIZE, CELL_SIZE * 0.25, CELL_SIZE)
     }
 }
