@@ -38,6 +38,15 @@ public class WaveSimulationService {
     /** Distance (en cases) à partir de laquelle un Sapeur cesse d'avancer et attaque la tour visée. */
     private static final double SIEGE_MELEE_RANGE = 1.0;
 
+    /**
+     * Défense intégrée du château (équivalent d'archers postés sur les remparts) :
+     * dernière ligne contre les ennemis qui approchent de l'arrivée. Volontairement
+     * modeste — aide à finir les fuyards, ne remplace pas la défense du joueur.
+     */
+    private static final double CASTLE_DEFENSE_RANGE = 3.5;   // cases autour de l'arrivée
+    private static final int CASTLE_DEFENSE_DAMAGE = 20;       // par tir
+    private static final int CASTLE_DEFENSE_COOLDOWN = 5;      // ticks entre deux tirs
+
     private final PathfindingService pathfindingService;
 
     public WaveSimulationService(PathfindingService pathfindingService) {
@@ -81,6 +90,9 @@ public class WaveSimulationService {
             // pas un delta) : le frontend les grise tant qu'elles y figurent, sans
             // avoir à recompter lui-même les durées (voir GameScene).
             List<UUID> stunnedTowers,
+            // Ennemis touchés par la défense du château ce tick (voir
+            // CASTLE_DEFENSE_*) : le frontend anime un tir depuis l'arrivée.
+            List<UUID> castleAttacks,
             int castleHp
     ) {}
 
@@ -132,6 +144,8 @@ public class WaveSimulationService {
         List<TickSnapshot> ticks = new ArrayList<>();
         int castleDamageTaken = 0;
         int lastPathIndex = path.size() - 1;
+        Position castlePos = path.get(lastPathIndex);
+        int castleCooldown = 0; // ticks restants avant le prochain tir de la défense
 
         int tick = 0;
         while (tick < MAX_TICKS) {
@@ -324,6 +338,41 @@ public class WaveSimulationService {
                 cooldowns.put(tower.getId(), 1.0 / tower.getType().attackSpeed);
             }
 
+            // 2.5. Défense du château (archers des remparts) : à cadence fixe,
+            // tire sur l'ennemi vivant le plus proche de l'arrivée s'il est dans
+            // CASTLE_DEFENSE_RANGE — dernière ligne contre les fuyards.
+            List<UUID> castleAttacks = new ArrayList<>();
+            if (castleCooldown > 0) {
+                castleCooldown--;
+            } else {
+                Enemy target = null;
+                double bestDistSq = CASTLE_DEFENSE_RANGE * CASTLE_DEFENSE_RANGE;
+                for (Enemy enemy : wave.getEnemies()) {
+                    if (enemy.isDead() || escaped.contains(enemy.getId()) || tick <= enemy.getSpawnDelayTicks()) {
+                        continue;
+                    }
+                    double dx = enemy.getX() - castlePos.x();
+                    double dy = enemy.getY() - castlePos.y();
+                    double distSq = dx * dx + dy * dy;
+                    if (distSq <= bestDistSq) {
+                        bestDistSq = distSq;
+                        target = enemy;
+                    }
+                }
+                if (target != null) {
+                    target.takeDamage(CASTLE_DEFENSE_DAMAGE);
+                    castleAttacks.add(target.getId());
+                    if (target.isDead()) {
+                        // La défense du château ne rapporte PAS d'or (filet de
+                        // sécurité, pas une source de revenu : l'économie reste
+                        // pilotée par les tours du joueur). On signale juste la
+                        // mort (deaths) pour l'animation d'agonie côté frontend.
+                        deaths.add(target.getId());
+                    }
+                    castleCooldown = CASTLE_DEFENSE_COOLDOWN;
+                }
+            }
+
             // Une tour détruite (rayon ou pulse d'un Boss, Sapeur) pendant qu'elle
             // était étourdie laisserait une entrée orpheline dans towerStuns : la
             // boucle des tours saute les détruites AVANT le décompte, l'entrée n'y
@@ -351,7 +400,8 @@ public class WaveSimulationService {
                     .toList();
 
             ticks.add(new TickSnapshot(tick, snapshot, damageEvents, towerDamageEvents, deaths, reached,
-                    destroyedTowers, bossAbilityEvents, List.copyOf(towerStuns.keySet()), castle.getHp()));
+                    destroyedTowers, bossAbilityEvents, List.copyOf(towerStuns.keySet()),
+                    castleAttacks, castle.getHp()));
 
             boolean allResolved = wave.getEnemies().stream()
                     .allMatch(enemy -> enemy.isDead() || escaped.contains(enemy.getId()));

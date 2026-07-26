@@ -38,30 +38,39 @@ class WaveSimulationServiceTest {
     }
 
     @Test
-    @DisplayName("Sans tour, tous les ennemis atteignent le château et aucun or n'est gagné")
-    void simulate_noTowers_allEnemiesReachCastleAndZeroGold() {
+    @DisplayName("Sans tour du joueur, le château encaisse des dégâts et aucun or n'est gagné")
+    void simulate_noTowers_castleTakesDamageAndZeroGold() {
         Wave wave = new WaveFactory().createWave(1, map.getPathStart());
         wave.start();
 
         WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
 
+        // La défense du château peut tuer quelques ennemis proches de l'arrivée,
+        // mais elle ne rapporte pas d'or : sans tour du joueur, le solde reste 0.
         assertThat(result.goldEarned()).isZero();
+        // La vague est nombreuse : le château ne peut pas tout arrêter, des
+        // ennemis passent et l'endommagent.
         assertThat(result.castleDamageTaken()).isGreaterThan(0);
-        assertThat(wave.getEnemies()).noneMatch(Enemy::isDead);
     }
 
     @Test
-    @DisplayName("Une tour hors de portée ne fait aucun dégât")
+    @DisplayName("Une tour hors de portée ne fait aucun dégât (le château seul agit)")
     void simulate_towerOutOfRange_dealsNoDamage() {
-        map.placeTower(new Tower(TowerType.ARCHER, 5, 0)); // portée 3.0, chemin à y=7 => distance 7
+        Tower archer = new Tower(TowerType.ARCHER, 5, 0); // portée 3.0, chemin à y=7 => distance 7
+        map.placeTower(archer);
 
         Wave wave = new WaveFactory().createWave(1, map.getPathStart());
         wave.start();
 
         WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
 
+        // La tour hors de portée ne tire jamais : aucun damageEvent à son nom.
+        boolean archerFired = result.ticks().stream()
+                .flatMap(t -> t.damageEvents().stream())
+                .anyMatch(e -> e.towerId().equals(archer.getId()));
+        assertThat(archerFired).isFalse();
+        // Pas de tour utile => pas d'or (la défense du château ne rapporte rien).
         assertThat(result.goldEarned()).isZero();
-        assertThat(wave.getEnemies()).noneMatch(Enemy::isDead);
     }
 
     @Test
@@ -109,7 +118,10 @@ class WaveSimulationServiceTest {
         Tower archer = new Tower(TowerType.ARCHER, 5, 5);
         map.placeTower(archer);
 
-        Enemy sapeur = new Enemy(EnemyType.SAPEUR, 5, 6);
+        // PV surdimensionnés : le Sapeur doit survivre à la destruction de sa
+        // cible ET au tir de la défense du château en fin de course — ce test
+        // vérifie qu'il REPREND sa route jusqu'au bout, pas sa survie sous le feu.
+        Enemy sapeur = new Enemy(EnemyType.SAPEUR, 5, 6, 0, 100000);
         Wave wave = new Wave(1, List.of(sapeur));
         wave.start();
 
@@ -253,7 +265,10 @@ class WaveSimulationServiceTest {
         Tower wall = new Tower(TowerType.WALL, 10, 7);
         map.placeTower(wall);
 
-        Enemy goblin = new Enemy(EnemyType.GOBLIN, map.getPathStart().x(), map.getPathStart().y());
+        // PV surdimensionnés : le Goblin doit survivre à son siège du mur ET au
+        // tir de la défense du château pour atteindre l'arrivée — ce test vérifie
+        // le blocage puis le passage, pas sa survie sous le feu.
+        Enemy goblin = new Enemy(EnemyType.GOBLIN, map.getPathStart().x(), map.getPathStart().y(), 0, 100000);
         Wave wave = new Wave(1, List.of(goblin));
         wave.start();
 
@@ -402,6 +417,36 @@ class WaveSimulationServiceTest {
                 .mapToInt(WaveSimulationService.TickSnapshot::tick)
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Aucun tir sur " + enemy.getType()));
+    }
+
+    @Test
+    @DisplayName("La défense du château tire sur les ennemis proches de l'arrivée (dernière ligne)")
+    void simulate_castleDefense_hitsEnemiesNearTheEnd() {
+        // Aucune tour : seul le château peut infliger des dégâts aux ennemis.
+        // Un Goblin traverse tout le chemin ; en approchant de l'arrivée (19,7)
+        // il doit être ciblé par la défense (castleAttacks non vide).
+        Enemy goblin = new Enemy(EnemyType.GOBLIN, map.getPathStart().x(), map.getPathStart().y());
+        Wave wave = new Wave(1, List.of(goblin));
+        wave.start();
+
+        WaveSimulationService.SimulationResult result = simulationService.simulate(map, wave, castle);
+
+        boolean castleFired = result.ticks().stream()
+                .anyMatch(t -> t.castleAttacks().contains(goblin.getId()));
+        assertThat(castleFired).isTrue();
+
+        // Les tirs partent bien de la zone d'arrivée : quand le château tire, le
+        // Goblin est à moins de 4 cases de l'arrivée.
+        result.ticks().stream()
+                .filter(t -> !t.castleAttacks().isEmpty())
+                .forEach(t -> {
+                    WaveSimulationService.EnemySnapshot snap = t.enemies().stream()
+                            .filter(e -> e.enemyId().equals(goblin.getId()))
+                            .findFirst().orElse(null);
+                    if (snap != null) {
+                        assertThat(map.getPathEnd().x() - snap.x()).isLessThan(4.0);
+                    }
+                });
     }
 
     @Test

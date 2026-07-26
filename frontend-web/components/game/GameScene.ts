@@ -71,6 +71,8 @@ export interface TickSnapshot {
     reachedCastle: string[]
     destroyedTowers: string[]
     bossAbilityEvents: BossAbilityEvent[]
+    // Ennemis touchés par la défense du château ce tick (tir des remparts).
+    castleAttacks?: string[]
     castleHp: number
 }
 
@@ -207,6 +209,9 @@ export class GameScene extends Phaser.Scene {
         // Terrain : herbe (champ) + terre (couloir), textures tuilables 512x512.
         this.load.image('terrain-grass', '/sprites/terrain/grass.png')
         this.load.image('terrain-dirt', '/sprites/terrain/dirt.png')
+        // Châteaux : le tien (arrivée, à défendre) + celui de l'ennemi (spawn, décoratif).
+        this.load.image('castle', '/sprites/castle/castle.png')
+        this.load.image('castle-enemy', '/sprites/castle/castle_enemy.png')
     }
 
     create() {
@@ -480,10 +485,12 @@ export class GameScene extends Phaser.Scene {
             // Chariot/Boss, ou n'importe qui bloqué contre un mur) : jouent leur
             // anim d'attaque au lieu de marcher (voir drawEnemies).
             const attackingIds = new Set(tick.towerDamageEvents.map((e) => e.enemyId))
+            const reachedIds = new Set(tick.reachedCastle ?? [])
 
             this.effectsGraphics.clear()
-            this.drawEnemies(tick.enemies, tick.deaths, attackingIds)
+            this.drawEnemies(tick.enemies, tick.deaths, attackingIds, reachedIds)
             this.drawEffects(tick.damageEvents, tick.towerDamageEvents, tick.enemies, index)
+            this.drawCastleAttacks(tick.castleAttacks ?? [], tick.enemies)
             this.drawBossAbilityEvents(tick.bossAbilityEvents)
             this.drawStunnedTowers(tick.stunnedTowers ?? [])
             onTick?.(tick.castleHp)
@@ -502,7 +509,7 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
-    private drawEnemies(enemies: EnemySnapshot[], deaths: string[] = [], attackingIds: Set<string> = new Set()) {
+    private drawEnemies(enemies: EnemySnapshot[], deaths: string[] = [], attackingIds: Set<string> = new Set(), reachedIds: Set<string> = new Set()) {
         this.enemiesGraphics.clear()
 
         const alive = new Set(enemies.map((e) => e.id))
@@ -521,8 +528,25 @@ export class GameScene extends Phaser.Scene {
                     sprite.destroy()
                     this.enemySprites.delete(id)
                 })
-            } else if (!dying.has(id) && !sprite.getData('dying')) {
-                // Sorti du champ (fuite/atteint le château) sans mourir : retrait sec.
+            } else if (reachedIds.has(id) && !sprite.getData('reached') && !sprite.getData('dying')) {
+                // Atteint le château : joue une brève anim d'attaque sur place
+                // (dernière position connue, devant les remparts) puis disparaît.
+                // Purement cosmétique — les dégâts au château sont déjà appliqués
+                // côté backend au tick d'arrivée (WaveSimulationService).
+                const atkKey = `${sprite.getData('type')}-attack`
+                sprite.setData('reached', true)
+                if (this.anims.exists(atkKey)) {
+                    sprite.play(atkKey)
+                    this.time.delayedCall(600, () => {
+                        sprite.destroy()
+                        this.enemySprites.delete(id)
+                    })
+                } else {
+                    sprite.destroy()
+                    this.enemySprites.delete(id)
+                }
+            } else if (!dying.has(id) && !sprite.getData('dying') && !sprite.getData('reached')) {
+                // Sorti du champ (fuite) sans mourir : retrait sec.
                 sprite.destroy()
                 this.enemySprites.delete(id)
             }
@@ -554,6 +578,7 @@ export class GameScene extends Phaser.Scene {
                     const scale = isBoss ? CELL_SIZE * 2.6 : CELL_SIZE * 1.6
                     sprite.setDisplaySize(scale, scale)
                     sprite.setData('dieKey', `${enemy.type}-die`)
+                    sprite.setData('type', enemy.type)
                     sprite.play(`${enemy.type}-walk`)
                     this.enemySprites.set(enemy.id, sprite)
                 }
@@ -600,6 +625,27 @@ export class GameScene extends Phaser.Scene {
         this.enemiesGraphics.fillRect(barX, barY, barWidth, 4)
         this.enemiesGraphics.fillStyle(hpRatio > 0.3 ? 0x22c55e : 0xef4444, 1)
         this.enemiesGraphics.fillRect(barX, barY, barWidth * hpRatio, 4)
+    }
+
+    /**
+     * Tir défensif du château (voir castleAttacks) : une flèche de feu part de
+     * l'arrivée vers chaque ennemi touché ce tick — les archers des remparts.
+     */
+    private drawCastleAttacks(castleAttacks: string[], enemies: EnemySnapshot[]) {
+        if (castleAttacks.length === 0) return
+        const enemyById = new Map(enemies.map((e) => [e.id, e]))
+        const castleX = GRID_WIDTH * CELL_SIZE - CELL_SIZE * 0.5
+        const castleY = (CORRIDOR_MIN_Y + CORRIDOR_MAX_Y + 1) / 2 * CELL_SIZE
+
+        castleAttacks.forEach((id) => {
+            const enemy = enemyById.get(id)
+            if (!enemy) return
+            const ex = enemy.x * CELL_SIZE + CELL_SIZE / 2
+            const ey = enemy.y * CELL_SIZE + CELL_SIZE / 2
+            this.effectsGraphics.lineStyle(2, 0xf59e0b, 0.85) // ambre = flèche du château
+            this.effectsGraphics.lineBetween(castleX, castleY, ex, ey)
+            this.spawnImpact('firearrow', enemy.x, enemy.y, 0.9)
+        })
     }
 
     /** Détruit tous les sprites d'ennemis (fin de vague / arrêt de scène). */
@@ -801,10 +847,22 @@ export class GameScene extends Phaser.Scene {
         this.gridGraphics.lineBetween(0, top, right, top)
         this.gridGraphics.lineBetween(0, bottom, right, bottom)
 
-        // Marqueur spawn (gauche, rouge) et destination/château (droite, bleu).
-        this.gridGraphics.fillStyle(0xef4444, 0.85)
-        this.gridGraphics.fillRect(0, 7 * CELL_SIZE, CELL_SIZE * 0.25, CELL_SIZE)
-        this.gridGraphics.fillStyle(0x3b82f6, 0.85)
-        this.gridGraphics.fillRect(right - CELL_SIZE * 0.25, 7 * CELL_SIZE, CELL_SIZE * 0.25, CELL_SIZE)
+        // Châteaux à chaque bout du couloir : ennemi à gauche (spawn, décoratif),
+        // le tien à droite (arrivée, celui qu'on défend). Forteresses compactes
+        // bornées à 2 cases de LARGE (la hauteur suit le ratio), posées sur le bas
+        // du couloir pour tenir debout et déborder vers le haut. Le tien est
+        // retourné (regarde vers la gauche, face aux assaillants).
+        const castleW = CELL_SIZE * 2.4
+        const groundY = (CORRIDOR_MAX_Y + 1) * CELL_SIZE
+
+        const enemyCastle = this.add.image(0, groundY, 'castle').setOrigin(0.1, 1).setDepth(-15)
+        enemyCastle.setScale(castleW / enemyCastle.width)
+        enemyCastle.setFlipX(true) // regarde vers la droite, face au centre
+
+        // Les deux assets sont orientés en miroir à la source : le clair regarde
+        // déjà vers la droite, le sombre vers la gauche. Aucun flip nécessaire,
+        // ils font naturellement face au centre du couloir.
+        const castle = this.add.image(right, groundY, 'castle-enemy').setOrigin(0.9, 1).setDepth(-15)
+        castle.setScale(castleW / castle.width)
     }
 }
