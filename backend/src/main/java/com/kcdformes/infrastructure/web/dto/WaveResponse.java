@@ -53,6 +53,8 @@ public record WaveResponse(
             // par tick, voir WaveSimulationService.TickSnapshot) : le frontend les
             // grise tant qu'elles y figurent, sans compter les durées lui-même.
             List<UUID> stunnedTowers,
+            // Ennemis touchés par la défense du château ce tick (tir des remparts).
+            List<UUID> castleAttacks,
             int castleHp
     ) {}
 
@@ -99,6 +101,7 @@ public record WaveResponse(
                         .map(b -> new BossAbilityEventResponse(b.bossId(), b.x(), b.y(), b.alliesHealed(), b.towersHit()))
                         .toList(),
                 tick.stunnedTowers(),
+                tick.castleAttacks(),
                 tick.castleHp()
         );
     }
