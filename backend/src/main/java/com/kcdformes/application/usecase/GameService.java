@@ -96,13 +96,17 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         // lieu d'une ligne droite, pour étaler l'action et rentabiliser plus de
         // positions de tours. Waypoints alignés deux à deux (segments droits) —
         // voir PathfindingService.findCorridorPath.
+        // Voies décalées vers le bas (4/9/14 au lieu de 2/7/12) : laisse 3 lignes
+        // d'herbe en haut pour que le château de spawn et les tours de la voie
+        // haute (ancrés en bas, ils débordent vers le HAUT) ne soient pas coupés
+        // par le bord supérieur du canvas.
         GameMap initialMap = new GameMap(20, 15, List.of(
-                new Position(0, 2),   // spawn (haut-gauche)
-                new Position(17, 2),  // voie haute -> droite
-                new Position(17, 7),  // descente
-                new Position(2, 7),   // voie médiane -> gauche
-                new Position(2, 12),  // descente
-                new Position(19, 12)  // château (bas-droite)
+                new Position(0, 4),   // spawn (haut-gauche)
+                new Position(17, 4),  // voie haute -> droite
+                new Position(17, 9),  // descente
+                new Position(2, 9),   // voie médiane -> gauche
+                new Position(2, 14),  // descente
+                new Position(19, 14)  // château (bas-droite)
         ));
 
         CastleEntity castle = new CastleEntity();

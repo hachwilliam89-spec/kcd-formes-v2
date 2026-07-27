@@ -91,28 +91,28 @@ class BalanceHarnessTest {
     // constructibles entre les voies — rangs 4-5 (couvrent la voie haute row2 +
     // la médiane row7) et rangs 9-10 (couvrent la médiane + la voie basse row12).
     private static final Setup ECO_ARCHERS = new Setup("eco-archers", List.of(
-            new Placement(TowerType.ARCHER, 4, 5),
-            new Placement(TowerType.ARCHER, 9, 5),
-            new Placement(TowerType.ARCHER, 14, 5),
-            new Placement(TowerType.ARCHER, 6, 9),
-            new Placement(TowerType.ARCHER, 11, 9),
-            new Placement(TowerType.ARCHER, 16, 9)
+            new Placement(TowerType.ARCHER, 4, 6),
+            new Placement(TowerType.ARCHER, 9, 6),
+            new Placement(TowerType.ARCHER, 14, 6),
+            new Placement(TowerType.ARCHER, 6, 11),
+            new Placement(TowerType.ARCHER, 11, 11),
+            new Placement(TowerType.ARCHER, 16, 11)
     ), 3);
 
     private static final Setup MIXTE = new Setup("mixte", List.of(
-            new Placement(TowerType.ARCHER, 4, 5),
-            new Placement(TowerType.MAGE, 9, 5),
-            new Placement(TowerType.CATAPULT, 14, 5),
-            new Placement(TowerType.ARCHER, 7, 9),
-            new Placement(TowerType.MAGE, 12, 9)
+            new Placement(TowerType.ARCHER, 4, 6),
+            new Placement(TowerType.MAGE, 9, 6),
+            new Placement(TowerType.CATAPULT, 14, 6),
+            new Placement(TowerType.ARCHER, 7, 11),
+            new Placement(TowerType.MAGE, 12, 11)
     ), 3);
 
     private static final Setup PREMIUM = new Setup("premium", List.of(
-            new Placement(TowerType.ARCHER, 4, 5),
-            new Placement(TowerType.CATAPULT, 9, 5),
-            new Placement(TowerType.BALLISTA, 14, 5),
-            new Placement(TowerType.MAGE, 11, 9),
-            new Placement(TowerType.BALLISTA, 6, 9)
+            new Placement(TowerType.ARCHER, 4, 6),
+            new Placement(TowerType.CATAPULT, 9, 6),
+            new Placement(TowerType.BALLISTA, 14, 6),
+            new Placement(TowerType.MAGE, 11, 11),
+            new Placement(TowerType.BALLISTA, 6, 11)
     ), 3);
 
     /**
@@ -122,18 +122,18 @@ class BalanceHarnessTest {
      * de façon fiable pour mesurer LE BOSS, pas l'économie ni la survie.
      */
     private static final Setup FORTRESS = new Setup("forteresse", List.of(
-            new Placement(TowerType.ARCHER, 4, 5),
-            new Placement(TowerType.MAGE, 7, 5),
-            new Placement(TowerType.CATAPULT, 10, 5),
-            new Placement(TowerType.BALLISTA, 13, 5),
-            new Placement(TowerType.ARCHER, 6, 4),
-            new Placement(TowerType.MAGE, 11, 4),
-            new Placement(TowerType.BALLISTA, 5, 9),
-            new Placement(TowerType.MAGE, 8, 9),
-            new Placement(TowerType.ARCHER, 11, 9),
-            new Placement(TowerType.CATAPULT, 14, 9),
-            new Placement(TowerType.ARCHER, 9, 10),
-            new Placement(TowerType.ARCHER, 15, 10)
+            new Placement(TowerType.ARCHER, 4, 6),
+            new Placement(TowerType.MAGE, 7, 6),
+            new Placement(TowerType.CATAPULT, 10, 6),
+            new Placement(TowerType.BALLISTA, 13, 6),
+            new Placement(TowerType.ARCHER, 6, 7),
+            new Placement(TowerType.MAGE, 11, 7),
+            new Placement(TowerType.BALLISTA, 5, 11),
+            new Placement(TowerType.MAGE, 8, 11),
+            new Placement(TowerType.ARCHER, 11, 11),
+            new Placement(TowerType.CATAPULT, 14, 11),
+            new Placement(TowerType.ARCHER, 9, 12),
+            new Placement(TowerType.ARCHER, 15, 12)
     // targetLevel 5 (vs 3 pour les setups économiques) : première mesure à 3,
     // la forteresse mourait v14 (churn 4-5 tours/vague dès v10) sans jamais
     // approcher le double-boss de la v20 — la survie profonde passe par des
@@ -269,8 +269,8 @@ class BalanceHarnessTest {
     private RunResult runGame(Setup setup, long seed, int startingGold, int maxWave) {
         // Même chemin serpentin que la production (voir GameService.createGame).
         GameMap map = new GameMap(20, 15, List.of(
-                new Position(0, 2), new Position(17, 2), new Position(17, 7),
-                new Position(2, 7), new Position(2, 12), new Position(19, 12)));
+                new Position(0, 4), new Position(17, 4), new Position(17, 9),
+                new Position(2, 9), new Position(2, 14), new Position(19, 14)));
         int gold = startingGold;
         int castleHp = CASTLE_MAX_HP;
         int towersLost = 0;
