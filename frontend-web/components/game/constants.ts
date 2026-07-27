@@ -14,12 +14,12 @@ export const GRID_H = 15
 // aux waypoints du backend, sinon le décor ne collerait pas au déplacement réel
 // des ennemis (calculé côté serveur).
 export const WAYPOINTS: Cell[] = [
-  { x: 0, y: 4 },   // spawn (haut-gauche)
-  { x: 17, y: 4 },  // voie haute -> droite
-  { x: 17, y: 9 },  // descente
-  { x: 2, y: 9 },   // voie médiane -> gauche
-  { x: 2, y: 14 },  // descente
-  { x: 19, y: 14 }, // château (bas-droite)
+  { x: 0, y: 3 },   // spawn (haut-gauche)
+  { x: 17, y: 3 },  // voie haute -> droite
+  { x: 17, y: 8 },  // descente
+  { x: 2, y: 8 },   // voie médiane -> gauche
+  { x: 2, y: 13 },  // descente
+  { x: 19, y: 13 }, // château (bas-droite)
 ]
 
 export const PATH_START = WAYPOINTS[0]

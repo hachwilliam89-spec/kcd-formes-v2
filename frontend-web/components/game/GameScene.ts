@@ -96,6 +96,19 @@ const ENEMY_COLORS: Record<string, number> = {
     BOSS_WARLORD: 0xeab308, // or — distinct de tout le reste, signale le premier boss
 }
 
+// Taille du sprite par type, en cases (setDisplaySize). Hiérarchie voulue :
+// la piétaille (Goblin) est petite, les brutes (Orc puis Troll) plus grosses,
+// et le Boss domine nettement. Les autres restent à une taille intermédiaire.
+const ENEMY_SCALE: Record<string, number> = {
+    GOBLIN: 1.4,
+    ORC: 1.9,
+    TROLL: 2.3,
+    SAPEUR: 1.4,       // menace anti-tours, pas un colosse : taille d'un Goblin
+    CHARIOT: 1.9,
+    DARK_KNIGHT: 1.9,  // taille d'un Orc
+    BOSS_WARLORD: 3.8,
+}
+
 // Couleur de la ligne de siège (Sapeur → tour visée), distincte des couleurs
 // de tir des tours pour ne jamais être confondue avec une attaque de tour.
 const SIEGE_LINE_COLOR = 0xdc2626
@@ -646,9 +659,11 @@ export class GameScene extends Phaser.Scene {
                 if (!sprite) {
                     sprite = this.add.sprite(px, py, `enemy-${enemy.type}`)
                     // Le contenu utile du chibi occupe ~2/3 du cadre 96px, on
-                    // surdimensionne donc ; le Boss est nettement plus grand pour
-                    // rester identifiable au milieu de son escorte.
-                    const scale = isBoss ? CELL_SIZE * 2.6 : CELL_SIZE * 1.6
+                    // surdimensionne donc. Taille PAR TYPE : la piétaille (Goblin)
+                    // est la plus petite, les brutes (Orc, Troll) plus imposantes,
+                    // le Boss nettement plus gros pour rester identifiable au milieu
+                    // de son escorte (voir ENEMY_SCALE).
+                    const scale = CELL_SIZE * (ENEMY_SCALE[enemy.type] ?? 1.6)
                     sprite.setDisplaySize(scale, scale)
                     sprite.setData('dieKey', `${enemy.type}-die`)
                     sprite.setData('type', enemy.type)
