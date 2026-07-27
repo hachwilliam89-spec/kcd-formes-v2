@@ -137,6 +137,27 @@ const TOWER_IMPACT: Record<string, string> = {
 // continu sans chevauchement excessif.
 const MAGIC_FX_PERIOD = 3
 
+// Projectiles volants (public/sprites/projectiles/) : petits sprites animés
+// (3 frames) tirés de la tour vers la cible, l'impact éclate à l'arrivée. Le
+// sprite d'origine pointe vers le HAUT, on le fait pivoter dans la direction
+// du tir. frameW = largeur planche / 3.
+const PROJECTILES: Record<string, { key: string; frameW: number; frameH: number }> = {
+    ARCHER: { key: 'bolt', frameW: 6, frameH: 26 },
+    BALLISTA: { key: 'arrow', frameW: 8, frameH: 40 },
+}
+const PROJECTILE_KEYS = ['arrow', 'bolt']
+
+// Tours à arme animée : planche pré-composée (base + arme à chaque pose), jouée
+// au tir. loop=true pour le rayon continu du Mage (canalise tant qu'il vise),
+// false pour un tir ponctuel (Archer, Baliste, Catapulte) qui rejoue puis revient
+// au repos (frame 0). Dimensions issues de la génération des planches.
+const TOWER_ANIM: Record<string, { frameW: number; frameH: number; fps: number; loop: boolean }> = {
+    ARCHER:   { frameW: 64, frameH: 114, fps: 18, loop: false },
+    BALLISTA: { frameW: 64, frameH: 132, fps: 18, loop: false },
+    MAGE:     { frameW: 64, frameH: 104, fps: 16, loop: true },
+    CATAPULT: { frameW: 64, frameH: 162, fps: 32, loop: false }, // 17f/32fps≈531ms < 600ms (5 ticks) : anim finit avant le tir suivant
+}
+
 // Tours à sprite (bâtiments statiques, public/sprites/towers/). Les 5 types y
 // figurent : le rendu géométrique (carrés) n'est plus qu'un repli si l'image
 // manque.
@@ -175,7 +196,7 @@ export class GameScene extends Phaser.Scene {
     // réconciliées à chaque drawTowers (créées à la pose, retirées à la
     // destruction). Le tir est porté par les effets d'impact, pas par une anim
     // de la tour (voir drawEffects).
-    private towerSprites = new Map<string, Phaser.GameObjects.Image>()
+    private towerSprites = new Map<string, Phaser.GameObjects.Image | Phaser.GameObjects.Sprite>()
     // Dernier tick où chaque Mage a émis son éclat de magie (cadencé pour un
     // scintillement continu sans spawn à chaque tick — voir drawEffects).
     private magicFxTick = new Map<string, number>()
@@ -205,6 +226,21 @@ export class GameScene extends Phaser.Scene {
         // Sprites de tours (bâtiments statiques, une image par type).
         TOWER_SPRITE_TYPES.forEach((type) => {
             this.load.image(`tower-${type}`, `/sprites/towers/${type}.png`)
+        })
+        // Projectiles animés (flèche, carreau) : spritesheets 3 frames.
+        Object.values(PROJECTILES).forEach(({ key, frameW, frameH }) => {
+            this.load.spritesheet(`proj-${key}`, `/sprites/projectiles/${key}.png`, {
+                frameWidth: frameW,
+                frameHeight: frameH,
+            })
+        })
+        // Tours à arme animée : planches pré-composées (base + arme). Chaque tour
+        // concernée devient un Sprite animé (voir TOWER_ANIM / drawTowers).
+        Object.entries(TOWER_ANIM).forEach(([type, a]) => {
+            this.load.spritesheet(`tower-${type}-anim`, `/sprites/towers/${type}_sheet.png`, {
+                frameWidth: a.frameW,
+                frameHeight: a.frameH,
+            })
         })
         // Terrain : herbe (champ) + terre (couloir), textures tuilables 512x512.
         this.load.image('terrain-grass', '/sprites/terrain/grass.png')
@@ -271,6 +307,31 @@ export class GameScene extends Phaser.Scene {
             }
         })
 
+        // Projectiles : anim en boucle (3 frames) jouée pendant le vol.
+        PROJECTILE_KEYS.forEach((key) => {
+            if (!this.anims.exists(`proj-${key}`)) {
+                this.anims.create({
+                    key: `proj-${key}`,
+                    frames: this.anims.generateFrameNumbers(`proj-${key}`, {}),
+                    frameRate: 16,
+                    repeat: -1,
+                })
+            }
+        })
+
+        // Tours animées : une anim de tir par type. loop=-1 pour le Mage (rayon
+        // continu), 0 pour un tir ponctuel qui revient au repos.
+        Object.entries(TOWER_ANIM).forEach(([type, a]) => {
+            if (!this.anims.exists(`tower-${type}-fire`)) {
+                this.anims.create({
+                    key: `tower-${type}-fire`,
+                    frames: this.anims.generateFrameNumbers(`tower-${type}-anim`, {}),
+                    frameRate: a.fps,
+                    repeat: a.loop ? -1 : 0,
+                })
+            }
+        })
+
         // Préchauffage : Phaser n'envoie une texture au GPU qu'à son premier
         // AFFICHAGE (rendu). On joue donc chaque effet une fois DANS le canvas
         // (hors écran il serait "cull" et jamais uploadé), minuscule et quasi
@@ -280,6 +341,11 @@ export class GameScene extends Phaser.Scene {
             const warm = this.add.sprite(2, 2, `fx-${key}`).setScale(0.02).setAlpha(0.02).setDepth(-1)
             warm.play(`fx-${key}`)
             warm.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => warm.destroy())
+        })
+        PROJECTILE_KEYS.forEach((key) => {
+            const warm = this.add.sprite(2, 2, `proj-${key}`).setScale(0.02).setAlpha(0.02).setDepth(-1)
+            warm.play(`proj-${key}`)
+            this.time.delayedCall(60, () => warm.destroy())
         })
 
         this.drawGrid()
@@ -366,9 +432,15 @@ export class GameScene extends Phaser.Scene {
 
             if (hasSprite) {
                 const isWall = tower.type === 'WALL'
+                const isAnimated = TOWER_ANIM[tower.type] != null
                 let sprite = this.towerSprites.get(tower.id)
                 if (!sprite) {
-                    sprite = this.add.image(0, 0, `tower-${tower.type}`)
+                    // Tour à arme animée (Archer, Baliste, Mage, Catapulte) :
+                    // Sprite au repos sur la frame 0 ; les autres (Mur) restent
+                    // des Images statiques.
+                    sprite = isAnimated
+                        ? this.add.sprite(0, 0, `tower-${tower.type}-anim`, 0)
+                        : this.add.image(0, 0, `tower-${tower.type}`)
                     if (isWall) {
                         // Mur : barricade CENTRÉE et PIVOTÉE de 90° — le couloir
                         // étant horizontal, une barricade verticale barre le
@@ -672,6 +744,76 @@ export class GameScene extends Phaser.Scene {
     }
 
     /**
+     * Projectile volant (flèche/carreau) de la tour vers la cible. Le sprite
+     * d'origine pointe vers le HAUT : on le pivote dans la direction du tir, on
+     * l'anime en boucle, puis un tween l'amène à la cible en ~un tick — à
+     * l'arrivée l'impact éclate et le projectile disparaît. onArrive porte
+     * l'effet d'impact (pour ne le déclencher qu'au contact, pas au départ).
+     */
+    private spawnProjectile(
+        projKey: string,
+        fromPx: number,
+        fromPy: number,
+        toPx: number,
+        toPy: number,
+        onArrive: () => void,
+    ) {
+        const p = this.add.sprite(fromPx, fromPy, `proj-${projKey}`)
+        // Sprite dessiné pointe vers le haut (−90°) : rotation = angle du vecteur + 90°.
+        p.setRotation(Math.atan2(toPy - fromPy, toPx - fromPx) + Math.PI / 2)
+        p.setDisplaySize(CELL_SIZE * 0.18, CELL_SIZE * 0.5)
+        p.setDepth(9)
+        p.play(`proj-${projKey}`)
+        this.tweens.add({
+            targets: p,
+            x: toPx,
+            y: toPy,
+            duration: TICK_DELAY_MS * 0.7,
+            onComplete: () => {
+                onArrive()
+                p.destroy()
+            },
+        })
+    }
+
+    /**
+     * Joue l'animation de tir d'une tour (arme qui s'active). Pour un tir
+     * ponctuel (Archer/Baliste/Catapulte) : rejoue depuis le début à chaque
+     * salve puis revient au repos (frame 0). Pour le rayon continu (Mage,
+     * loop) : lance la boucle si elle ne tourne pas déjà — resetIdleTowers la
+     * coupe quand la tour ne vise plus. Renvoie true si la tour est animée.
+     */
+    private playTowerFire(towerId: string, type: string): boolean {
+        const spec = TOWER_ANIM[type]
+        if (!spec) return false
+        const s = this.towerSprites.get(towerId)
+        if (!(s instanceof Phaser.GameObjects.Sprite)) return false
+        const key = `tower-${type}-fire`
+        if (spec.loop) {
+            if (s.anims.currentAnim?.key !== key || !s.anims.isPlaying) s.play(key)
+        } else if (!s.anims.isPlaying) {
+            s.play(key)
+            s.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => s.setFrame(0))
+        }
+        return true
+    }
+
+    /**
+     * Coupe l'anim en boucle (Mage) des tours qui n'ont PAS tiré ce tick et les
+     * remet au repos — sinon l'orbe continuerait de pulser sans cible.
+     */
+    private resetIdleLoopTowers(firedThisTick: Set<string>) {
+        this.towersById.forEach((tower) => {
+            if (!TOWER_ANIM[tower.type]?.loop || firedThisTick.has(tower.id)) return
+            const s = this.towerSprites.get(tower.id)
+            if (s instanceof Phaser.GameObjects.Sprite && s.anims.isPlaying) {
+                s.anims.stop()
+                s.setFrame(0)
+            }
+        })
+    }
+
+    /**
      * Voile gris sur chaque tour étourdie par le pulse d'un Boss (voir
      * TickSnapshot.stunnedTowers) : la tour est réduite au silence tant que le
      * voile est visible — le joueur doit comprendre d'un coup d'œil pourquoi
@@ -764,6 +906,9 @@ export class GameScene extends Phaser.Scene {
         // Une tour AOE (Catapulte) génère un damageEvent par ennemi touché : on
         // ne veut qu'UN effet d'impact par tour et par tick, pas un par éclat.
         const impactSpawned = new Set<string>()
+        // Tours ayant tiré ce tick : sert à couper l'anim en boucle du Mage
+        // quand il n'a plus de cible (voir resetIdleLoopTowers en fin de méthode).
+        const firedThisTick = new Set<string>()
 
         damageEvents.forEach((event) => {
             const tower = this.towersById.get(event.towerId)
@@ -778,40 +923,55 @@ export class GameScene extends Phaser.Scene {
             const targetPy = enemy.y * CELL_SIZE + CELL_SIZE / 2
 
             if (damageType === 'CONTINUOUS') {
-                // Rayon continu (Mage) : trait persistant + éclat de magie sur la
-                // cible, cadencé (toutes les MAGIC_FX_PERIOD frames) — le Mage
-                // tire chaque tick, un spawn systématique saturerait l'écran.
-                this.effectsGraphics.lineStyle(3, color, 0.85)
-                this.effectsGraphics.lineBetween(towerPx, towerPy, targetPx, targetPy)
+                // Rayon continu (Mage) : plus de trait — l'orbe animé canalise
+                // (anim en boucle) et un éclat de magie cadencé frappe la cible
+                // (toutes les MAGIC_FX_PERIOD frames, sinon l'écran saturerait).
+                this.playTowerFire(tower.id, tower.type)
+                firedThisTick.add(tower.id)
                 const last = this.magicFxTick.get(tower.id) ?? -99
                 if (tickIndex - last >= MAGIC_FX_PERIOD) {
                     this.spawnImpact('fireball', enemy.x, enemy.y, 1.1)
                     this.magicFxTick.set(tower.id, tickIndex)
                 }
             } else if (damageType === 'AOE') {
-                // Trait tour→cible conservé (montre qui tire) ; l'effet de zone
-                // est désormais porté par le sprite d'explosion (dimensionné au
-                // rayon d'éclat), plus lisible que l'ancien cercle plein.
-                this.effectsGraphics.lineStyle(2, color, 0.5)
-                this.effectsGraphics.lineBetween(towerPx, towerPy, targetPx, targetPy)
+                // Catapulte : plus de trait — le marteau s'abat (anim de tir) et
+                // l'explosion éclate sur la zone touchée. Un seul tir par tour/tick.
                 if (!impactSpawned.has(tower.id)) {
                     const diameter = Math.max((tower.splashRadius ?? 0.5) * 2, 1.2)
                     this.spawnImpact('explosion', enemy.x, enemy.y, diameter)
                     impactSpawned.add(tower.id)
+                    this.playTowerFire(tower.id, tower.type)
+                    firedThisTick.add(tower.id)
                 }
             } else {
-                // Trait de la Baliste plus épais que l'Archer (perce-blindage,
-                // voir backend) + effet d'impact à la cible selon le type.
-                const isBallista = tower.type === 'BALLISTA'
-                this.effectsGraphics.lineStyle(isBallista ? 4 : 1.5, color, isBallista ? 0.95 : 0.6)
-                this.effectsGraphics.lineBetween(towerPx, towerPy, targetPx, targetPy)
+                const proj = PROJECTILES[tower.type]
                 const impact = TOWER_IMPACT[tower.type]
-                if (impact && !impactSpawned.has(tower.id)) {
-                    this.spawnImpact(impact, enemy.x, enemy.y, isBallista ? 1.4 : 1.0)
-                    impactSpawned.add(tower.id)
+                const isBallista = tower.type === 'BALLISTA'
+                if (proj) {
+                    // Tour à projectile (Archer, Baliste) : plus de trait — l'arme
+                    // s'anime, une flèche/carreau vole vers la cible et l'impact
+                    // éclate à l'arrivée. Un seul tir par tour et par tick.
+                    if (!impactSpawned.has(tower.id)) {
+                        this.playTowerFire(tower.id, tower.type)
+                        firedThisTick.add(tower.id)
+                        const originY = towerPy - CELL_SIZE * 0.45 // part de l'arme, en haut
+                        this.spawnProjectile(proj.key, towerPx, originY, targetPx, targetPy, () => {
+                            if (impact) this.spawnImpact(impact, enemy.x, enemy.y, isBallista ? 1.4 : 1.0)
+                        })
+                        impactSpawned.add(tower.id)
+                    }
+                } else {
+                    // Repli (tour sans projectile ni anim) : impact instantané.
+                    if (impact && !impactSpawned.has(tower.id)) {
+                        this.spawnImpact(impact, enemy.x, enemy.y, isBallista ? 1.4 : 1.0)
+                        impactSpawned.add(tower.id)
+                    }
                 }
             }
         })
+
+        // Mage sans cible ce tick : on coupe sa boucle et on repose l'orbe.
+        this.resetIdleLoopTowers(firedThisTick)
     }
 
     // ── Dessin de la grille ──────────────────────────────────────────────

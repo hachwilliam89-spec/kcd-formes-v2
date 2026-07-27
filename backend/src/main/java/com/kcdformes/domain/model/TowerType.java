@@ -21,7 +21,12 @@ public enum TowerType {
     // pratique (un seul tir touchait la cible principale + tous les ennemis
     // groupés dans splashRadius, pour un DPS effectif largement supérieur aux
     // autres profils à coût équivalent).
-    CATAPULT(27, 4.0, 150, 0.3, 0, DamageType.AOE, 1.5),
+    // Cadence franchement ralentie 0.3->0.1 (tir toutes les 10 ticks, ~1,2 s) :
+    // vraie arme de siège lente, l'animation du marteau (17 frames @32 fps ≈
+    // 531 ms, voir TOWER_ANIM) finit largement avant le tir suivant → 1 marteau
+    // = 1 explosion. Équilibrage volontairement mis de côté (DPS ~4/tick), à
+    // réajuster plus tard (baseDamage/splash) si la catapulte devient trop faible.
+    CATAPULT(40, 4.0, 150, 0.1, 0, DamageType.AOE, 1.5),
     // Tour débloquée par la progression de compte (meilleure vague atteinte),
     // pas par l'or de la partie en cours : voir GameService.placeTower().
     // PERCE-BLINDAGE (heavyTargetMultiplier x2) : dégâts doublés contre les
