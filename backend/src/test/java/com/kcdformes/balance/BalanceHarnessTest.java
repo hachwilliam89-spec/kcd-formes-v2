@@ -94,25 +94,25 @@ class BalanceHarnessTest {
             new Placement(TowerType.ARCHER, 4, 6),
             new Placement(TowerType.ARCHER, 9, 6),
             new Placement(TowerType.ARCHER, 14, 6),
-            new Placement(TowerType.ARCHER, 6, 11),
-            new Placement(TowerType.ARCHER, 11, 11),
-            new Placement(TowerType.ARCHER, 16, 11)
+            new Placement(TowerType.ARCHER, 6, 10),
+            new Placement(TowerType.ARCHER, 11, 10),
+            new Placement(TowerType.ARCHER, 16, 10)
     ), 3);
 
     private static final Setup MIXTE = new Setup("mixte", List.of(
             new Placement(TowerType.ARCHER, 4, 6),
             new Placement(TowerType.MAGE, 9, 6),
             new Placement(TowerType.CATAPULT, 14, 6),
-            new Placement(TowerType.ARCHER, 7, 11),
-            new Placement(TowerType.MAGE, 12, 11)
+            new Placement(TowerType.ARCHER, 7, 10),
+            new Placement(TowerType.MAGE, 12, 10)
     ), 3);
 
     private static final Setup PREMIUM = new Setup("premium", List.of(
             new Placement(TowerType.ARCHER, 4, 6),
             new Placement(TowerType.CATAPULT, 9, 6),
             new Placement(TowerType.BALLISTA, 14, 6),
-            new Placement(TowerType.MAGE, 11, 11),
-            new Placement(TowerType.BALLISTA, 6, 11)
+            new Placement(TowerType.MAGE, 11, 10),
+            new Placement(TowerType.BALLISTA, 6, 10)
     ), 3);
 
     /**
@@ -122,18 +122,18 @@ class BalanceHarnessTest {
      * de façon fiable pour mesurer LE BOSS, pas l'économie ni la survie.
      */
     private static final Setup FORTRESS = new Setup("forteresse", List.of(
-            new Placement(TowerType.ARCHER, 4, 6),
+            new Placement(TowerType.ARCHER, 4, 5),
             new Placement(TowerType.MAGE, 7, 6),
             new Placement(TowerType.CATAPULT, 10, 6),
             new Placement(TowerType.BALLISTA, 13, 6),
-            new Placement(TowerType.ARCHER, 6, 7),
-            new Placement(TowerType.MAGE, 11, 7),
-            new Placement(TowerType.BALLISTA, 5, 11),
-            new Placement(TowerType.MAGE, 8, 11),
-            new Placement(TowerType.ARCHER, 11, 11),
-            new Placement(TowerType.CATAPULT, 14, 11),
-            new Placement(TowerType.ARCHER, 9, 12),
-            new Placement(TowerType.ARCHER, 15, 12)
+            new Placement(TowerType.ARCHER, 6, 5),
+            new Placement(TowerType.MAGE, 11, 5),
+            new Placement(TowerType.BALLISTA, 5, 10),
+            new Placement(TowerType.MAGE, 8, 10),
+            new Placement(TowerType.ARCHER, 11, 10),
+            new Placement(TowerType.CATAPULT, 14, 10),
+            new Placement(TowerType.ARCHER, 9, 11),
+            new Placement(TowerType.ARCHER, 15, 11)
     // targetLevel 5 (vs 3 pour les setups économiques) : première mesure à 3,
     // la forteresse mourait v14 (churn 4-5 tours/vague dès v10) sans jamais
     // approcher le double-boss de la v20 — la survie profonde passe par des
@@ -269,8 +269,8 @@ class BalanceHarnessTest {
     private RunResult runGame(Setup setup, long seed, int startingGold, int maxWave) {
         // Même chemin serpentin que la production (voir GameService.createGame).
         GameMap map = new GameMap(20, 15, List.of(
-                new Position(0, 4), new Position(17, 4), new Position(17, 9),
-                new Position(2, 9), new Position(2, 14), new Position(19, 14)));
+                new Position(0, 3), new Position(17, 3), new Position(17, 8),
+                new Position(2, 8), new Position(2, 13), new Position(19, 13)));
         int gold = startingGold;
         int castleHp = CASTLE_MAX_HP;
         int towersLost = 0;
