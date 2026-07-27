@@ -32,7 +32,25 @@ public class PathfindingService {
      * (voir corridorCells / PlaceTowerService).
      */
     public List<Position> findCorridorPath(GameMap map) {
-        return findPath(map, true);
+        // Le chemin passe par tous les waypoints dans l'ordre : on calcule le
+        // segment (A* en ignorant les tours) entre chaque paire consécutive et on
+        // les concatène. Deux waypoints alignés donnent un segment droit ; la
+        // concaténation d'un serpentin de waypoints donne le tracé sinueux.
+        List<Position> waypoints = map.getWaypoints();
+        List<Position> path = new ArrayList<>();
+        for (int i = 0; i < waypoints.size() - 1; i++) {
+            List<Position> segment = findPath(map, waypoints.get(i), waypoints.get(i + 1), true);
+            if (segment == null) {
+                return null; // segment infranchissable (ne devrait pas arriver sur une map valide)
+            }
+            for (Position p : segment) {
+                // Évite de dupliquer le waypoint partagé entre deux segments.
+                if (path.isEmpty() || !path.get(path.size() - 1).equals(p)) {
+                    path.add(p);
+                }
+            }
+        }
+        return path;
     }
 
     /**
@@ -74,9 +92,10 @@ public class PathfindingService {
     }
 
     private List<Position> findPath(GameMap map, boolean ignoreTowers) {
-        Position start = map.getPathStart();
-        Position end = map.getPathEnd();
+        return findPath(map, map.getPathStart(), map.getPathEnd(), ignoreTowers);
+    }
 
+    private List<Position> findPath(GameMap map, Position start, Position end, boolean ignoreTowers) {
         PriorityQueue<Node> open = new PriorityQueue<>(Comparator.comparingDouble(n -> n.f));
         Map<Position, Position> cameFrom = new HashMap<>();
         Map<Position, Double> gScore = new HashMap<>();

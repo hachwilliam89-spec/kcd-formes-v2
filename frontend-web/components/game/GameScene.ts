@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { CORRIDOR_MIN_Y, CORRIDOR_MAX_Y } from './constants'
+import { PATH_START, PATH_END, CORRIDOR_CELLS } from './constants'
 
 const CELL_SIZE = 40
 const GRID_WIDTH = 20
@@ -252,15 +252,16 @@ export class GameScene extends Phaser.Scene {
 
     create() {
         // Terrain tuilé, sous tout le reste (depth très négatif) : herbe sur tout
-        // le champ, bande de terre sur le couloir des ennemis (y=6..8). Remplace
-        // le fond bleu nu — un vrai décor de tower defense.
+        // le champ, puis une tuile de terre sur chaque case du couloir SERPENTIN
+        // (chemin élargi d'une case, voir CORRIDOR_CELLS) — la route suit le tracé
+        // en S au lieu d'une bande droite. Remplace le fond bleu nu.
         this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'terrain-grass')
             .setOrigin(0, 0).setDepth(-20)
-        this.add.tileSprite(
-            0, CORRIDOR_MIN_Y * CELL_SIZE,
-            GRID_WIDTH * CELL_SIZE, (CORRIDOR_MAX_Y - CORRIDOR_MIN_Y + 1) * CELL_SIZE,
-            'terrain-dirt',
-        ).setOrigin(0, 0).setDepth(-19)
+        for (const c of CORRIDOR_CELLS) {
+            this.add.image(c.x * CELL_SIZE + CELL_SIZE / 2, c.y * CELL_SIZE + CELL_SIZE / 2, 'terrain-dirt')
+                .setDisplaySize(CELL_SIZE + 1, CELL_SIZE + 1) // +1 : recouvre les joints entre tuiles
+                .setDepth(-19)
+        }
 
         this.gridGraphics = this.add.graphics()
         this.towersGraphics = this.add.graphics()
@@ -706,8 +707,8 @@ export class GameScene extends Phaser.Scene {
     private drawCastleAttacks(castleAttacks: string[], enemies: EnemySnapshot[]) {
         if (castleAttacks.length === 0) return
         const enemyById = new Map(enemies.map((e) => [e.id, e]))
-        const castleX = GRID_WIDTH * CELL_SIZE - CELL_SIZE * 0.5
-        const castleY = (CORRIDOR_MIN_Y + CORRIDOR_MAX_Y + 1) / 2 * CELL_SIZE
+        const castleX = PATH_END.x * CELL_SIZE + CELL_SIZE / 2
+        const castleY = PATH_END.y * CELL_SIZE + CELL_SIZE / 2
 
         castleAttacks.forEach((id) => {
             const enemy = enemyById.get(id)
@@ -997,32 +998,24 @@ export class GameScene extends Phaser.Scene {
     }
 
     private drawPath() {
-        // Le couloir est désormais matérialisé par la bande de terre tuilée (voir
-        // create). On ne garde que les bords de route (lisérés sombres) et les
-        // marqueurs d'entrée/sortie, dessinés par-dessus.
-        const top = CORRIDOR_MIN_Y * CELL_SIZE
-        const bottom = (CORRIDOR_MAX_Y + 1) * CELL_SIZE
-        const right = GRID_WIDTH * CELL_SIZE
-        this.gridGraphics.lineStyle(3, 0x3a2a1a, 0.7) // brun sombre = bordure de terre
-        this.gridGraphics.lineBetween(0, top, right, top)
-        this.gridGraphics.lineBetween(0, bottom, right, bottom)
-
-        // Châteaux à chaque bout du couloir : ennemi à gauche (spawn, décoratif),
-        // le tien à droite (arrivée, celui qu'on défend). Forteresses compactes
-        // bornées à 2 cases de LARGE (la hauteur suit le ratio), posées sur le bas
-        // du couloir pour tenir debout et déborder vers le haut. Le tien est
-        // retourné (regarde vers la gauche, face aux assaillants).
+        // Le couloir est matérialisé par les tuiles de terre (voir create). On
+        // pose seulement les deux châteaux, à chaque extrémité du chemin serpentin :
+        // celui de l'ennemi au spawn (PATH_START, décoratif) et le tien à l'arrivée
+        // (PATH_END, celui qu'on défend). Forteresses compactes (~2,4 cases de
+        // large), ancrées en bas de leur case, débordant vers le haut.
         const castleW = CELL_SIZE * 2.4
-        const groundY = (CORRIDOR_MAX_Y + 1) * CELL_SIZE
 
-        const enemyCastle = this.add.image(0, groundY, 'castle').setOrigin(0.1, 1).setDepth(-15)
+        // Château ennemi au spawn (clair, orienté vers la droite = vers le champ).
+        const startX = PATH_START.x * CELL_SIZE + CELL_SIZE / 2
+        const startGroundY = (PATH_START.y + 1) * CELL_SIZE
+        const enemyCastle = this.add.image(startX, startGroundY, 'castle').setOrigin(0.35, 1).setDepth(-15)
         enemyCastle.setScale(castleW / enemyCastle.width)
-        enemyCastle.setFlipX(true) // regarde vers la droite, face au centre
+        enemyCastle.setFlipX(true)
 
-        // Les deux assets sont orientés en miroir à la source : le clair regarde
-        // déjà vers la droite, le sombre vers la gauche. Aucun flip nécessaire,
-        // ils font naturellement face au centre du couloir.
-        const castle = this.add.image(right, groundY, 'castle-enemy').setOrigin(0.9, 1).setDepth(-15)
+        // Ton château à l'arrivée (sombre, orienté vers la gauche = vers le champ).
+        const endX = PATH_END.x * CELL_SIZE + CELL_SIZE / 2
+        const endGroundY = (PATH_END.y + 1) * CELL_SIZE
+        const castle = this.add.image(endX, endGroundY, 'castle-enemy').setOrigin(0.65, 1).setDepth(-15)
         castle.setScale(castleW / castle.width)
     }
 }

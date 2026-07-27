@@ -91,9 +91,19 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         PlayerEntity player = playerJpaRepository.findById(playerId)
                 .orElseThrow(() -> new IllegalArgumentException("Player not found: " + playerId));
 
-        // Crée le château avec une map initiale vide
-        GameMap initialMap = new GameMap(20, 15,
-                new Position(0, 7), new Position(19, 7));
+        // Crée le château avec une map initiale vide. Chemin serpentin "3 voies"
+        // (tracé A) : le couloir descend en S sur toute la hauteur de la carte au
+        // lieu d'une ligne droite, pour étaler l'action et rentabiliser plus de
+        // positions de tours. Waypoints alignés deux à deux (segments droits) —
+        // voir PathfindingService.findCorridorPath.
+        GameMap initialMap = new GameMap(20, 15, List.of(
+                new Position(0, 2),   // spawn (haut-gauche)
+                new Position(17, 2),  // voie haute -> droite
+                new Position(17, 7),  // descente
+                new Position(2, 7),   // voie médiane -> gauche
+                new Position(2, 12),  // descente
+                new Position(19, 12)  // château (bas-droite)
+        ));
 
         CastleEntity castle = new CastleEntity();
         castle.setPlayer(player);

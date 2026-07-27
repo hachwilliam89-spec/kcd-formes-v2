@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { TowerData } from '@/components/game/GameScene'
-import { CORRIDOR_MIN_Y, CORRIDOR_MAX_Y } from '@/components/game/constants'
+import { isCorridorCell } from '@/components/game/constants'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
 import api from '@/lib/api'
 
@@ -152,7 +152,7 @@ export default function GamePage() {
         // final) : le mur-barrage se pose uniquement SUR le couloir des ennemis,
         // les tours uniquement en dehors. Filtré ici pour un retour immédiat au
         // lieu d'un aller-retour réseau voué au rejet.
-        const inCorridor = y >= CORRIDOR_MIN_Y && y <= CORRIDOR_MAX_Y
+        const inCorridor = isCorridorCell(x, y)
         if (selectedTower === 'WALL' && !inCorridor) {
             setMessage('Le mur se pose sur le couloir des ennemis (pour leur barrer la route)')
             return

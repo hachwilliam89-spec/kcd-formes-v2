@@ -9,15 +9,30 @@ public class GameMap {
 
     private final int width;
     private final int height;
+    // Points de virage du chemin, dans l'ordre spawn -> château. Deux waypoints
+    // consécutifs sont alignés (même ligne ou même colonne) : le chemin réel est
+    // la concaténation des segments droits qui les relient (voir
+    // PathfindingService.findCorridorPath). Un simple couple [start, end] donne
+    // l'ancien couloir droit ; une liste plus longue donne un tracé sinueux.
+    private final List<Position> waypoints;
     private final Position pathStart;
     private final Position pathEnd;
     private final Map<String, Tower> towers = new HashMap<>();
 
-    public GameMap(int width, int height, Position pathStart, Position pathEnd) {
+    public GameMap(int width, int height, List<Position> waypoints) {
+        if (waypoints == null || waypoints.size() < 2) {
+            throw new IllegalArgumentException("Le chemin doit avoir au moins 2 waypoints (spawn + château)");
+        }
         this.width = width;
         this.height = height;
-        this.pathStart = pathStart;
-        this.pathEnd = pathEnd;
+        this.waypoints = List.copyOf(waypoints);
+        this.pathStart = this.waypoints.get(0);
+        this.pathEnd = this.waypoints.get(this.waypoints.size() - 1);
+    }
+
+    /** Compat : couloir droit défini par ses seules extrémités (= 2 waypoints). */
+    public GameMap(int width, int height, Position pathStart, Position pathEnd) {
+        this(width, height, List.of(pathStart, pathEnd));
     }
 
     public void placeTower(Tower tower) {
@@ -69,4 +84,5 @@ public class GameMap {
     public int getHeight() { return height; }
     public Position getPathStart() { return pathStart; }
     public Position getPathEnd() { return pathEnd; }
+    public List<Position> getWaypoints() { return waypoints; }
 }
