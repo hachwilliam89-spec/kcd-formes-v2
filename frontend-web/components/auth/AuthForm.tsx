@@ -1,10 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/hooks/useAuth'
 
 type Mode = 'login' | 'register'
@@ -37,77 +33,94 @@ export default function AuthForm() {
         }
     }
 
+    const tab = (m: Mode, label: string) => (
+        <button
+            type="button"
+            onClick={() => setMode(m)}
+            className={`flex-1 py-1.5 text-sm rounded transition-colors ${
+                mode === m
+                    ? 'bg-[#7a5a2c] text-[#f5e8c6]'
+                    : 'bg-[#cdb987] text-[#5a441c] hover:bg-[#d8c79a]'
+            }`}
+        >
+            {label}
+        </button>
+    )
+
     return (
-        <Card className="w-full max-w-md">
-            <CardHeader>
-                <CardTitle className="text-2xl text-center">
-                    {mode === 'login' ? 'Connexion' : 'Inscription'}
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="username">Nom d&apos;utilisateur</Label>
-                        <Input
-                            id="username"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            placeholder="kim"
+        <div className="kcd-panel font-pixel w-[340px] max-w-[92vw]">
+            <div className="flex gap-2 mb-4">
+                {tab('login', 'Connexion')}
+                {tab('register', 'Inscription')}
+            </div>
+
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+                <div>
+                    <label htmlFor="username" className="block text-xs text-[#6a5024] mb-1">
+                        <i /> Nom d&apos;utilisateur
+                    </label>
+                    <input
+                        id="username"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="kim"
+                        required
+                        className="w-full px-2.5 py-2 text-sm text-[#3a2a12] rounded border-[3px] border-[#b9975a] bg-[#fbf3dd] outline-none focus:border-[#7a5a2c]"
+                    />
+                </div>
+
+                {mode === 'register' && (
+                    <div>
+                        <label htmlFor="email" className="block text-xs text-[#6a5024] mb-1">Email</label>
+                        <input
+                            id="email"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="kim@kcdformes.com"
                             required
+                            className="w-full px-2.5 py-2 text-sm text-[#3a2a12] rounded border-[3px] border-[#b9975a] bg-[#fbf3dd] outline-none focus:border-[#7a5a2c]"
                         />
                     </div>
+                )}
 
-                    {mode === 'register' && (
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
-                            <Input
-                                id="email"
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="kim@kcdformes.com"
-                                required
-                            />
-                        </div>
+                <div>
+                    <label htmlFor="password" className="block text-xs text-[#6a5024] mb-1">Mot de passe</label>
+                    <input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        required
+                        className="w-full px-2.5 py-2 text-sm text-[#3a2a12] rounded border-[3px] border-[#b9975a] bg-[#fbf3dd] outline-none focus:border-[#7a5a2c]"
+                    />
+                </div>
+
+                {error && <p className="text-sm text-[#8a3d12]">{error}</p>}
+
+                <button type="submit" disabled={loading} className="kcd-btn font-med text-lg py-2.5 mt-1 disabled:opacity-50">
+                    {loading ? 'Chargement…' : mode === 'login' ? 'Jouer' : "S'inscrire"}
+                </button>
+
+                <p className="text-xs text-center text-[#6a5024]">
+                    {mode === 'login' ? (
+                        <>
+                            Pas de compte ?{' '}
+                            <button type="button" className="underline font-semibold" onClick={() => setMode('register')}>
+                                Crée-en un
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            Déjà un compte ?{' '}
+                            <button type="button" className="underline font-semibold" onClick={() => setMode('login')}>
+                                Connecte-toi
+                            </button>
+                        </>
                     )}
-
-                    <div className="space-y-2">
-                        <Label htmlFor="password">Mot de passe</Label>
-                        <Input
-                            id="password"
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="••••••••"
-                            required
-                        />
-                    </div>
-
-                    {error && <p className="text-sm text-red-500">{error}</p>}
-
-                    <Button type="submit" className="w-full" disabled={loading}>
-                        {loading ? 'Chargement...' : mode === 'login' ? 'Se connecter' : "S'inscrire"}
-                    </Button>
-
-                    <p className="text-sm text-center text-muted-foreground">
-                        {mode === 'login' ? (
-                            <>
-                                Pas de compte ?{' '}
-                                <button type="button" className="underline" onClick={() => setMode('register')}>
-                                    S&apos;inscrire
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                Déjà un compte ?{' '}
-                                <button type="button" className="underline" onClick={() => setMode('login')}>
-                                    Se connecter
-                                </button>
-                            </>
-                        )}
-                    </p>
-                </form>
-            </CardContent>
-        </Card>
+                </p>
+            </form>
+        </div>
     )
 }

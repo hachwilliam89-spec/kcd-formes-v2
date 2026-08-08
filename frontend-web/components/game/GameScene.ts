@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { PATH_START, PATH_END, CORRIDOR_CELLS, pathDirectionAt } from './constants'
+import { PATH_START, PATH_END, WAYPOINTS, pathDirectionAt, isCorridorCell } from './constants'
 
 const CELL_SIZE = 40
 const GRID_WIDTH = 20
@@ -295,26 +295,20 @@ export class GameScene extends Phaser.Scene {
                 frameHeight: w.frameH,
             })
         })
-        // Terrain : herbe (champ) + terre (couloir), textures tuilables 512x512.
-        this.load.image('terrain-grass', '/sprites/terrain/grass.png')
-        this.load.image('terrain-dirt', '/sprites/terrain/dirt.png')
+        // Terrain "champ de bataille" (tileset TD pro) : sol terre foncée tuilable
+        // + route en terre claire (texture tuilable) masquée en forme de serpentin
+        // arrondi (voir drawTerrain) → virages parfaitement nets.
+        this.load.image('terrain-ground', '/sprites/terrain/ground.png')
+        this.load.image('road_fill', '/sprites/terrain/road_fill.png')
+        // Props décoratifs (rochers) pour habiller le champ.
+        for (let i = 1; i <= 5; i++) this.load.image(`prop-stone-${i}`, `/sprites/props/stone_${i}.png`)
         // Châteaux : le tien (arrivée, à défendre) + celui de l'ennemi (spawn, décoratif).
         this.load.image('castle', '/sprites/castle/castle.png')
         this.load.image('castle-enemy', '/sprites/castle/castle_enemy.png')
     }
 
     create() {
-        // Terrain tuilé, sous tout le reste (depth très négatif) : herbe sur tout
-        // le champ, puis une tuile de terre sur chaque case du couloir SERPENTIN
-        // (chemin élargi d'une case, voir CORRIDOR_CELLS) — la route suit le tracé
-        // en S au lieu d'une bande droite. Remplace le fond bleu nu.
-        this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'terrain-grass')
-            .setOrigin(0, 0).setDepth(-20)
-        for (const c of CORRIDOR_CELLS) {
-            this.add.image(c.x * CELL_SIZE + CELL_SIZE / 2, c.y * CELL_SIZE + CELL_SIZE / 2, 'terrain-dirt')
-                .setDisplaySize(CELL_SIZE + 1, CELL_SIZE + 1) // +1 : recouvre les joints entre tuiles
-                .setDepth(-19)
-        }
+        this.drawTerrain()
 
         this.gridGraphics = this.add.graphics()
         this.towersGraphics = this.add.graphics()
@@ -1160,25 +1154,91 @@ export class GameScene extends Phaser.Scene {
         this.resetIdleLoopTowers(firedThisTick)
     }
 
+    // ── Terrain (sol + route serpentine + props) ─────────────────────────
+
+    private drawTerrain() {
+        // Ces textures sont de l'art vectoriel lisse (pas du pixel) : on force un
+        // filtrage LINÉAIRE pour un redimensionnement propre, malgré pixelArt:true
+        // (qui reste souhaitable pour les sprites de perso/tours).
+        const smooth = ['terrain-ground', 'road_fill',
+            'prop-stone-1', 'prop-stone-2', 'prop-stone-3', 'prop-stone-4', 'prop-stone-5']
+        for (const k of smooth) this.textures.get(k)?.setFilter(Phaser.Textures.FilterMode.LINEAR)
+
+        // 1) Sol : terre foncée tuilée sur tout le champ (sous tout le reste).
+        this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'terrain-ground')
+            .setOrigin(0, 0).setDepth(-20)
+
+        // 2) Route serpentine générée géométriquement (pas d'assemblage de tuiles →
+        // aucun raccord) : on construit la forme "route" comme l'union de rectangles
+        // (segments entre waypoints) + de disques aux jointures → virages ARRONDIS
+        // parfaitement nets. Cette forme sert (a) de bordure sombre, (b) de masque
+        // pour la texture de terre claire tuilée.
+        const ROAD = CELL_SIZE * 2.4
+        const pts = WAYPOINTS.map((w) => ({ x: w.x * CELL_SIZE + CELL_SIZE / 2, y: w.y * CELL_SIZE + CELL_SIZE / 2 }))
+        const drawRoadShape = (g: Phaser.GameObjects.Graphics, width: number, color: number) => {
+            const r = width / 2
+            g.fillStyle(color, 1)
+            for (let i = 0; i < pts.length - 1; i++) {
+                const a = pts[i], b = pts[i + 1]
+                if (a.y === b.y) g.fillRect(Math.min(a.x, b.x), a.y - r, Math.abs(b.x - a.x), width)
+                else g.fillRect(a.x - r, Math.min(a.y, b.y), width, Math.abs(b.y - a.y))
+            }
+            for (const p of pts) g.fillCircle(p.x, p.y, r) // jointures arrondies
+        }
+
+        // Bordure sombre (légèrement plus large), sous la route.
+        const border = this.add.graphics().setDepth(-19)
+        drawRoadShape(border, ROAD + 8, 0x1e0f07)
+
+        // Texture de terre claire tuilée, masquée à la forme de la route.
+        const roadTex = this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'road_fill')
+            .setOrigin(0, 0).setDepth(-18)
+        const maskG = this.make.graphics({})
+        drawRoadShape(maskG, ROAD, 0xffffff)
+        roadTex.setMask(maskG.createGeometryMask())
+
+        // 3) Props : quelques rochers éparpillés sur des cases constructibles
+        // (décor pur, la construction reste possible dessus). Placement
+        // déterministe (LCG à graine fixe) → identique à chaque partie.
+        let seed = 1337
+        const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+        const buildable: { x: number; y: number }[] = []
+        for (let x = 0; x < GRID_WIDTH; x++)
+            for (let y = 0; y < GRID_HEIGHT; y++)
+                if (!isCorridorCell(x, y)) buildable.push({ x, y })
+        const used = new Set<number>()
+        for (let n = 0; n < 9 && buildable.length; n++) {
+            let idx = Math.floor(rnd() * buildable.length)
+            if (used.has(idx)) { idx = (idx + 1) % buildable.length }
+            used.add(idx)
+            const c = buildable[idx]
+            const key = `prop-stone-${1 + Math.floor(rnd() * 5)}`
+            const st = this.add.image(
+                c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 8,
+                c.y * CELL_SIZE + CELL_SIZE * 0.62 + (rnd() - 0.5) * 6,
+                key,
+            ).setOrigin(0.5, 0.7).setDepth(-16)
+            st.setScale((CELL_SIZE * 0.7) / st.width)
+        }
+    }
+
     // ── Dessin de la grille ──────────────────────────────────────────────
 
     private drawGrid() {
-        // Grille discrète par-dessus le terrain texturé : juste assez visible
-        // pour repérer les cases constructibles, sans masquer le décor.
-        this.gridGraphics.lineStyle(1, 0x000000, 0.15)
-
-        for (let x = 0; x <= GRID_WIDTH; x++) {
-            this.gridGraphics.lineBetween(
-                x * CELL_SIZE, 0,
-                x * CELL_SIZE, GRID_HEIGHT * CELL_SIZE
-            )
-        }
-
-        for (let y = 0; y <= GRID_HEIGHT; y++) {
-            this.gridGraphics.lineBetween(
-                0, y * CELL_SIZE,
-                GRID_WIDTH * CELL_SIZE, y * CELL_SIZE
-            )
+        // On ne quadrille PLUS tout : on marque seulement les cases
+        // CONSTRUCTIBLES (hors couloir) d'un liseré clair façon "parcelle" — ça
+        // montre où poser des tours et c'est plus joli qu'une grille pleine. Le
+        // couloir (route) reste net.
+        for (let x = 0; x < GRID_WIDTH; x++) {
+            for (let y = 0; y < GRID_HEIGHT; y++) {
+                if (isCorridorCell(x, y)) continue
+                const px = x * CELL_SIZE
+                const py = y * CELL_SIZE
+                this.gridGraphics.fillStyle(0xffffff, 0.06)
+                this.gridGraphics.fillRoundedRect(px + 3, py + 3, CELL_SIZE - 6, CELL_SIZE - 6, 4)
+                this.gridGraphics.lineStyle(1, 0xf0e2c4, 0.20)
+                this.gridGraphics.strokeRoundedRect(px + 3, py + 3, CELL_SIZE - 6, CELL_SIZE - 6, 4)
+            }
         }
     }
 
@@ -1192,14 +1252,14 @@ export class GameScene extends Phaser.Scene {
 
         // Château ennemi au spawn (clair, orienté vers la droite = vers le champ).
         const startX = PATH_START.x * CELL_SIZE + CELL_SIZE / 2
-        const startGroundY = (PATH_START.y + 1) * CELL_SIZE
+        const startGroundY = (PATH_START.y + 2) * CELL_SIZE // +2 : descendu d'une case
         const enemyCastle = this.add.image(startX, startGroundY, 'castle').setOrigin(0.35, 1).setDepth(-15)
         enemyCastle.setScale(castleW / enemyCastle.width)
         enemyCastle.setFlipX(true)
 
         // Ton château à l'arrivée (sombre, orienté vers la gauche = vers le champ).
         const endX = PATH_END.x * CELL_SIZE + CELL_SIZE / 2
-        const endGroundY = (PATH_END.y + 1) * CELL_SIZE
+        const endGroundY = (PATH_END.y + 2) * CELL_SIZE // +2 : descendu d'une case
         const castle = this.add.image(endX, endGroundY, 'castle-enemy').setOrigin(0.65, 1).setDepth(-15)
         castle.setScale(castleW / castle.width)
     }

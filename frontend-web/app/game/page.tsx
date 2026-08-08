@@ -309,10 +309,21 @@ export default function GamePage() {
     }
 
     return (
-        <div className="min-h-screen text-[#f0e2c4] font-pixel p-4" style={{ background: '#241a10' }}>
-            <div className="kcd-panel-wood flex justify-between items-center mb-4">
-                <h1 className="text-3xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>KCD Formes v2</h1>
-                <div className="flex items-center gap-4">
+        <div
+            className="relative min-h-screen lg:h-screen flex flex-col lg:overflow-hidden text-[#f0e2c4] font-pixel p-3 md:p-4"
+            style={{
+                backgroundImage: "url('/home-bg-alt.jpg')",
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+            }}
+        >
+            {/* Voile sombre : le décor reste visible en fond mais ne concurrence pas
+                la lisibilité du plateau et du HUD. */}
+            <div className="absolute inset-0 bg-[#160f08]/80" />
+
+            <div className="relative z-10 kcd-panel-wood flex flex-wrap justify-between items-center gap-y-2 mb-3 md:mb-4 shrink-0">
+                <h1 className="text-2xl md:text-3xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>KCD Formes v2</h1>
+                <div className="flex flex-wrap items-center gap-3 md:gap-4">
                     <span className="font-med text-yellow-300 text-lg">Vague {waveNumber}</span>
                     <span className="flex items-center gap-1 text-yellow-300 font-bold text-lg">
                         <img src="/sprites/ui/icon_gold.png" alt="or" className="kcd-icon" /> {gold}
@@ -341,12 +352,12 @@ export default function GamePage() {
                 </div>
             </div>
 
-            <div className="flex gap-4">
-                <div className="border border-slate-700 rounded-lg overflow-hidden">
+            <div className="relative z-10 flex flex-col lg:flex-row gap-4 lg:flex-1 lg:min-h-0">
+                <div className="w-full aspect-[4/3] lg:aspect-auto lg:flex-1 min-w-0 lg:min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
                     <GameCanvas ref={canvasRef} towers={towers} onCellClick={handleCellClick} />
                 </div>
 
-                <div className="flex flex-col gap-4 w-48">
+                <div className="flex flex-col gap-3 w-full lg:w-56 shrink-0 lg:overflow-y-auto">
                     {/* Carte de la tour sélectionnée (clic) : remontée en TÊTE du
                         panneau pour être associée sans ambiguïté à la tour cliquée.
                         Chaque mode est décrit en toutes lettres (le libellé seul

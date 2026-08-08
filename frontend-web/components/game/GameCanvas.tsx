@@ -35,11 +35,19 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
 
         gameRef.current = new Phaser.Game({
             type: Phaser.AUTO,
-            width: 800,
-            height: 600,
             parent: 'phaser-container',
             backgroundColor: '#0f172a',
             scene: scene,
+            pixelArt: true, // scaling au plus proche voisin : sprites nets même redimensionnés
+            // Responsive : le jeu est rendu en 800×600 puis MIS À L'ÉCHELLE pour
+            // remplir le conteneur en gardant le ratio (Phaser convertit tout seul
+            // les coordonnées de pointeur → pas de changement dans handleCellClick).
+            scale: {
+                mode: Phaser.Scale.FIT,
+                autoCenter: Phaser.Scale.CENTER_BOTH,
+                width: 800,
+                height: 600,
+            },
         })
 
         return () => {
@@ -80,7 +88,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
         resumeWave: () => sceneRef.current?.resumeWave(),
     }))
 
-    return <div id="phaser-container" />
+    return <div id="phaser-container" className="w-full h-full" />
 })
 
 export default GameCanvas
