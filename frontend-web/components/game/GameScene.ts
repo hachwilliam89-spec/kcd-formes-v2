@@ -807,8 +807,13 @@ export class GameScene extends Phaser.Scene {
         const key = `tower-${type}-fire`
         if (spec.loop) {
             if (s.anims.currentAnim?.key !== key || !s.anims.isPlaying) s.play(key)
-        } else if (!s.anims.isPlaying) {
-            s.play(key)
+        } else {
+            // Tir ponctuel : on REJOUE depuis le début à chaque salve (play sans
+            // ignoreIfPlaying = redémarrage), même si l'anim précédente tourne
+            // encore. L'ancien garde !isPlaying sautait les tirs rapproches ->
+            // animation intermittente/saccadée (surtout Baliste/Archer). Retour au
+            // repos (frame 0) quand l'anim va jusqu'au bout sans être relancée.
+            s.play(key, false)
             s.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => s.setFrame(0))
         }
         return true
