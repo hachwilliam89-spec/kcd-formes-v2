@@ -1,28 +1,68 @@
-version: "3.9"
+# Fichier de PRODUCTION autonome (ne dépend pas de docker-compose.yml).
+# Lancer : docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+# Prérequis : les assets du jeu doivent être présents dans
+# frontend-web/public/sprites/ AVANT le build (voir scripts/unpack-assets.sh
+# et DEPLOY.md) — ils sont gitignorés mais bakés dans l'image du front.
+name: kcd-formes
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Pas de port publié : seul le backend (réseau interne) y accède.
+
   backend:
     build:
       context: ./backend
       dockerfile: ../docker/backend/Dockerfile
     restart: unless-stopped
-    volumes: []
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      SERVER_PORT: 8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Pas de port publié : nginx proxifie /api → backend:8080 en interne.
 
-  postgres:
+  frontend:
+    build:
+      context: ./frontend-web
+      dockerfile: ../docker/frontend/Dockerfile
+      args:
+        # Vide = requêtes relatives à l'origine ; nginx route /api vers le backend.
+        NEXT_PUBLIC_API_URL: ""
     restart: unless-stopped
-    ports: []
+    depends_on:
+      - backend
+    # Pas de port publié : nginx proxifie / → frontend:3000 en interne.
 
   nginx:
     image: nginx:alpine
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
+      # - "443:443"   # activer avec un certificat TLS (voir DEPLOY.md, certbot)
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
+      - frontend
       - backend
 
 volumes:
   postgres_data:
-  maven_cache:

@@ -1,0 +1,40 @@
+name: Deploy (VPS)
+
+# Déploiement continu : à chaque push sur main (ou déclenchement manuel), on se
+# connecte en SSH au VPS et on rebuild/relance la stack Docker de prod.
+# Les assets du jeu (gitignorés) restent sur le VPS (déposés une fois via
+# scripts/unpack-assets.sh) — ils ne transitent jamais par GitHub.
+#
+# Secrets requis (Settings → Secrets and variables → Actions) :
+#   VPS_HOST, VPS_USER, VPS_SSH_KEY   (+ éventuellement VPS_PORT)
+#   Le dépôt doit être déjà cloné sur le VPS dans ${VPS_APP_DIR}.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Déploiement SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            cd ${{ secrets.VPS_APP_DIR || '~/kcd-formes-v2' }}
+            git fetch --all
+            git reset --hard origin/main
+            # Assets déjà présents sur le VPS (public/sprites/) ; on vérifie.
+            test -d frontend-web/public/sprites || { echo "Assets manquants — lance scripts/unpack-assets.sh"; exit 1; }
+            docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+            docker image prune -f
