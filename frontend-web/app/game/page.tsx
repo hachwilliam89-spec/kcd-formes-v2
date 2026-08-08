@@ -205,10 +205,11 @@ export default function GamePage() {
     }
 
     async function handleUpgradeSelected(tower: TowerData) {
-        const cost = TOWER_INFO[tower.type].cost * tower.level
+        const level = tower.level ?? 1
+        const cost = TOWER_INFO[tower.type].cost * level
         try {
             await upgradeTower(tower.id, cost)
-            setMessage(`${TOWER_INFO[tower.type].label} améliorée au niveau ${tower.level + 1} (-${cost} or)`)
+            setMessage(`${TOWER_INFO[tower.type].label} améliorée au niveau ${level + 1} (-${cost} or)`)
         } catch {
             setMessage("Impossible d'améliorer cette tour (or insuffisant)")
         }
@@ -366,7 +367,7 @@ export default function GamePage() {
                                     onClick={() => handleUpgradeSelected(selectedTowerObj)}
                                     className="bg-emerald-700 hover:bg-emerald-600 text-white"
                                 >
-                                    ⬆ Améliorer (-{TOWER_INFO[selectedTowerObj.type].cost * selectedTowerObj.level} or)
+                                    ⬆ Améliorer (-{TOWER_INFO[selectedTowerObj.type].cost * (selectedTowerObj.level ?? 1)} or)
                                 </Button>
 
                                 <div>

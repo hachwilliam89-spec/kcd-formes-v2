@@ -1,0 +1,11 @@
+# Contexte de build Docker du frontend.
+# NB : on N'exclut PAS public/sprites/ — les assets doivent être bakés dans
+# l'image (ils sont gitignorés côté git, mais présents dans le contexte de build
+# sur la machine de déploiement, voir DEPLOY.md).
+node_modules
+.next
+npm-debug.log*
+.git
+.env*
+Dockerfile
+.dockerignore

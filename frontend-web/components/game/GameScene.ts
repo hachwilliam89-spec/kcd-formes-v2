@@ -21,6 +21,11 @@ export interface TowerData {
     // dessine simplement pas de barre de vie pour la tour.
     hp?: number
     maxHp?: number
+    // Niveau d'amélioration (coût/dégâts croissants, voir UpgradeTowerService) et
+    // priorité de tir choisie par le joueur (voir TargetingMode) — renvoyés par le
+    // backend (TowerResponse) et utilisés par la carte de tour (voir game/page).
+    level?: number
+    targetingMode?: 'CLOSEST' | 'FIRST' | 'STRONGEST'
 }
 
 export interface EnemySnapshot {
