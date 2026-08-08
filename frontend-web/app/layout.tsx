@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, MedievalSharp, Pixelify_Sans } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -9,6 +9,18 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+// Polices pixel-art / médiévale du HUD (voir globals.css : .font-pixel / .font-med).
+const medievalSharp = MedievalSharp({
+  weight: "400",
+  variable: "--font-med",
+  subsets: ["latin"],
+});
+
+const pixelifySans = Pixelify_Sans({
+  variable: "--font-pixel",
   subsets: ["latin"],
 });
 
@@ -25,7 +37,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${medievalSharp.variable} ${pixelifySans.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

@@ -127,3 +127,50 @@
     @apply font-sans;
   }
 }
+
+/* ── Couche UI pixel-art (pack CraftPix "Basic Pixel Art UI for RPG") ──────
+   Panneaux et boutons habillés via border-image 9-slice depuis les pièces
+   découpées dans public/sprites/ui/. image-rendering: pixelated garde le rendu
+   net une fois agrandi. Polices : MedievalSharp (titres) + Pixelify Sans (UI). */
+.pixel { image-rendering: pixelated; }
+.font-pixel { font-family: var(--font-pixel), ui-monospace, sans-serif; }
+.font-med { font-family: var(--font-med), serif; }
+
+.kcd-panel {
+  border-style: solid;
+  border-width: 16px;
+  border-image: url('/sprites/ui/panel_parch.png') 9 fill / 16px / 0 stretch;
+  image-rendering: pixelated;
+  color: #43310f;
+}
+.kcd-panel-wood {
+  border-style: solid;
+  border-width: 14px;
+  border-image: url('/sprites/ui/panel_wood_parch.png') 10 fill / 14px / 0 stretch;
+  image-rendering: pixelated;
+  color: #f0e2c4;
+}
+.kcd-panel-titled {
+  border-style: solid;
+  border-width: 22px 14px 14px 14px;
+  border-image: url('/sprites/ui/panel_titled.png') 22 12 12 12 fill / 22px 14px 14px 14px / 0 stretch;
+  image-rendering: pixelated;
+  color: #43310f;
+}
+
+.kcd-btn {
+  border-style: solid;
+  border-width: 8px;
+  border-image: url('/sprites/ui/button_green.png') 4 fill / 8px / 0 stretch;
+  image-rendering: pixelated;
+  font-family: var(--font-pixel), sans-serif;
+  color: #1f3d12;
+  cursor: pointer;
+  transition: transform .05s;
+  padding: 2px 10px;
+}
+.kcd-btn:hover { filter: brightness(1.06); }
+.kcd-btn:active { transform: translateY(2px); }
+.kcd-btn:disabled { filter: grayscale(.7) brightness(.9); cursor: not-allowed; }
+
+.kcd-icon { image-rendering: pixelated; height: 20px; width: auto; display: inline-block; vertical-align: middle; }

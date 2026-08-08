@@ -73,3 +73,38 @@ export const CORRIDOR_CELLS: Cell[] = Array.from(CORRIDOR_CELL_SET).map((k) => {
 
 /** Une case est-elle sur le couloir (donc inconstructible pour une tour) ? */
 export const isCorridorCell = (x: number, y: number) => CORRIDOR_CELL_SET.has(key(x, y))
+
+// Direction de déplacement des ennemis (dx, dy) à chaque case du chemin, pour
+// orienter le mur-barrage face au flux. Dérivée des différences entre cases
+// consécutives du tracé.
+const PATH_DIR: Map<string, { dx: number; dy: number }> = (() => {
+  const m = new Map<string, { dx: number; dy: number }>()
+  for (let i = 0; i < PATH_CELLS.length; i++) {
+    const a = PATH_CELLS[i]
+    const b = PATH_CELLS[Math.min(i + 1, PATH_CELLS.length - 1)]
+    const dx = Math.sign(b.x - a.x)
+    const dy = Math.sign(b.y - a.y)
+    m.set(key(a.x, a.y), { dx, dy })
+  }
+  return m
+})()
+
+/**
+ * Direction du chemin (sens des ennemis) à/près d'une case — pour orienter le
+ * mur. Cherche la case de chemin la plus proche (le mur peut être posé sur une
+ * case élargie hors du tracé central). Défaut : vers la droite.
+ */
+export const pathDirectionAt = (x: number, y: number): { dx: number; dy: number } => {
+  const exact = PATH_DIR.get(key(x, y))
+  if (exact) return exact
+  let best: { dx: number; dy: number } = { dx: 1, dy: 0 }
+  let bestD = Infinity
+  for (const p of PATH_CELLS) {
+    const d = (p.x - x) ** 2 + (p.y - y) ** 2
+    if (d < bestD) {
+      bestD = d
+      best = PATH_DIR.get(key(p.x, p.y)) ?? best
+    }
+  }
+  return best
+}

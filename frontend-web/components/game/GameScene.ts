@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { PATH_START, PATH_END, CORRIDOR_CELLS } from './constants'
+import { PATH_START, PATH_END, CORRIDOR_CELLS, pathDirectionAt } from './constants'
 
 const CELL_SIZE = 40
 const GRID_WIDTH = 20
@@ -165,10 +165,23 @@ const PROJECTILE_KEYS = ['arrow', 'bolt']
 // false pour un tir ponctuel (Archer, Baliste, Catapulte) qui rejoue puis revient
 // au repos (frame 0). Dimensions issues de la génération des planches.
 const TOWER_ANIM: Record<string, { frameW: number; frameH: number; fps: number; loop: boolean }> = {
-    ARCHER:   { frameW: 64, frameH: 114, fps: 18, loop: false },
-    BALLISTA: { frameW: 64, frameH: 132, fps: 18, loop: false },
     MAGE:     { frameW: 64, frameH: 104, fps: 16, loop: true },
-    CATAPULT: { frameW: 64, frameH: 162, fps: 32, loop: false }, // 17f/32fps≈531ms < 600ms (5 ticks) : anim finit avant le tir suivant
+}
+
+// Tours à ARME ROTATIVE (Archer, Baliste) : base statique + sprite d'arme
+// superposé qui PIVOTE vers la cible au tir (les autres tours restent des
+// composites figés vers le haut). base = ${type}_base.png (64 de large),
+// weapon = ${type}_weapon.png (spritesheet frameW×frameH×frames). pivotY = ancre
+// verticale de rotation dans la frame d'arme (~grip). mountFrac = position du
+// pivot sur la base, en fraction de hauteur depuis le HAUT de la base.
+const ROT_WEAPON: Record<string, {
+    frameW: number; frameH: number; frames: number; fps: number; pivotX: number; pivotY: number; mountFrac: number
+}> = {
+    ARCHER:   { frameW: 28, frameH: 45, frames: 6, fps: 18, pivotX: 0.5, pivotY: 0.82, mountFrac: 0.30 },
+    BALLISTA: { frameW: 40, frameH: 67, frames: 6, fps: 16, pivotX: 0.5, pivotY: 0.82, mountFrac: 0.28 },
+    // Marteau à long manche : tourne sur lui-même autour du MILIEU de la tige
+    // (pivotX sur l'axe du manche, pivotY au centre), monté sur la couronne.
+    CATAPULT: { frameW: 20, frameH: 104, frames: 17, fps: 32, pivotX: 0.5, pivotY: 0.5, mountFrac: 0.35 },
 }
 
 // Tours à sprite (bâtiments statiques, public/sprites/towers/). Les 5 types y
@@ -186,6 +199,9 @@ export class GameScene extends Phaser.Scene {
     private effectsGraphics!: Phaser.GameObjects.Graphics
     private onCellClick?: (x: number, y: number) => void
     private waveTimer?: Phaser.Time.TimerEvent
+    // Fonction de rendu du tick courant, conservée pour reprendre après une pause
+    // de tuto (voir playWave / resumeWave).
+    private waveRender?: () => void
     // Indexées par id pour retrouver rapidement la tour à l'origine d'un
     // DamageEvent pendant playWave (position + profil de dégâts). Contient des
     // COPIES des données React (voir drawTowers) : les PV y sont décrémentés en
@@ -210,6 +226,8 @@ export class GameScene extends Phaser.Scene {
     // destruction). Le tir est porté par les effets d'impact, pas par une anim
     // de la tour (voir drawEffects).
     private towerSprites = new Map<string, Phaser.GameObjects.Image | Phaser.GameObjects.Sprite>()
+    // Sprite d'arme rotative superposé (Archer, Baliste) — clé = id de la tour.
+    private towerWeapons = new Map<string, Phaser.GameObjects.Sprite>()
     // Dernier tick où chaque Mage a émis son éclat de magie (cadencé pour un
     // scintillement continu sans spawn à chaque tick — voir drawEffects).
     private magicFxTick = new Map<string, number>()
@@ -253,6 +271,14 @@ export class GameScene extends Phaser.Scene {
             this.load.spritesheet(`tower-${type}-anim`, `/sprites/towers/${type}_sheet.png`, {
                 frameWidth: a.frameW,
                 frameHeight: a.frameH,
+            })
+        })
+        // Tours à arme rotative : base statique + planche d'arme (voir ROT_WEAPON).
+        Object.entries(ROT_WEAPON).forEach(([type, w]) => {
+            this.load.image(`tower-${type}-base`, `/sprites/towers/${type}_base.png`)
+            this.load.spritesheet(`tower-${type}-weapon`, `/sprites/towers/${type}_weapon.png`, {
+                frameWidth: w.frameW,
+                frameHeight: w.frameH,
             })
         })
         // Terrain : herbe (champ) + terre (couloir), textures tuilables 512x512.
@@ -342,6 +368,17 @@ export class GameScene extends Phaser.Scene {
                     frames: this.anims.generateFrameNumbers(`tower-${type}-anim`, {}),
                     frameRate: a.fps,
                     repeat: a.loop ? -1 : 0,
+                })
+            }
+        })
+        // Anim de tir de l'arme rotative (jouée sur le sprite d'arme, pas la base).
+        Object.entries(ROT_WEAPON).forEach(([type, w]) => {
+            if (!this.anims.exists(`weapon-${type}-fire`)) {
+                this.anims.create({
+                    key: `weapon-${type}-fire`,
+                    frames: this.anims.generateFrameNumbers(`tower-${type}-weapon`, {}),
+                    frameRate: w.fps,
+                    repeat: 0,
                 })
             }
         })
@@ -436,6 +473,8 @@ export class GameScene extends Phaser.Scene {
             if (!present.has(id)) {
                 sprite.destroy()
                 this.towerSprites.delete(id)
+                this.towerWeapons.get(id)?.destroy()
+                this.towerWeapons.delete(id)
             }
         }
 
@@ -446,6 +485,30 @@ export class GameScene extends Phaser.Scene {
 
             if (hasSprite) {
                 const isWall = tower.type === 'WALL'
+                const rot = ROT_WEAPON[tower.type]
+                if (rot) {
+                    // Tour à arme rotative : base statique + arme superposée qui
+                    // pivote (voir aimWeapon / drawEffects). La base est stockée
+                    // dans towerSprites, l'arme dans towerWeapons.
+                    let base = this.towerSprites.get(tower.id)
+                    if (!base) {
+                        base = this.add.image(0, 0, `tower-${tower.type}-base`).setOrigin(0.5, 1)
+                        base.setScale((CELL_SIZE * 1.25) / base.width)
+                        this.towerSprites.set(tower.id, base)
+                    }
+                    base.setPosition(px + CELL_SIZE / 2, py + CELL_SIZE + 2)
+                    let weapon = this.towerWeapons.get(tower.id)
+                    if (!weapon) {
+                        weapon = this.add.sprite(0, 0, `tower-${tower.type}-weapon`, 0).setOrigin(rot.pivotX, rot.pivotY)
+                        weapon.setScale((CELL_SIZE * 1.25) / base.width)
+                        weapon.setDepth(1) // au-dessus de la base
+                        this.towerWeapons.set(tower.id, weapon)
+                    }
+                    const mountY = (py + CELL_SIZE + 2) - base.displayHeight * (1 - rot.mountFrac)
+                    weapon.setPosition(px + CELL_SIZE / 2, mountY)
+                    this.drawStructureHpBar(tower, px, py)
+                    return
+                }
                 const isAnimated = TOWER_ANIM[tower.type] != null
                 let sprite = this.towerSprites.get(tower.id)
                 if (!sprite) {
@@ -456,17 +519,17 @@ export class GameScene extends Phaser.Scene {
                         ? this.add.sprite(0, 0, `tower-${tower.type}-anim`, 0)
                         : this.add.image(0, 0, `tower-${tower.type}`)
                     if (isWall) {
-                        // Mur : barricade CENTRÉE et PIVOTÉE de 90° — le couloir
-                        // étant horizontal, une barricade verticale barre le
-                        // passage (3 empilées = muraille continue). Échelle sur la
-                        // largeur d'origine : après rotation, ce grand axe devient
-                        // la hauteur et remplit la case (×1.3), l'épaisseur reste
-                        // fine — ça lit comme un vrai barrage.
+                        // Mur : barricade CENTRÉE, orientée selon la direction du
+                        // chemin à sa case pour que les pointes (vers le HAUT dans le
+                        // sprite d'origine) fassent face au flux d'ennemis. Sur le
+                        // serpentin les ennemis arrivent par la gauche (voie haute),
+                        // la droite (voie médiane) ou le haut (descentes) — l'angle
+                        // s'adapte donc au lieu d'être figé.
                         sprite.setOrigin(0.5, 0.5)
-                        // -90° : les pointes de la barricade (vers le haut dans le
-                        // sprite d'origine) se retrouvent tournées vers la GAUCHE,
-                        // face aux ennemis qui arrivent de ce côté.
-                        sprite.setAngle(-90)
+                        const { dx, dy } = pathDirectionAt(tower.x, tower.y)
+                        // Pointes = sens OPPOSÉ au déplacement (face aux assaillants).
+                        const angle = dx > 0 ? -90 : dx < 0 ? 90 : dy < 0 ? 180 : 0
+                        sprite.setAngle(angle)
                         sprite.setScale((CELL_SIZE * 1.3) / sprite.width)
                     } else {
                         // Tour : ancrée en bas-centre, base au bas de la case, la
@@ -519,7 +582,12 @@ export class GameScene extends Phaser.Scene {
     playWave(
         ticks: TickSnapshot[],
         onTick?: (castleHp: number) => void,
-        onComplete?: () => void
+        onComplete?: () => void,
+        // Types d'ennemis dont le tuto n'a pas encore été vu : à leur 1re
+        // apparition, la vague se met en pause et onNeedTutorial est appelé (voir
+        // game/page.tsx). resumeWave() reprend l'animation après « Compris ».
+        unseenEnemyTypes?: Set<string>,
+        onNeedTutorial?: (type: string) => void,
     ) {
         // Scène pas (ou plus) initialisée : signaler quand même la fin plutôt que
         // de sortir en silence — sinon l'appelant ne reçoit jamais onComplete et
@@ -543,12 +611,55 @@ export class GameScene extends Phaser.Scene {
                 this.clearEnemySprites()
                 this.waveTimer?.remove()
                 this.waveTimer = undefined
+                this.waveRender = undefined
                 onComplete?.()
                 return
             }
 
             const tick = ticks[index]
 
+            // Tuto ennemi : à la 1re apparition d'un type non encore vu, on rend
+            // ce tick (l'ennemi devient visible) PUIS on met la vague en pause et
+            // on prévient React d'afficher la bulle. resumeWave() reprend ensuite.
+            if (unseenEnemyTypes && unseenEnemyTypes.size > 0 && onNeedTutorial) {
+                const newType = tick.enemies.map((e) => e.type).find((t) => unseenEnemyTypes.has(t))
+                if (newType) {
+                    unseenEnemyTypes.delete(newType)
+                    this.drawWaveTick(tick, index)
+                    onTick?.(tick.castleHp)
+                    index++
+                    this.waveTimer?.remove()
+                    this.waveTimer = undefined
+                    onNeedTutorial(newType)
+                    return
+                }
+            }
+
+            this.drawWaveTick(tick, index)
+            onTick?.(tick.castleHp)
+            index++
+        }
+        this.waveRender = renderTick
+
+        renderTick()
+        if (ticks.length > 1) {
+            this.waveTimer = this.time.addEvent({ delay: TICK_DELAY_MS, callback: renderTick, loop: true })
+        } else {
+            onComplete?.()
+        }
+    }
+
+    /** Reprend la vague mise en pause par le tuto (voir playWave / TutorialBubble). */
+    resumeWave() {
+        if (this.waveTimer || !this.waveRender) return
+        this.waveRender()
+        if (this.waveRender) {
+            this.waveTimer = this.time.addEvent({ delay: TICK_DELAY_MS, callback: this.waveRender, loop: true })
+        }
+    }
+
+    /** Dessine un tick de la vague (extrait de playWave pour être réutilisé). */
+    private drawWaveTick(tick: TickSnapshot, index: number) {
             // Dégâts de siège de ce tick (Sapeur ou pulse de Boss) : appliqués en
             // direct aux copies locales (voir towersById) pour que les jauges des
             // tours baissent PENDANT l'animation — sans ça, les dégâts du Boss
@@ -579,20 +690,6 @@ export class GameScene extends Phaser.Scene {
             this.drawCastleAttacks(tick.castleAttacks ?? [], tick.enemies)
             this.drawBossAbilityEvents(tick.bossAbilityEvents)
             this.drawStunnedTowers(tick.stunnedTowers ?? [])
-            onTick?.(tick.castleHp)
-            index++
-        }
-
-        renderTick()
-        if (ticks.length > 1) {
-            this.waveTimer = this.time.addEvent({
-                delay: TICK_DELAY_MS,
-                callback: renderTick,
-                loop: true,
-            })
-        } else {
-            onComplete?.()
-        }
     }
 
     private drawEnemies(enemies: EnemySnapshot[], deaths: string[] = [], attackingIds: Set<string> = new Set(), reachedIds: Set<string> = new Set()) {
@@ -820,6 +917,19 @@ export class GameScene extends Phaser.Scene {
     }
 
     /**
+     * Tour à arme rotative (Archer, Baliste) : pivote l'arme vers la cible et
+     * rejoue son animation de tir. Le sprite d'arme pointe vers le HAUT au repos,
+     * d'où le +90° sur l'angle du vecteur tour→cible.
+     */
+    private aimAndFireWeapon(towerId: string, type: string, targetPx: number, targetPy: number) {
+        if (!ROT_WEAPON[type]) return
+        const weapon = this.towerWeapons.get(towerId)
+        if (!weapon) return
+        weapon.setRotation(Math.atan2(targetPy - weapon.y, targetPx - weapon.x) + Math.PI / 2)
+        weapon.play(`weapon-${type}-fire`)
+    }
+
+    /**
      * Coupe l'anim en boucle (Mage) des tours qui n'ont PAS tiré ce tick et les
      * remet au repos — sinon l'orbe continuerait de pulser sans cible.
      */
@@ -961,7 +1071,8 @@ export class GameScene extends Phaser.Scene {
                     const diameter = Math.max((tower.splashRadius ?? 0.5) * 2, 1.2)
                     this.spawnImpact('explosion', enemy.x, enemy.y, diameter)
                     impactSpawned.add(tower.id)
-                    this.playTowerFire(tower.id, tower.type)
+                    // Marteau qui vise la zone et s'abat (arme rotative).
+                    this.aimAndFireWeapon(tower.id, tower.type, targetPx, targetPy)
                     firedThisTick.add(tower.id)
                 }
             } else {
@@ -974,6 +1085,7 @@ export class GameScene extends Phaser.Scene {
                     // éclate à l'arrivée. Un seul tir par tour et par tick.
                     if (!impactSpawned.has(tower.id)) {
                         this.playTowerFire(tower.id, tower.type)
+                        this.aimAndFireWeapon(tower.id, tower.type, targetPx, targetPy)
                         firedThisTick.add(tower.id)
                         const originY = towerPy - CELL_SIZE * 0.45 // part de l'arme, en haut
                         this.spawnProjectile(proj.key, towerPx, originY, targetPx, targetPy, () => {

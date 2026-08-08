@@ -13,8 +13,11 @@ export interface GameCanvasHandle {
     playWave: (
         ticks: TickSnapshot[],
         onTick?: (castleHp: number) => void,
-        onComplete?: () => void
+        onComplete?: () => void,
+        unseenEnemyTypes?: Set<string>,
+        onNeedTutorial?: (type: string) => void,
     ) => void
+    resumeWave: () => void
 }
 
 const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCanvas(
@@ -62,7 +65,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
     }, [towers])
 
     useImperativeHandle(ref, () => ({
-        playWave: (ticks, onTick, onComplete) => {
+        playWave: (ticks, onTick, onComplete, unseenEnemyTypes, onNeedTutorial) => {
             // Scène indisponible (ex. remontage à chaud en dev) : signaler quand
             // même la fin, sinon l'appelant attend un onComplete qui ne viendra
             // jamais et l'UI reste verrouillée en "combat en cours" (voir
@@ -72,8 +75,9 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
                 onComplete?.()
                 return
             }
-            sceneRef.current.playWave(ticks, onTick, onComplete)
+            sceneRef.current.playWave(ticks, onTick, onComplete, unseenEnemyTypes, onNeedTutorial)
         },
+        resumeWave: () => sceneRef.current?.resumeWave(),
     }))
 
     return <div id="phaser-container" />

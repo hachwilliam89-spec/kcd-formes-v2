@@ -11,6 +11,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import type { TowerData } from '@/components/game/GameScene'
 import { isCorridorCell } from '@/components/game/constants'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
+import TutorialBubble from '@/components/game/TutorialBubble'
+import {
+    ENEMY_TUTORIAL, TOWER_TUTORIAL, getSeenTutorials, markTutorialSeen, resetTutorial,
+    type TutorialEntry,
+} from '@/components/game/tutorial'
 import api from '@/lib/api'
 
 const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
@@ -68,6 +73,10 @@ export default function GamePage() {
         top: { rank: number; username: string; bestWave: number }[]
         me: { rank: number; username: string; bestWave: number } | null
     } | null>(null)
+    // Classement affiché en modale (info non vitale) plutôt que dans le HUD.
+    const [showLeaderboard, setShowLeaderboard] = useState(false)
+    // Bulle de tuto en cours (null = aucune). enemy => la vague est en pause.
+    const [tutorial, setTutorial] = useState<{ entry: TutorialEntry; kind: 'enemy' | 'tower' } | null>(null)
 
     // Redirection vers la connexion : UNIQUEMENT une fois le store relu depuis
     // localStorage (authHydrated). La réhydratation de persist est asynchrone —
@@ -135,6 +144,20 @@ export default function GamePage() {
         setLiveCastleHp(castleHp)
     }, [castleHp])
 
+    // Affiche la bulle de tuto pour ce type (ennemi/tour) si le compte ne l'a
+    // pas encore vue. Renvoie true si une bulle a été ouverte (utile pour mettre
+    // la vague en pause côté ennemis).
+    function maybeShowTutorial(kind: 'enemy' | 'tower', type: string): boolean {
+        const username = player?.username ?? ''
+        const key = `${kind}:${type}`
+        if (getSeenTutorials(username).has(key)) return false
+        const entry = kind === 'enemy' ? ENEMY_TUTORIAL[type] : TOWER_TUTORIAL[type]
+        if (!entry) return false
+        markTutorialSeen(username, key)
+        setTutorial({ entry, kind })
+        return true
+    }
+
     async function handleCellClick(x: number, y: number) {
         if (isGameOver || combatRunning) return
 
@@ -171,9 +194,11 @@ export default function GamePage() {
         }
 
         const cost = TOWER_INFO[selectedTower].cost
+        const placedType = selectedTower
         try {
             await placeTower(selectedTower, x, y, cost)
             setMessage(`${TOWER_INFO[selectedTower].label} placé(e) en (${x}, ${y})`)
+            maybeShowTutorial('tower', placedType)
         } catch {
             setMessage('Impossible de placer ici (or insuffisant ou case invalide)')
         }
@@ -231,10 +256,19 @@ export default function GamePage() {
             }
 
             if (canvasRef.current) {
+                // Tuto ennemis : la scène met la vague en pause à la 1re apparition
+                // d'un type non encore vu et appelle onNeedTutorial → bulle. La
+                // reprise se fait au clic « Compris » (voir rendu de TutorialBubble).
+                const seen = getSeenTutorials(player?.username ?? '')
+                const unseenEnemyTypes = new Set(
+                    Object.keys(ENEMY_TUTORIAL).filter((t) => !seen.has(`enemy:${t}`)),
+                )
                 canvasRef.current.playWave(
                     data.ticks,
                     (tickCastleHp: number) => setLiveCastleHp(tickCastleHp),
-                    finishWave
+                    finishWave,
+                    unseenEnemyTypes,
+                    (type: string) => maybeShowTutorial('enemy', type),
                 )
             } else {
                 finishWave()
@@ -276,14 +310,16 @@ export default function GamePage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-900 text-white p-4">
-            <div className="flex justify-between items-center mb-4">
-                <h1 className="text-2xl font-bold">KCD Formes v2</h1>
+        <div className="min-h-screen text-[#f0e2c4] font-pixel p-4" style={{ background: '#241a10' }}>
+            <div className="kcd-panel-wood flex justify-between items-center mb-4">
+                <h1 className="text-3xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>KCD Formes v2</h1>
                 <div className="flex items-center gap-4">
-                    <span className="text-yellow-400 font-bold">⚔ Vague {waveNumber}</span>
-                    <span className="text-yellow-300 font-bold">💰 {gold} or</span>
+                    <span className="font-med text-yellow-300 text-lg">Vague {waveNumber}</span>
+                    <span className="flex items-center gap-1 text-yellow-300 font-bold text-lg">
+                        <img src="/sprites/ui/icon_gold.png" alt="or" className="kcd-icon" /> {gold}
+                    </span>
                     <div className="flex items-center gap-2">
-                        <span className="text-red-400 text-sm">🏰</span>
+                        <img src="/sprites/ui/icon_heart.png" alt="PV" className="kcd-icon" style={{ height: 18 }} />
                         <div className="w-28 h-3 bg-slate-700 rounded overflow-hidden">
                             <div
                                 className={`h-full transition-all ${hpRatio > 0.3 ? 'bg-green-500' : 'bg-red-500'}`}
@@ -361,7 +397,7 @@ export default function GamePage() {
                                     </div>
                                     {selectedTowerObj.type === 'BALLISTA' && (
                                         <p className="text-[11px] text-amber-400/90 mt-2">
-                                            ⚔ La Baliste vise toujours les grosses cibles (Troll, Chariot, Chevalier, Boss) en priorité — le réglage ci-dessus départage seulement quand plusieurs sont à portée.
+                                            ⚔ La Baliste vise toujours les grosses cibles (Troll, Démon de givre, Chevalier, Boss) en priorité — le réglage ci-dessus départage seulement quand plusieurs sont à portée.
                                         </p>
                                     )}
                                 </div>
@@ -369,50 +405,45 @@ export default function GamePage() {
                         </Card>
                     )}
 
-                    <Card className="bg-slate-800 border-slate-700">
-                        <CardContent className="p-4">
-                            <h3 className="text-sm font-semibold mb-3 text-slate-300">Tours</h3>
-                            <div className="flex flex-col gap-2">
-                                {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(
-                                    ([type, info]) => {
-                                        const locked = bestWave < info.unlockWave
-                                        return (
-                                            <button
-                                                key={type}
-                                                onClick={() => !locked && setSelectedTower(type)}
-                                                disabled={isGameOver || combatRunning || locked}
-                                                className={`p-2 rounded text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                                                    selectedTower === type
-                                                        ? `${info.color} text-white ring-2 ring-white`
-                                                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                                                }`}
-                                            >
-                                                {locked ? `🔒 ${info.label}` : info.label}
-                                                <span className="block text-xs opacity-75">
-                                                    {locked ? `Vague ${info.unlockWave} requise` : `${info.cost} or`}
-                                                </span>
-                                            </button>
-                                        )
-                                    }
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <div className="kcd-panel-titled">
+                        <h3 className="font-med text-center text-base mb-3 -mt-4 text-[#43310f]">Tours</h3>
+                        <div className="flex flex-col gap-2">
+                            {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(
+                                ([type, info]) => {
+                                    const locked = bestWave < info.unlockWave
+                                    return (
+                                        <button
+                                            key={type}
+                                            onClick={() => !locked && setSelectedTower(type)}
+                                            disabled={isGameOver || combatRunning || locked}
+                                            className={`kcd-btn text-sm flex justify-between items-center disabled:opacity-50 ${
+                                                selectedTower === type ? 'ring-2 ring-yellow-400' : ''
+                                            }`}
+                                        >
+                                            <span>{locked ? `🔒 ${info.label}` : info.label}</span>
+                                            <span className="text-xs">
+                                                {locked ? `V${info.unlockWave}` : `${info.cost}`}
+                                            </span>
+                                        </button>
+                                    )
+                                }
+                            )}
+                        </div>
+                    </div>
 
-                    <Button
+                    <button
                         onClick={handleStartWave}
                         disabled={loading || isGameOver || combatRunning || awaitingBonusChoice}
-                        className="bg-red-600 hover:bg-red-500 text-white disabled:opacity-40"
+                        className="kcd-btn font-med text-lg py-2 disabled:opacity-50"
                     >
-                        {awaitingBonusChoice ? '⚔ Choisissez un bonus' : '⚔ Lancer vague'}
-                    </Button>
+                        {awaitingBonusChoice ? 'Choisissez un bonus' : 'Lancer la vague'}
+                    </button>
 
                     {/* Toujours disponible (hors combat) : abandonner et repartir sur
                         une partie neuve — auparavant possible uniquement après une
                         défaite, impossible de relancer une partie mal engagée. */}
                     {!isGameOver && (
-                        <Button
-                            size="sm"
+                        <button
                             onClick={() => {
                                 if (window.confirm('Abandonner cette partie et en commencer une nouvelle ?')) {
                                     setIsGameOver(false)
@@ -421,10 +452,10 @@ export default function GamePage() {
                                 }
                             }}
                             disabled={combatRunning || loading}
-                            className="bg-slate-700 hover:bg-slate-600 text-slate-200 disabled:opacity-40"
+                            className="kcd-btn text-sm py-1 disabled:opacity-50"
                         >
                             ↻ Nouvelle partie
-                        </Button>
+                        </button>
                     )}
 
                     {isGameOver && (
@@ -450,45 +481,76 @@ export default function GamePage() {
                     )}
 
                     {message && (
-                        <Card className="bg-slate-800 border-slate-700">
-                            <CardContent className="p-3">
-                                <p className="text-xs text-slate-300">{message}</p>
-                            </CardContent>
-                        </Card>
+                        <div className="kcd-panel text-xs text-center">{message}</div>
                     )}
 
-                    {/* Classement par meilleure vague (voir backend LeaderboardService).
-                        La ligne "toi" n'est ajoutée que si le joueur est hors du top
-                        affiché — sinon sa ligne du top est simplement surlignée. */}
+                    {/* Classement : simple bouton, le détail s'ouvre en modale (info
+                        non vitale, on n'encombre pas le HUD). */}
                     {leaderboard && leaderboard.top.length > 0 && (
-                        <Card className="bg-slate-800 border-slate-700">
-                            <CardContent className="p-3 flex flex-col gap-1">
-                                <p className="text-sm font-semibold text-yellow-400 mb-1">🏆 Classement</p>
-                                {leaderboard.top.map((entry) => (
-                                    <p
-                                        key={entry.rank + entry.username}
-                                        className={`text-xs flex justify-between ${
-                                            entry.username === player?.username
-                                                ? 'text-yellow-300 font-semibold'
-                                                : 'text-slate-300'
-                                        }`}
-                                    >
-                                        <span>#{entry.rank} {entry.username}</span>
-                                        <span>vague {entry.bestWave}</span>
-                                    </p>
-                                ))}
-                                {leaderboard.me &&
-                                    !leaderboard.top.some((e) => e.username === leaderboard.me!.username) && (
-                                    <p className="text-xs flex justify-between text-yellow-300 font-semibold border-t border-slate-700 pt-1 mt-1">
-                                        <span>#{leaderboard.me.rank} {leaderboard.me.username}</span>
-                                        <span>vague {leaderboard.me.bestWave}</span>
-                                    </p>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <button
+                            onClick={() => setShowLeaderboard(true)}
+                            className="kcd-btn text-sm py-1 flex items-center justify-center gap-2"
+                        >
+                            <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 16 }} />
+                            Classement
+                        </button>
                     )}
+
+                    <button
+                        onClick={() => {
+                            resetTutorial(player?.username ?? '')
+                            setMessage('Tuto réinitialisé — les conseils réapparaîtront.')
+                        }}
+                        className="kcd-btn text-xs py-1 opacity-90"
+                    >
+                        ↻ Revoir le tuto
+                    </button>
                 </div>
             </div>
+
+            {/* Modale Classement (voir backend LeaderboardService). La ligne "toi"
+                n'est ajoutée que si le joueur est hors du top affiché. */}
+            {showLeaderboard && leaderboard && (
+                <div
+                    className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+                    onClick={() => setShowLeaderboard(false)}
+                >
+                    <div
+                        className="kcd-panel-titled font-pixel w-80 max-w-[90vw]"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between -mt-4 mb-2">
+                            <h2 className="font-med text-lg flex items-center gap-2 text-[#43310f]">
+                                <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 20 }} />
+                                Classement
+                            </h2>
+                            <button onClick={() => setShowLeaderboard(false)} aria-label="Fermer">
+                                <img src="/sprites/ui/icon_close.png" alt="Fermer" className="kcd-icon" style={{ height: 18 }} />
+                            </button>
+                        </div>
+                        <div className="flex flex-col gap-1 text-sm text-[#43310f]">
+                            {leaderboard.top.map((entry) => (
+                                <p
+                                    key={entry.rank + entry.username}
+                                    className={`flex justify-between px-1 py-0.5 rounded ${
+                                        entry.username === player?.username ? 'bg-[#e0b83c]/40 font-semibold' : ''
+                                    }`}
+                                >
+                                    <span>#{entry.rank} {entry.username}</span>
+                                    <span>vague {entry.bestWave}</span>
+                                </p>
+                            ))}
+                            {leaderboard.me &&
+                                !leaderboard.top.some((e) => e.username === leaderboard.me!.username) && (
+                                <p className="flex justify-between font-semibold border-t-2 border-[#c9ae76] pt-1 mt-1">
+                                    <span>#{leaderboard.me.rank} {leaderboard.me.username}</span>
+                                    <span>vague {leaderboard.me.bestWave}</span>
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Palier de bonus (toutes les 5 vagues) : bloque le jeu jusqu'à un choix
                 du joueur parmi plusieurs options (voir backend BonusType).
@@ -525,6 +587,20 @@ export default function GamePage() {
                         </CardContent>
                     </Card>
                 </div>
+            )}
+
+            {/* Bulle de tutoriel (1re apparition d'un ennemi / 1re pose d'une tour).
+                Pour un ennemi, la vague reste en pause tant qu'elle est ouverte. */}
+            {tutorial && (
+                <TutorialBubble
+                    entry={tutorial.entry}
+                    kind={tutorial.kind}
+                    onClose={() => {
+                        const wasEnemy = tutorial.kind === 'enemy'
+                        setTutorial(null)
+                        if (wasEnemy) canvasRef.current?.resumeWave?.()
+                    }}
+                />
             )}
         </div>
     )
