@@ -41,6 +41,8 @@ function loadPrefs(): Prefs {
 class AudioManager {
     private ctx: AudioContext | null = null
     private master: GainNode | null = null
+    private sfxBus: GainNode | null = null
+    private musicBus: GainNode | null = null
     private buffers = new Map<string, AudioBuffer>()
     private prefs: Prefs = loadPrefs()
     private started = false
@@ -59,6 +61,12 @@ class AudioManager {
         this.master = this.ctx.createGain()
         this.master.gain.value = this.prefs.muted ? 0 : this.prefs.volume
         this.master.connect(this.ctx.destination)
+        // Deux bus séparés sous le maître : les SFX sont mixés PLUS BAS que la
+        // musique (sinon ils la couvrent). Ajuste SFX_BUS / MUSIC_BUS pour le mix.
+        this.sfxBus = this.ctx.createGain(); this.sfxBus.gain.value = 0.11
+        this.musicBus = this.ctx.createGain(); this.musicBus.gain.value = 0.8
+        this.sfxBus.connect(this.master)
+        this.musicBus.connect(this.master)
         SFX_LIST.forEach((n) => this.fetchBuffer(`/sounds/${n}.mp3`, n))
     }
 
@@ -86,7 +94,7 @@ class AudioManager {
     /** Joue un bruitage (chevauchement autorisé). `volume` relatif 0..1,
      *  `rate` = pitch/vitesse (1 = normal). */
     play(name: Sfx, opts: { volume?: number; rate?: number } = {}) {
-        if (!this.ctx || !this.master || this.prefs.muted) return
+        if (!this.ctx || !this.sfxBus || this.prefs.muted) return
         const buf = this.buffers.get(name)
         if (!buf) return
         const src = this.ctx.createBufferSource()
@@ -94,7 +102,7 @@ class AudioManager {
         src.playbackRate.value = opts.rate ?? 1
         const g = this.ctx.createGain()
         g.gain.value = opts.volume ?? 1
-        src.connect(g).connect(this.master)
+        src.connect(g).connect(this.sfxBus)
         src.start()
     }
 
@@ -105,13 +113,12 @@ class AudioManager {
         if (this.musicKey === key) return
         this.musicKey = key
         if (this.musicSrc) { try { this.musicSrc.stop() } catch { /* */ } this.musicSrc = null }
-        if (!key || !this.ctx || !this.master) return
+        if (!key || !this.ctx || !this.musicBus) return
         const buf = await this.fetchBuffer(MUSIC[key], `music_${key}`)
         if (!buf || this.musicKey !== key) return
         const src = this.ctx.createBufferSource()
         src.buffer = buf; src.loop = true
-        const g = this.ctx.createGain(); g.gain.value = 0.5
-        src.connect(g).connect(this.master)
+        src.connect(this.musicBus)
         src.start()
         this.musicSrc = src
     }

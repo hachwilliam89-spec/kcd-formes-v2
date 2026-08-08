@@ -13,7 +13,8 @@ const IMPACT_SFX: Record<string, { sfx: Sfx; gap: number; vol?: number }> = {
     // ici rajoutait un "pop" sec cadencé.
     heavy: { sfx: 'impact_hit', gap: 70 },
     frost: { sfx: 'frost_impact', gap: 200, vol: 0.9 }, // impact = sort "epic"
-    firearrow: { sfx: 'castle_hit', gap: 120 }, // ennemi qui frappe le château
+    // 'firearrow' (flèche du château qui touche) : pas de son d'impact — c'est le
+    // sifflement au tir (shoot_arrow) qui porte l'action.
 }
 
 // Pitch du gémissement de mort selon le gabarit : gros ennemis = voix plus grave
@@ -878,14 +879,19 @@ export class GameScene extends Phaser.Scene {
         const castleX = PATH_END.x * CELL_SIZE + CELL_SIZE / 2
         const castleY = PATH_END.y * CELL_SIZE + CELL_SIZE / 2
 
+        // Les archers des remparts décochent une VRAIE flèche (plus de trait) vers
+        // chaque ennemi ciblé, avec le sifflement de flèche ; l'impact enflammé
+        // éclate à l'arrivée. Départ un peu au-dessus du sol = les remparts.
+        const fromY = castleY - CELL_SIZE * 0.6
+        this.playSfx('shoot_arrow', 45, 0.8)
         castleAttacks.forEach((id) => {
             const enemy = enemyById.get(id)
             if (!enemy) return
             const ex = enemy.x * CELL_SIZE + CELL_SIZE / 2
             const ey = enemy.y * CELL_SIZE + CELL_SIZE / 2
-            this.effectsGraphics.lineStyle(2, 0xf59e0b, 0.85) // ambre = flèche du château
-            this.effectsGraphics.lineBetween(castleX, castleY, ex, ey)
-            this.spawnImpact('firearrow', enemy.x, enemy.y, 0.9)
+            this.spawnProjectile('arrow', castleX, fromY, ex, ey, () => {
+                this.spawnImpact('firearrow', enemy.x, enemy.y, 0.9)
+            })
         })
     }
 

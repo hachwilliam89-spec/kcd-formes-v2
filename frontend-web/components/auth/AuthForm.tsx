@@ -20,7 +20,8 @@ export default function AuthForm() {
     // bloquent l'audio avant une interaction). La page de jeu bascule ensuite sur
     // la musique de combat. No-op si le fichier n'est pas présent.
     useEffect(() => {
-        const start = () => { audio.resume(); audio.music('menu') }
+        audio.music('menu') // si le contexte est déjà débloqué (retour depuis le jeu)
+        const start = () => { audio.resume(); audio.music('menu') } // 1er chargement : au 1er geste
         window.addEventListener('pointerdown', start, { once: true })
         return () => window.removeEventListener('pointerdown', start)
     }, [])

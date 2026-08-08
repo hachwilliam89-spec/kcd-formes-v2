@@ -144,6 +144,13 @@ export default function GamePage() {
         setLiveCastleHp(castleHp)
     }, [castleHp])
 
+    // Bascule sur la musique de combat dès l'entrée dans le jeu (le contexte
+    // audio est déjà débloqué par l'interaction de connexion) — sinon la musique
+    // du menu continuait tant qu'on n'avait pas cliqué sur la page de jeu.
+    useEffect(() => {
+        audio.music('game')
+    }, [])
+
     // Affiche la bulle de tuto pour ce type (ennemi/tour) si le compte ne l'a
     // pas encore vue. Renvoie true si une bulle a été ouverte (utile pour mettre
     // la vague en pause côté ennemis).
