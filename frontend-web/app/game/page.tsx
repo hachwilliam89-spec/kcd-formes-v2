@@ -343,7 +343,7 @@ export default function GamePage() {
                 <h1 className="text-2xl md:text-3xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>KCD Formes v2</h1>
                 <div className="flex flex-wrap items-center gap-3 md:gap-4">
                     <span className="font-med text-yellow-300 text-lg">Vague {waveNumber}</span>
-                    <span className="flex items-center gap-1 text-yellow-300 font-bold text-lg">
+                    <span className="flex items-center gap-1 text-yellow-300 font-med text-xl">
                         <img src="/sprites/ui/icon_gold.png" alt="or" className="kcd-icon" /> {gold}
                     </span>
                     <div className="flex items-center gap-2">
@@ -361,7 +361,7 @@ export default function GamePage() {
                                 }}
                             />
                         </div>
-                        <span className="text-xs text-[#d8c193]">{liveCastleHp}/{castleMaxHp}</span>
+                        <span className="font-med text-sm text-[#f0e2c4]">{liveCastleHp}/{castleMaxHp}</span>
                     </div>
                     <span className="text-[#d8c193]">{player?.username}</span>
                     <button onClick={handleLogout} className="kcd-btn text-xs py-1 px-3">
@@ -453,7 +453,7 @@ export default function GamePage() {
                                             }`}
                                         >
                                             <span>{locked ? `🔒 ${info.label}` : info.label}</span>
-                                            <span className="text-xs">
+                                            <span className="font-med text-base">
                                                 {locked ? `V${info.unlockWave}` : `${info.cost}`}
                                             </span>
                                         </button>

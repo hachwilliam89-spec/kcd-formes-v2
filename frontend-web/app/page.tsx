@@ -1,19 +1,26 @@
 import AuthForm from '@/components/auth/AuthForm'
 import EmberField from '@/components/home/EmberField'
-import HeroScene from '@/components/home/HeroScene'
 
 export default function HomePage() {
     return (
         <main className="relative min-h-screen overflow-hidden flex flex-col items-center justify-center p-4 font-pixel bg-[#0d0906]">
-            {/* Fond héros animé : Ken Burns + lueurs aux fenêtres + drapeau + soleil. */}
-            <HeroScene />
+            {/* Fond héros plein écran avec lent zoom/pan (Ken Burns), dans un
+                conteneur qui masque le débordement du scale. */}
+            <div className="absolute inset-0 overflow-hidden">
+                <div
+                    className="absolute inset-0 kcd-kenburns"
+                    style={{
+                        backgroundImage: "url('/home-bg.jpg')",
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        imageRendering: 'pixelated',
+                    }}
+                />
+            </div>
 
-            {/* Voile sombre + vignettage pour la lisibilité et le côté cinématique. */}
-            <div className="absolute inset-0 bg-black/45" />
-            <div
-                className="absolute inset-0"
-                style={{ boxShadow: 'inset 0 0 220px 60px rgba(0,0,0,.85)' }}
-            />
+            {/* Voile sombre + vignettage cinématique. */}
+            <div className="absolute inset-0 bg-black/40" />
+            <div className="absolute inset-0" style={{ boxShadow: 'inset 0 0 200px 40px rgba(0,0,0,.8)' }} />
 
             {/* Braises qui montent + brume au sol. */}
             <EmberField />
@@ -27,7 +34,6 @@ export default function HomePage() {
                         style={{ textShadow: '3px 3px 0 #2f1c0d, 6px 6px 0 rgba(0,0,0,.55)' }}
                     >
                         KCD Formes
-                        {/* Reflet qui balaie le titre (superposé au texte). */}
                         <span className="kcd-shine absolute inset-0" aria-hidden>KCD Formes</span>
                     </h1>
                 </div>
@@ -43,7 +49,7 @@ export default function HomePage() {
             <div className="relative kcd-rise-2">
                 <AuthForm />
                 <p className="text-center text-[#e9d9b0] text-xs mt-3 kcd-pulse" style={{ textShadow: '1px 1px 0 rgba(0,0,0,.6)' }}>
-                    ⚔ Défends ton château — clique pour commencer
+                    Défends ton château — clique pour commencer
                 </p>
             </div>
         </main>
