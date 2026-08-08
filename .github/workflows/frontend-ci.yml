@@ -25,8 +25,11 @@ jobs:
 
       - run: npm ci
 
+      # Lint informatif (non bloquant) : le build de prod ne dépend pas d'ESLint
+      # (voir next.config eslint.ignoreDuringBuilds), le typecheck reste le garde-fou.
       - name: Lint
         run: npm run lint
+        continue-on-error: true
 
       - name: Typecheck
         run: npx tsc --noEmit

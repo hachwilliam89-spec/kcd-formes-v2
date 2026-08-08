@@ -143,7 +143,7 @@ const SPRITE_ENEMY_TYPES = [
 // Effets d'impact animés (public/sprites/effects/) : jouent une fois à la
 // position de l'ennemi touché, puis s'auto-détruisent. Mappés par type de tour.
 const EFFECT_CELL = 64
-const EFFECT_KEYS = ['heavy', 'explosion', 'fireball', 'firearrow']
+const EFFECT_KEYS = ['heavy', 'explosion', 'fireball', 'firearrow', 'destroy', 'frost', 'bigboom']
 const TOWER_IMPACT: Record<string, string> = {
     ARCHER: 'firearrow',   // flèche de feu à l'impact
     BALLISTA: 'heavy',     // gros impact perçant (perce-blindage)
@@ -163,7 +163,9 @@ const PROJECTILES: Record<string, { key: string; frameW: number; frameH: number 
     ARCHER: { key: 'bolt', frameW: 6, frameH: 26 },
     BALLISTA: { key: 'arrow', frameW: 8, frameH: 40 },
 }
-const PROJECTILE_KEYS = ['arrow', 'bolt']
+const PROJECTILE_KEYS = ['arrow', 'bolt', 'icebolt']
+// Dard de glace du Démon de givre (10 frames 32×48), tiré vers la tour visée.
+const ICEBOLT = { frameW: 32, frameH: 48 }
 
 // Tours à arme animée : planche pré-composée (base + arme à chaque pose), jouée
 // au tir. loop=true pour le rayon continu du Mage (canalise tant qu'il vise),
@@ -207,6 +209,9 @@ export class GameScene extends Phaser.Scene {
     // Fonction de rendu du tick courant, conservée pour reprendre après une pause
     // de tuto (voir playWave / resumeWave).
     private waveRender?: () => void
+    // Évite de rejouer la volée d'explosions du château plusieurs fois (une seule
+    // chute par vague).
+    private castleFell = false
     // Indexées par id pour retrouver rapidement la tour à l'origine d'un
     // DamageEvent pendant playWave (position + profil de dégâts). Contient des
     // COPIES des données React (voir drawTowers) : les PV y sont décrémentés en
@@ -269,6 +274,10 @@ export class GameScene extends Phaser.Scene {
                 frameWidth: frameW,
                 frameHeight: frameH,
             })
+        })
+        this.load.spritesheet('proj-icebolt', '/sprites/projectiles/icebolt.png', {
+            frameWidth: ICEBOLT.frameW,
+            frameHeight: ICEBOLT.frameH,
         })
         // Tours à arme animée : planches pré-composées (base + arme). Chaque tour
         // concernée devient un Sprite animé (voir TOWER_ANIM / drawTowers).
@@ -606,6 +615,7 @@ export class GameScene extends Phaser.Scene {
         // la vague précédente (grands numéros de tick) bloquent les premiers
         // éclats du Mage au début de cette vague-ci (index repart de 0).
         this.magicFxTick.clear()
+        this.castleFell = false
 
         let index = 0
 
@@ -679,7 +689,13 @@ export class GameScene extends Phaser.Scene {
                         tower.hp = Math.max(0, tower.hp - event.damage)
                     }
                 })
-                tick.destroyedTowers.forEach((towerId) => this.towersById.delete(towerId))
+                tick.destroyedTowers.forEach((towerId) => {
+                    // Explosion de destruction à l'emplacement de la tour (réutilise
+                    // l'effet de poussière) AVANT de la retirer de l'affichage.
+                    const t = this.towersById.get(towerId)
+                    if (t) this.spawnImpact('destroy', t.x, t.y, 1.8) // feu = destruction (≠ poussière catapulte)
+                    this.towersById.delete(towerId)
+                })
                 this.drawTowers(Array.from(this.towersById.values()))
             }
 
@@ -695,6 +711,22 @@ export class GameScene extends Phaser.Scene {
             this.drawCastleAttacks(tick.castleAttacks ?? [], tick.enemies)
             this.drawBossAbilityEvents(tick.bossAbilityEvents)
             this.drawStunnedTowers(tick.stunnedTowers ?? [])
+
+            // Chute du château : volée d'explosions de feu échelonnées sur la
+            // forteresse d'arrivée (une seule fois, voir castleFell).
+            if (tick.castleHp <= 0 && !this.castleFell) {
+                this.castleFell = true
+                for (let i = 0; i < 6; i++) {
+                    this.time.delayedCall(i * 110, () => {
+                        this.spawnImpact(
+                            'bigboom',
+                            PATH_END.x + (Math.random() * 2 - 1),
+                            PATH_END.y + (Math.random() * 1.6 - 0.8),
+                            2.6,
+                        )
+                    })
+                }
+            }
     }
 
     private drawEnemies(enemies: EnemySnapshot[], deaths: string[] = [], attackingIds: Set<string> = new Set(), reachedIds: Set<string> = new Set()) {
@@ -1032,6 +1064,22 @@ export class GameScene extends Phaser.Scene {
             // Chaque menace a sa couleur : rouge = Sapeur au corps à corps,
             // violet = rayon du Boss, sinon la couleur du type (cyan Chariot,
             // gris Troll) — on identifie l'agresseur d'une tour d'un coup d'œil.
+            // Démon de givre (CHARIOT) : PAS de trait — il TIRE un dard de glace
+            // (projectile icebolt) du démon vers la tour, et l'impact `frost`
+            // éclate à l'arrivée (le DÉGÂT). Cadencé (toutes les 3 frames) pour ne
+            // pas saturer, le rayon étant continu côté backend.
+            if (enemy.type === 'CHARIOT') {
+                if (tickIndex % 3 === 0) {
+                    this.spawnProjectile('icebolt', enemyPx, enemyPy, towerPx, towerPy, () => {
+                        this.spawnImpact('frost', tower.x, tower.y, 1.2)
+                    })
+                }
+                return
+            }
+
+            // Autres assaillants : trait coloré (rouge = Sapeur au corps à corps,
+            // violet = rayon du Boss, sinon la couleur du type) — on identifie
+            // l'agresseur d'une tour d'un coup d'œil.
             const rayColor = enemy.type === 'SAPEUR' ? SIEGE_LINE_COLOR
                 : enemy.type === 'BOSS_WARLORD' ? BOSS_RAY_COLOR
                 : (ENEMY_COLORS[enemy.type] ?? SIEGE_LINE_COLOR)

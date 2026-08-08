@@ -6,8 +6,6 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 import { useGame } from '@/hooks/useGame'
 import { useAuth } from '@/hooks/useAuth'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import type { TowerData } from '@/components/game/GameScene'
 import { isCorridorCell } from '@/components/game/constants'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
@@ -321,18 +319,25 @@ export default function GamePage() {
                     </span>
                     <div className="flex items-center gap-2">
                         <img src="/sprites/ui/icon_heart.png" alt="PV" className="kcd-icon" style={{ height: 18 }} />
-                        <div className="w-28 h-3 bg-slate-700 rounded overflow-hidden">
+                        <div
+                            className="w-32 h-4 overflow-hidden"
+                            style={{ background: '#2a1810', border: '2px solid #120a06', boxShadow: 'inset 0 2px 0 rgba(0,0,0,.4)' }}
+                        >
                             <div
-                                className={`h-full transition-all ${hpRatio > 0.3 ? 'bg-green-500' : 'bg-red-500'}`}
-                                style={{ width: `${hpRatio * 100}%` }}
+                                className="h-full transition-all"
+                                style={{
+                                    width: `${hpRatio * 100}%`,
+                                    background: hpRatio > 0.3 ? '#5bbd3a' : '#d64545',
+                                    boxShadow: hpRatio > 0.3 ? 'inset 0 2px 0 #8fe06a' : 'inset 0 2px 0 #e88',
+                                }}
                             />
                         </div>
-                        <span className="text-xs text-slate-400">{liveCastleHp}/{castleMaxHp}</span>
+                        <span className="text-xs text-[#d8c193]">{liveCastleHp}/{castleMaxHp}</span>
                     </div>
-                    <span className="text-slate-400">{player?.username}</span>
-                    <Button variant="outline" size="sm" onClick={handleLogout}>
+                    <span className="text-[#d8c193]">{player?.username}</span>
+                    <button onClick={handleLogout} className="kcd-btn text-xs py-1 px-3">
                         Déconnexion
-                    </Button>
+                    </button>
                 </div>
             </div>
 
@@ -348,62 +353,59 @@ export default function GamePage() {
                         est muet), avec le mode actif surligné. Cachée en combat et
                         pour les murs (non sélectionnables). */}
                     {selectedTowerObj && !combatRunning && !isGameOver && (
-                        <Card className="bg-slate-800 border-blue-500">
-                            <CardContent className="p-4 flex flex-col gap-3">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm font-semibold text-white">
-                                        {TOWER_INFO[selectedTowerObj.type].label} · niveau {selectedTowerObj.level}
-                                    </span>
-                                    <button
-                                        onClick={() => setSelectedTowerId(null)}
-                                        className="text-slate-400 hover:text-white"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
-
-                                <Button
-                                    size="sm"
-                                    onClick={() => handleUpgradeSelected(selectedTowerObj)}
-                                    className="bg-emerald-700 hover:bg-emerald-600 text-white"
+                        <div className="kcd-panel flex flex-col gap-3">
+                            <div className="flex justify-between items-center">
+                                <span className="font-med text-base text-[#43310f]">
+                                    {TOWER_INFO[selectedTowerObj.type].label} · niv. {selectedTowerObj.level ?? 1}
+                                </span>
+                                <button
+                                    onClick={() => setSelectedTowerId(null)}
+                                    aria-label="Fermer"
                                 >
-                                    ⬆ Améliorer (-{TOWER_INFO[selectedTowerObj.type].cost * (selectedTowerObj.level ?? 1)} or)
-                                </Button>
+                                    <img src="/sprites/ui/icon_close.png" alt="Fermer" className="kcd-icon" style={{ height: 16 }} />
+                                </button>
+                            </div>
 
-                                <div>
-                                    <p className="text-xs font-semibold text-slate-300">Priorité de tir</p>
-                                    <p className="text-[11px] text-slate-500 mb-2">
-                                        Sur quel ennemi cette tour vise en premier.
-                                    </p>
-                                    <div className="flex flex-col gap-1">
-                                        {TARGETING_MODES.map((m) => {
-                                            const active = (selectedTowerObj.targetingMode ?? 'CLOSEST') === m.mode
-                                            return (
-                                                <button
-                                                    key={m.mode}
-                                                    onClick={() => handleSetTargeting(selectedTowerObj.id, m.mode)}
-                                                    className={`text-left p-2 rounded transition-all ${
-                                                        active
-                                                            ? 'bg-blue-600 text-white ring-1 ring-white'
-                                                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                                                    }`}
-                                                >
-                                                    <span className="block text-xs font-semibold">
-                                                        {active ? '✓ ' : ''}{m.label}
-                                                    </span>
-                                                    <span className="block text-[11px] opacity-80">{m.hint}</span>
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
-                                    {selectedTowerObj.type === 'BALLISTA' && (
-                                        <p className="text-[11px] text-amber-400/90 mt-2">
-                                            ⚔ La Baliste vise toujours les grosses cibles (Troll, Démon de givre, Chevalier, Boss) en priorité — le réglage ci-dessus départage seulement quand plusieurs sont à portée.
-                                        </p>
-                                    )}
+                            <button
+                                onClick={() => handleUpgradeSelected(selectedTowerObj)}
+                                className="kcd-btn text-sm py-1"
+                            >
+                                ⬆ Améliorer (-{TOWER_INFO[selectedTowerObj.type].cost * (selectedTowerObj.level ?? 1)} or)
+                            </button>
+
+                            <div>
+                                <p className="text-xs font-semibold text-[#5a3d16]">Priorité de tir</p>
+                                <p className="text-[11px] text-[#8a6a2c] mb-2">
+                                    Sur quel ennemi cette tour vise en premier.
+                                </p>
+                                <div className="flex flex-col gap-1">
+                                    {TARGETING_MODES.map((m) => {
+                                        const active = (selectedTowerObj.targetingMode ?? 'CLOSEST') === m.mode
+                                        return (
+                                            <button
+                                                key={m.mode}
+                                                onClick={() => handleSetTargeting(selectedTowerObj.id, m.mode)}
+                                                className={`text-left px-2 py-1 rounded transition-all ${
+                                                    active
+                                                        ? 'bg-[#7a5a2c] text-[#f5e8c6]'
+                                                        : 'bg-[#cdb987] text-[#5a441c] hover:bg-[#d8c79a]'
+                                                }`}
+                                            >
+                                                <span className="block text-xs font-semibold">
+                                                    {active ? '✓ ' : ''}{m.label}
+                                                </span>
+                                                <span className="block text-[11px] opacity-80">{m.hint}</span>
+                                            </button>
+                                        )
+                                    })}
                                 </div>
-                            </CardContent>
-                        </Card>
+                                {selectedTowerObj.type === 'BALLISTA' && (
+                                    <p className="text-[11px] text-[#8a3d12] mt-2">
+                                        ⚔ La Baliste vise toujours les grosses cibles (Troll, Démon de givre, Chevalier, Boss) en priorité — le réglage départage seulement quand plusieurs sont à portée.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
                     )}
 
                     <div className="kcd-panel-titled">
@@ -457,28 +459,6 @@ export default function GamePage() {
                         >
                             ↻ Nouvelle partie
                         </button>
-                    )}
-
-                    {isGameOver && (
-                        <Card className="bg-red-950 border-red-800">
-                            <CardContent className="p-3 flex flex-col gap-2">
-                                <p className="text-sm font-semibold text-red-300">💀 Château détruit</p>
-                                <Button
-                                    size="sm"
-                                    onClick={() => {
-                                        // newGame plutôt que resetGame : on reste sur la page de jeu
-                                        // (l'effet de création relance aussitôt une partie) au lieu
-                                        // d'être renvoyé à l'écran d'accueil.
-                                        setIsGameOver(false)
-                                        setMessage(null)
-                                        newGame()
-                                    }}
-                                    className="bg-slate-700 hover:bg-slate-600"
-                                >
-                                    Nouvelle partie
-                                </Button>
-                            </CardContent>
-                        </Card>
                     )}
 
                     {message && (
@@ -563,30 +543,64 @@ export default function GamePage() {
                 les Sapeurs détruisaient plus tard dans l'animation semblaient
                 "supprimées par le bonus". */}
             {awaitingBonusChoice && !isGameOver && !combatRunning && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-                    <Card className="bg-slate-800 border-slate-600 w-96">
-                        <CardContent className="p-5 flex flex-col gap-3">
-                            <h2 className="text-lg font-bold text-yellow-400">
-                                🏆 Vague {waveNumber} repoussée — choisissez un bonus
-                            </h2>
-                            <p className="text-xs text-slate-400">
-                                Un seul bonus par palier. Choisissez celui qui vous aide le plus en ce moment.
-                            </p>
-                            <div className="flex flex-col gap-2 mt-1">
-                                {availableBonuses.map((bonus) => (
-                                    <button
-                                        key={bonus.type}
-                                        onClick={() => handleChooseBonus(bonus.type)}
-                                        disabled={bonusChoiceLoading}
-                                        className="text-left p-3 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 transition-all"
-                                    >
-                                        <span className="block font-semibold text-sm text-white">{bonus.label}</span>
-                                        <span className="block text-xs text-slate-300 mt-1">{bonus.description}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 font-pixel p-4">
+                    <div className="kcd-panel-titled w-96 max-w-[92vw]">
+                        <h2 className="font-med text-lg text-[#43310f] -mt-4 mb-1 flex items-center gap-2">
+                            <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 20 }} />
+                            Vague {waveNumber} repoussée
+                        </h2>
+                        <p className="text-xs text-[#8a6a2c] mb-3">
+                            Choisis un bonus (un seul par palier) — celui qui t&apos;aide le plus maintenant.
+                        </p>
+                        <div className="flex flex-col gap-2">
+                            {availableBonuses.map((bonus) => (
+                                <button
+                                    key={bonus.type}
+                                    onClick={() => handleChooseBonus(bonus.type)}
+                                    disabled={bonusChoiceLoading}
+                                    className="text-left px-3 py-2 rounded bg-[#cdb987] hover:bg-[#d8c79a] text-[#4a361a] disabled:opacity-40 transition-all"
+                                >
+                                    <span className="block font-semibold text-sm">{bonus.label}</span>
+                                    <span className="block text-xs opacity-80 mt-0.5">{bonus.description}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Écran de défaite (château tombé) — le jeu est en survie infinie,
+                donc pas d'écran de victoire : on célèbre la vague atteinte. */}
+            {isGameOver && (
+                <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center font-pixel p-4">
+                    <div className="kcd-panel w-[360px] max-w-[92vw] text-center flex flex-col items-center gap-3">
+                        <img src="/sprites/ui/icon_defeat.png" alt="" className="kcd-icon" style={{ height: 64 }} />
+                        <h2 className="font-med text-2xl text-[#8a3d12]">Château tombé</h2>
+                        <p className="text-sm text-[#4a361a]">
+                            Tu as tenu jusqu&apos;à la <b>vague {waveNumber}</b>.
+                        </p>
+                        <p className="text-sm text-[#5a3d16] flex items-center gap-2">
+                            <img src="/sprites/ui/icon_star_gold.png" alt="" className="kcd-icon" style={{ height: 18 }} />
+                            Meilleure vague : <b>{bestWave}</b>
+                        </p>
+                        <button
+                            onClick={() => {
+                                setIsGameOver(false)
+                                setMessage(null)
+                                newGame()
+                            }}
+                            className="kcd-btn font-med text-lg py-2 w-full mt-1"
+                        >
+                            Nouvelle partie
+                        </button>
+                        <button
+                            onClick={() => setShowLeaderboard(true)}
+                            className="kcd-btn text-sm py-1 w-full flex items-center justify-center gap-2"
+                        >
+                            <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 16 }} />
+                            Classement
+                        </button>
+                    </div>
                 </div>
             )}
 
