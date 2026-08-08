@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { audio } from '@/lib/audio'
 
 type Mode = 'login' | 'register'
 
@@ -14,6 +15,15 @@ export default function AuthForm() {
     const [password, setPassword] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
+
+    // Musique du menu : démarrée au 1er geste de l'utilisateur (les navigateurs
+    // bloquent l'audio avant une interaction). La page de jeu bascule ensuite sur
+    // la musique de combat. No-op si le fichier n'est pas présent.
+    useEffect(() => {
+        const start = () => { audio.resume(); audio.music('menu') }
+        window.addEventListener('pointerdown', start, { once: true })
+        return () => window.removeEventListener('pointerdown', start)
+    }, [])
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()

@@ -15,6 +15,14 @@ if [ ! -d "$SRC" ]; then
   exit 1
 fi
 
-tar -czf "$OUT" -C frontend-web/public sprites
+# Sprites (licence CraftPix) + musiques de fond sous licence (music_*.mp3).
+# Les bruitages SFX maison sont dans git, pas besoin de les empaqueter.
+PATHS=(sprites)
+for m in frontend-web/public/sounds/music_*.mp3; do
+  [ -e "$m" ] && PATHS+=("sounds/$(basename "$m")")
+done
+
+tar -czf "$OUT" -C frontend-web/public "${PATHS[@]}"
 echo "OK → $OUT ($(du -h "$OUT" | cut -f1))"
+echo "Contenu : ${PATHS[*]}"
 echo "Transfère-le sur le serveur puis lance scripts/unpack-assets.sh là-bas."

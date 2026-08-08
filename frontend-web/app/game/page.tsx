@@ -10,6 +10,8 @@ import type { TowerData } from '@/components/game/GameScene'
 import { isCorridorCell } from '@/components/game/constants'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
 import TutorialBubble from '@/components/game/TutorialBubble'
+import AudioControls from '@/components/game/AudioControls'
+import { audio } from '@/lib/audio'
 import {
     ENEMY_TUTORIAL, TOWER_TUTORIAL, getSeenTutorials, markTutorialSeen, resetTutorial,
     type TutorialEntry,
@@ -195,9 +197,11 @@ export default function GamePage() {
         const placedType = selectedTower
         try {
             await placeTower(selectedTower, x, y, cost)
+            audio.play('tower_place')
             setMessage(`${TOWER_INFO[selectedTower].label} placé(e) en (${x}, ${y})`)
             maybeShowTutorial('tower', placedType)
         } catch {
+            audio.play('error', { volume: 0.6 })
             setMessage('Impossible de placer ici (or insuffisant ou case invalide)')
         }
     }
@@ -225,6 +229,9 @@ export default function GamePage() {
         try {
             setLoading(true)
             setCombatRunning(true)
+            audio.resume()
+            audio.play('wave_start')
+            audio.music('game') // no-op tant que la musique n'est pas fournie
             const data = await startWave()
             setMessage(`Vague ${data.number} en cours...`)
 
@@ -245,9 +252,12 @@ export default function GamePage() {
                     // best-effort : un échec n'empêche pas d'afficher le résultat de la vague.
                 })
                 if (data.gameStatus === 'DEFEAT') {
+                    audio.music(null)
+                    audio.play('defeat')
                     setIsGameOver(true)
                     setMessage(`Le château est tombé à la vague ${data.number}. Partie terminée.`)
                 } else if (data.status === 'VICTORY') {
+                    audio.play('victory')
                     setMessage(`Vague ${data.number} repoussée — +${data.goldEarned} or !`)
                 } else {
                     setMessage(`Vague ${data.number} : des ennemis ont atteint le château (-${data.castleDamageTaken} PV). +${data.goldEarned} or.`)
@@ -311,6 +321,7 @@ export default function GamePage() {
     return (
         <div
             className="relative min-h-screen lg:h-screen flex flex-col lg:overflow-hidden text-[#f0e2c4] font-pixel p-3 md:p-4"
+            onPointerDown={() => { audio.resume(); audio.music('game') }} // débloque l'audio + musique de fond au 1er geste
             style={{
                 backgroundImage: "url('/home-bg-alt.jpg')",
                 backgroundSize: 'cover',
@@ -428,7 +439,7 @@ export default function GamePage() {
                                     return (
                                         <button
                                             key={type}
-                                            onClick={() => !locked && setSelectedTower(type)}
+                                            onClick={() => { if (!locked) { audio.play('ui_click', { volume: 0.5 }); setSelectedTower(type) } }}
                                             disabled={isGameOver || combatRunning || locked}
                                             className={`kcd-btn text-sm flex justify-between items-center disabled:opacity-50 ${
                                                 selectedTower === type ? 'ring-2 ring-yellow-400' : ''
@@ -497,6 +508,9 @@ export default function GamePage() {
                     >
                         ↻ Revoir le tuto
                     </button>
+
+                    {/* Contrôle du son : mute + volume (persistés). */}
+                    <AudioControls />
                 </div>
             </div>
 

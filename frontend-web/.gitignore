@@ -40,3 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 public/sprites/
+# Musiques de fond sous licence (pack payant) : non redistribuées via git,
+# transférées par le bundle d'assets (scripts/pack-assets.sh). Les bruitages
+# SFX générés maison (public/sounds/*.mp3 hors music_*) restent, eux, versionnés.
+public/sounds/music_*.mp3

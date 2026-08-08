@@ -17,5 +17,6 @@ fi
 
 mkdir -p frontend-web/public
 tar -xzf "$ARCHIVE" -C frontend-web/public
-echo "OK → assets restaurés dans frontend-web/public/sprites/"
+echo "OK → assets restaurés dans frontend-web/public/ (sprites/ + sounds/music_*.mp3)"
 ls frontend-web/public/sprites
+ls frontend-web/public/sounds/music_*.mp3 2>/dev/null || true

@@ -1,5 +1,27 @@
 import Phaser from 'phaser'
 import { PATH_START, PATH_END, WAYPOINTS, pathDirectionAt, isCorridorCell } from './constants'
+import { audio, Sfx } from '@/lib/audio'
+
+// Association effet visuel d'impact → bruitage, avec un intervalle mini (ms) pour
+// éviter de superposer 10 sons identiques quand une AOE touche plein d'ennemis.
+const IMPACT_SFX: Record<string, { sfx: Sfx; gap: number; vol?: number }> = {
+    explosion: { sfx: 'catapult_impact', gap: 60 }, // impact catapulte = thud de rocher
+    destroy: { sfx: 'tower_destroy', gap: 60, vol: 1 }, // son propre, distinct de la catapulte
+    bigboom: { sfx: 'explosion', gap: 40 }, // chute du château = explosion (synthèse)
+    // 'fireball' (impact magique du Mage) : PAS de son d'impact — c'est le
+    // crépitement de flamme continu (shoot_mage) qui porte le Mage. Un impact
+    // ici rajoutait un "pop" sec cadencé.
+    heavy: { sfx: 'impact_hit', gap: 70 },
+    frost: { sfx: 'frost_impact', gap: 200, vol: 0.9 }, // impact = sort "epic"
+    firearrow: { sfx: 'castle_hit', gap: 120 }, // ennemi qui frappe le château
+}
+
+// Pitch du gémissement de mort selon le gabarit : gros ennemis = voix plus grave
+// (rate < 1), petits = plus aiguë. Donne de la variété avec un seul asset.
+const DEATH_PITCH: Record<string, number> = {
+    GOBLIN: 1.18, SAPEUR: 1.12, ORC: 1.0, DARK_KNIGHT: 0.95,
+    CHARIOT: 0.95, TROLL: 0.82, BOSS_WARLORD: 0.68,
+}
 
 const CELL_SIZE = 40
 const GRID_WIDTH = 20
@@ -737,6 +759,9 @@ export class GameScene extends Phaser.Scene {
                 // le temps de l'agonie.
                 const dieKey = sprite.getData('dieKey') as string
                 sprite.setData('dying', true)
+                // Pitch selon le gabarit + léger aléa (±5%) pour éviter la répétition.
+                const base = DEATH_PITCH[sprite.getData('type') as string] ?? 1
+                this.playSfx('enemy_death', 55, 0.7, base * (0.95 + Math.random() * 0.1))
                 sprite.play(dieKey)
                 sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
                     sprite.destroy()
@@ -875,7 +900,18 @@ export class GameScene extends Phaser.Scene {
      * scale : diamètre affiché en cases (l'explosion de Catapulte est agrandie
      * au rayon d'éclat pour signaler sa zone).
      */
+    // Anti-flood : ne rejoue un même bruitage que si `gap` ms se sont écoulés.
+    private sfxLast = new Map<string, number>()
+    private playSfx(name: Sfx, gap = 0, vol = 1, rate = 1) {
+        const now = this.time.now
+        if (gap > 0 && now - (this.sfxLast.get(name) ?? -1e9) < gap) return
+        this.sfxLast.set(name, now)
+        audio.play(name, { volume: vol, rate })
+    }
+
     private spawnImpact(key: string, cellX: number, cellY: number, scale = 1) {
+        const s = IMPACT_SFX[key]
+        if (s) this.playSfx(s.sfx, s.gap, s.vol ?? 1)
         const fx = this.add.sprite(
             cellX * CELL_SIZE + CELL_SIZE / 2,
             cellY * CELL_SIZE + CELL_SIZE / 2,
@@ -1064,6 +1100,7 @@ export class GameScene extends Phaser.Scene {
             // pas saturer, le rayon étant continu côté backend.
             if (enemy.type === 'CHARIOT') {
                 if (tickIndex % 3 === 0) {
+                    this.playSfx('shoot_frost', 300, 0.55)
                     this.spawnProjectile('icebolt', enemyPx, enemyPy, towerPx, towerPy, () => {
                         this.spawnImpact('frost', tower.x, tower.y, 1.2)
                     })
@@ -1108,6 +1145,7 @@ export class GameScene extends Phaser.Scene {
                 firedThisTick.add(tower.id)
                 const last = this.magicFxTick.get(tower.id) ?? -99
                 if (tickIndex - last >= MAGIC_FX_PERIOD) {
+                    this.playSfx('shoot_mage', 300, 0.32)
                     this.spawnImpact('fireball', enemy.x, enemy.y, 1.1)
                     this.magicFxTick.set(tower.id, tickIndex)
                 }
@@ -1115,6 +1153,7 @@ export class GameScene extends Phaser.Scene {
                 // Catapulte : plus de trait — le marteau s'abat (anim de tir) et
                 // l'explosion éclate sur la zone touchée. Un seul tir par tour/tick.
                 if (!impactSpawned.has(tower.id)) {
+                    this.playSfx('shoot_catapult', 50, 0.9)
                     const diameter = Math.max((tower.splashRadius ?? 0.5) * 2, 1.2)
                     this.spawnImpact('explosion', enemy.x, enemy.y, diameter)
                     impactSpawned.add(tower.id)
@@ -1131,6 +1170,7 @@ export class GameScene extends Phaser.Scene {
                     // s'anime, une flèche/carreau vole vers la cible et l'impact
                     // éclate à l'arrivée. Un seul tir par tour et par tick.
                     if (!impactSpawned.has(tower.id)) {
+                        this.playSfx(tower.type === 'BALLISTA' ? 'shoot_bolt' : 'shoot_arrow', 45, 0.8)
                         this.playTowerFire(tower.id, tower.type)
                         this.aimAndFireWeapon(tower.id, tower.type, targetPx, targetPy)
                         firedThisTick.add(tower.id)
