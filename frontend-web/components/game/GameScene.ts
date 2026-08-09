@@ -889,7 +889,7 @@ export class GameScene extends Phaser.Scene {
             if (!enemy) return
             const ex = enemy.x * CELL_SIZE + CELL_SIZE / 2
             const ey = enemy.y * CELL_SIZE + CELL_SIZE / 2
-            const arrowAngle = Phaser.Math.RadToDeg(Math.atan2(ey - fromY, ex - castleX))
+            const arrowAngle = Phaser.Math.RadToDeg(Math.atan2(ey - fromY, ex - castleX)) + 180
             this.spawnProjectile('arrow', castleX, fromY, ex, ey, () => {
                 this.spawnImpact('firearrow', enemy.x, enemy.y, 0.9, arrowAngle)
             })
@@ -1183,8 +1183,9 @@ export class GameScene extends Phaser.Scene {
                         this.aimAndFireWeapon(tower.id, tower.type, targetPx, targetPy)
                         firedThisTick.add(tower.id)
                         const originY = towerPy - CELL_SIZE * 0.45 // part de l'arme, en haut
-                        // Angle de vol de la flèche → l'impact s'oriente dessus.
-                        const arrowAngle = Phaser.Math.RadToDeg(Math.atan2(targetPy - originY, targetPx - towerPx))
+                        // Angle de vol de la flèche → l'impact s'oriente dessus (+180 :
+                        // le sprite d'impact pointe dans le sens inverse par défaut).
+                        const arrowAngle = Phaser.Math.RadToDeg(Math.atan2(targetPy - originY, targetPx - towerPx)) + 180
                         this.spawnProjectile(proj.key, towerPx, originY, targetPx, targetPy, () => {
                             if (impact) this.spawnImpact(impact, enemy.x, enemy.y, isBallista ? 1.4 : 1.0, arrowAngle)
                         })
