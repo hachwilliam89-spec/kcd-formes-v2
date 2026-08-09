@@ -889,8 +889,9 @@ export class GameScene extends Phaser.Scene {
             if (!enemy) return
             const ex = enemy.x * CELL_SIZE + CELL_SIZE / 2
             const ey = enemy.y * CELL_SIZE + CELL_SIZE / 2
+            const arrowAngle = Phaser.Math.RadToDeg(Math.atan2(ey - fromY, ex - castleX))
             this.spawnProjectile('arrow', castleX, fromY, ex, ey, () => {
-                this.spawnImpact('firearrow', enemy.x, enemy.y, 0.9)
+                this.spawnImpact('firearrow', enemy.x, enemy.y, 0.9, arrowAngle)
             })
         })
     }
@@ -915,7 +916,7 @@ export class GameScene extends Phaser.Scene {
         audio.play(name, { volume: vol, rate })
     }
 
-    private spawnImpact(key: string, cellX: number, cellY: number, scale = 1) {
+    private spawnImpact(key: string, cellX: number, cellY: number, scale = 1, angleDeg = 0) {
         const s = IMPACT_SFX[key]
         if (s) this.playSfx(s.sfx, s.gap, s.vol ?? 1)
         const fx = this.add.sprite(
@@ -925,6 +926,7 @@ export class GameScene extends Phaser.Scene {
         )
         fx.setDisplaySize(CELL_SIZE * scale, CELL_SIZE * scale)
         fx.setDepth(10) // au-dessus des ennemis et du décor
+        if (angleDeg) fx.setAngle(angleDeg) // impact orienté (ex. suit la trajectoire d'une flèche)
         fx.play(`fx-${key}`)
         fx.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => fx.destroy())
     }
@@ -1181,8 +1183,10 @@ export class GameScene extends Phaser.Scene {
                         this.aimAndFireWeapon(tower.id, tower.type, targetPx, targetPy)
                         firedThisTick.add(tower.id)
                         const originY = towerPy - CELL_SIZE * 0.45 // part de l'arme, en haut
+                        // Angle de vol de la flèche → l'impact s'oriente dessus.
+                        const arrowAngle = Phaser.Math.RadToDeg(Math.atan2(targetPy - originY, targetPx - towerPx))
                         this.spawnProjectile(proj.key, towerPx, originY, targetPx, targetPy, () => {
-                            if (impact) this.spawnImpact(impact, enemy.x, enemy.y, isBallista ? 1.4 : 1.0)
+                            if (impact) this.spawnImpact(impact, enemy.x, enemy.y, isBallista ? 1.4 : 1.0, arrowAngle)
                         })
                         impactSpawned.add(tower.id)
                     }
