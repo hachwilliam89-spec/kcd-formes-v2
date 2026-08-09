@@ -27,7 +27,13 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(request -> {
                     var config = new org.springframework.web.cors.CorsConfiguration();
-                    config.setAllowedOrigins(java.util.List.of("http://localhost:3000"));
+                    // localhost = dev ; le domaine de prod doit être autorisé sinon
+                    // Spring rejette les POST avec 403 (le navigateur envoie l'en-tête
+                    // Origin même en same-origin derrière le reverse-proxy Caddy).
+                    config.setAllowedOrigins(java.util.List.of(
+                            "http://localhost:3000",
+                            "https://kcd-formes.fr",
+                            "https://www.kcd-formes.fr"));
                     config.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
                     config.setAllowedHeaders(java.util.List.of("*"));
                     config.setAllowCredentials(true);
