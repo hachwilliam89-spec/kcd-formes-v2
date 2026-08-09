@@ -1,18 +1,18 @@
 # KCD Formes v2 — Comprendre le backend (guide néophyte)
 
-> Objectif de ce document : pouvoir expliquer à quelqu'un qui ne connaît pas le projet comment le backend est construit, pourquoi il est découpé ainsi, et quels design patterns sont utilisés où. Tous les exemples ci-dessous pointent vers de vrais fichiers du dépôt (`backend/src/main/java/com/kcdformes/...`), pas du code théorique.
+> Objectif de ce document : expliquer comment **j'ai construit** le backend, **pourquoi j'ai fait ces choix** de découpage et de patterns, et où ils se traduisent dans le code. Tous les exemples ci-dessous pointent vers de vrais fichiers du dépôt (`backend/src/main/java/com/kcdformes/...`), pas du code théorique.
 
 Dernière mise à jour : 2026-08-09 (architecture inchangée ; ajout du chemin serpentin par waypoints, du multi temps réel à venir — voir `docs/MULTIPLAYER.md`)
 
-## 1. La question de départ : pourquoi ne pas juste mettre toute la logique dans les Controllers ?
+## 1. Ma décision de départ : ne pas tout mettre dans les Controllers
 
-L'approche la plus simple (et la plus courante chez les débutants) serait d'avoir un Controller Spring qui reçoit la requête HTTP, parle directement à la base de données via JPA, et renvoie une réponse — tout dans la même classe. Ça marche pour un prototype, mais ça pose un problème dès que le projet grossit : la logique de jeu (calcul des dégâts, placement des tours, génération des vagues) se retrouve mélangée avec des préoccupations techniques (HTTP, SQL, JSON), et devient impossible à tester sans démarrer tout le serveur.
+Le réflexe le plus simple aurait été un Controller Spring qui reçoit la requête HTTP, parle directement à la base de données via JPA et renvoie la réponse — tout dans la même classe. Ça suffit pour un prototype, mais **j'ai choisi de ne pas partir là-dessus** : dès que le projet grossit, la logique de jeu (calcul des dégâts, placement des tours, génération des vagues) se mélange aux préoccupations techniques (HTTP, SQL, JSON) et devient impossible à tester sans démarrer tout le serveur.
 
-L'**architecture hexagonale** (aussi appelée "Ports & Adapters") répond à ça en imposant une règle simple : **le cœur du jeu (le domaine) ne doit rien savoir de Spring, de JPA, ni du HTTP.** Tout ce qui est "technique" est repoussé vers l'extérieur, et le domaine ne communique avec l'extérieur qu'à travers des interfaces qu'il définit lui-même (les "ports").
+**J'ai donc opté pour une architecture hexagonale** (« Ports & Adapters »), avec une règle que je me suis imposée : **le cœur du jeu (le domaine) ne doit rien savoir de Spring, de JPA ni du HTTP.** Tout ce qui est technique est repoussé vers l'extérieur, et le domaine ne communique avec le monde extérieur qu'à travers des interfaces qu'il définit lui-même (les « ports »).
 
 ## 2. Les trois couches du projet
 
-Le code Java est organisé en trois packages racine, qui correspondent exactement aux trois couches de l'architecture hexagonale :
+J'ai organisé le code Java en trois packages racine, qui correspondent exactement aux trois couches de l'architecture hexagonale :
 
 ```
 backend/src/main/java/com/kcdformes/
@@ -32,13 +32,13 @@ backend/src/main/java/com/kcdformes/
     └── config/          (sécurité, JWT, Swagger, déclaration des beans du domaine)
 ```
 
-La règle de dépendance est à sens unique : **`infrastructure` dépend de `application` qui dépend de `domain`, mais jamais l'inverse.** Si on ouvre n'importe quelle classe du package `domain`, elle ne doit importer ni `jakarta.persistence` (JPA), ni `org.springframework.web` (HTTP), ni `org.springframework.stereotype.Service`. C'est vérifiable d'un coup d'œil : par exemple `Tower.java` ou `WaveFactory.java` n'ont aucun import Spring.
+La règle que je m'impose est une **dépendance à sens unique** : **`infrastructure` dépend de `application` qui dépend de `domain`, mais jamais l'inverse.** Si on ouvre n'importe quelle classe du package `domain`, elle ne doit importer ni `jakarta.persistence` (JPA), ni `org.springframework.web` (HTTP), ni `org.springframework.stereotype.Service`. C'est vérifiable d'un coup d'œil : par exemple `Tower.java` ou `WaveFactory.java` n'ont aucun import Spring.
 
 ## 3. Le domaine : le cœur du jeu
 
 ### 3.1 Le modèle (`domain/model`)
 
-Ce sont des classes Java "pures" qui représentent les concepts du jeu et contiennent leurs propres règles. Exemple avec `Tower.java` : la classe sait calculer ses propres dégâts (`getDamage()`), sa portée (`getRange()`), son coût d'amélioration (`getUpgradeCost()`) — ce n'est pas un simple "sac de champs" (DTO anémique), c'est un objet qui encapsule du comportement. C'est ce qu'on appelle un modèle "riche" (rich domain model), à l'opposé d'un modèle où toute la logique serait dans des services externes.
+Ce sont des classes Java "pures" qui représentent les concepts du jeu et contiennent leurs propres règles. Exemple avec `Tower.java` : la classe sait calculer ses propres dégâts (`getDamage()`), sa portée (`getRange()`), son coût d'amélioration (`getUpgradeCost()`) — ce n'est pas un simple "sac de champs" (DTO anémique), c'est un objet qui encapsule du comportement. **J'ai choisi un modèle "riche" (rich domain model)**, à l'opposé d'un modèle anémique où toute la logique vivrait dans des services externes : les règles restent au plus près des données qu'elles manipulent.
 
 `TowerType` et `EnemyType` sont des enums qui regroupent les caractéristiques par type (dégâts de base, coût, PV, etc.) — une forme légère de **polymorphisme par données** : au lieu d'avoir une sous-classe Java par type de tour, chaque constante de l'enum porte ses propres valeurs, et le code se contente de lire `type.baseDamage`, `type.damageType`, etc.
 
@@ -55,7 +55,7 @@ public class DomainConfig {
 }
 ```
 
-C'est volontaire (voir le commentaire dans le fichier) : *"Déclare les services domaine purs comme beans Spring. Ils n'ont pas `@Component` car le domaine ne dépend pas de Spring."* Le domaine reste injectable par Spring sans jamais importer Spring lui-même.
+**C'est un choix délibéré de ma part** (voir le commentaire dans le fichier) : *"Déclare les services domaine purs comme beans Spring. Ils n'ont pas `@Component` car le domaine ne dépend pas de Spring."* Résultat : le domaine reste injectable par Spring sans jamais importer Spring lui-même — je garde la contrainte que je me suis fixée en §1.
 
 ### 3.3 Les ports — les interfaces du domaine
 
@@ -119,7 +119,7 @@ Cette interface ne fait *pas* partie du domaine — elle vit dans `infrastructur
 
 ### 4.3 Entités JPA vs modèle du domaine — deux objets, pas un seul
 
-Point important pour un néophyte : il y a **deux représentations différentes** pour un même concept, et c'est volontaire.
+**J'ai délibérément séparé deux représentations** pour un même concept — ce n'est pas un doublon oublié, mais un choix :
 
 - `GameEntity`, `CastleEntity`, `PlayerEntity` (dans `infrastructure/persistence/entity`) sont des classes annotées `@Entity` / `@Column`, qui décrivent une **table SQL**. Elles n'ont aucune logique de jeu, ce sont des conteneurs de données pour Hibernate.
 - `Castle`, `Tower`, `Wave` (dans `domain/model`) sont les objets du **domaine**, avec leur logique métier, et n'ont aucune annotation JPA.
@@ -142,7 +142,7 @@ Le schéma de la base lui-même évolue par **migrations Flyway** (`backend/src/
 
 ### 4.4 Les Controllers — la porte d'entrée HTTP
 
-Les controllers (`infrastructure/web/controller`) sont volontairement **fins** ("thin controllers") : ils ne contiennent aucune règle de jeu, juste de la traduction HTTP <-> appel de use case. `GameController.placeTower` :
+**J'ai gardé les controllers volontairement fins** ("thin controllers", dans `infrastructure/web/controller`) : ils ne contiennent aucune règle de jeu, juste de la traduction HTTP <-> appel de use case. `GameController.placeTower` :
 
 ```java
 @PostMapping("/{gameId}/towers")
@@ -160,7 +160,7 @@ Trois lignes : on transforme le DTO de requête en `Command` (le port "in", voir
 
 ### 4.5 Les DTOs — ne jamais exposer le domaine ou les entités directement
 
-`PlaceTowerRequest`, `CreateGameRequest`, `TowerResponse`, `GameResponse`, `WaveResponse` (dans `infrastructure/web/dto`) sont des **DTO** (Data Transfer Objects) : des `record` Java simples, dont le seul rôle est de définir la forme exacte du JSON échangé avec le frontend. Deux raisons de ne jamais renvoyer directement une entité JPA ou un objet du domaine en réponse HTTP :
+`PlaceTowerRequest`, `CreateGameRequest`, `TowerResponse`, `GameResponse`, `WaveResponse` (dans `infrastructure/web/dto`) sont des **DTO** (Data Transfer Objects) : des `record` Java simples, dont le seul rôle est de définir la forme exacte du JSON échangé avec le frontend. **Je ne renvoie jamais** directement une entité JPA ou un objet du domaine en réponse HTTP, pour deux raisons :
 
 1. **Découplage** : le contrat JSON de l'API peut évoluer indépendamment du modèle interne (ajouter/renommer un champ DTO sans toucher au domaine, ou inversement).
 2. **Sécurité/propreté** : une entité JPA traîne des relations (`@ManyToOne`), parfois chargées paresseusement (lazy) — la sérialiser directement peut planter ou fuiter des données non voulues.
@@ -188,7 +188,7 @@ Avantage : le domaine se contente de lever une exception qui porte du sens méti
 
 ## 5. La couche application — l'orchestrateur
 
-`application/usecase` contient `GameService` et `AuthService`, deux classes Spring `@Service`. C'est la couche qui **orchestre** : elle ne contient pas elle-même les règles fines du jeu (ça, c'est le domaine), mais elle sait dans quel ordre appeler les choses, gère les transactions (`@Transactional`), et fait le pont entre plusieurs entités/services à la fois.
+`application/usecase` contient `GameService` et `AuthService`, deux classes Spring `@Service`. **J'ai réservé cette couche à l'orchestration** : elle ne contient pas elle-même les règles fines du jeu (ça, c'est le domaine), mais elle sait dans quel ordre appeler les choses, gère les transactions (`@Transactional`), et fait le pont entre plusieurs entités/services à la fois.
 
 Exemple révélateur, `GameService.placeTower` : la validation géométrique du placement (case libre, ne bloque pas le chemin) est déléguée au domaine (`PlaceTowerService`, qui implémente le port `PlaceTowerUseCase`), mais la vérification et le débit de l'or — qui nécessite de connaître à la fois le `GameEntity` (solde de la partie) et la règle de déblocage par palier — est faite directement dans `GameService`, parce que ça touche plusieurs aggregats à la fois (le joueur, la partie, la tour). C'est typique du rôle d'un "service applicatif" dans la littérature hexagonale : il coordonne, le domaine décide des règles.
 
@@ -254,4 +254,4 @@ Chaque flèche traverse une frontière de couche, et à chaque frontière, l'obj
 
 ## 8. Comment raconter ça en une minute à quelqu'un
 
-"Le backend est découpé en trois couches. Au centre, le domaine contient toutes les règles du jeu — tours, ennemis, vagues, économie — sans rien savoir de la base de données ni du web. Autour, la couche application orchestre les actions (créer une partie, poser une tour, lancer une vague) en coordonnant le domaine et la persistance. Et tout autour, l'infrastructure s'occupe de la technique : les controllers traduisent le HTTP, les DTO définissent le format JSON, les entités JPA et leurs mappers s'occupent de la base PostgreSQL. Le domaine ne parle jamais directement à la base ou au web : il définit des interfaces ('ports'), et c'est l'infrastructure qui les implémente ('adapters'). Ça permet de tester toute la logique de jeu sans serveur ni base de données, et de faire évoluer la technique (changer de base, ajouter un autre frontend) sans toucher aux règles du jeu."
+"J'ai découpé le backend en trois couches. Au centre, le domaine contient toutes les règles du jeu — tours, ennemis, vagues, économie — sans rien savoir de la base de données ni du web. Autour, la couche application orchestre les actions (créer une partie, poser une tour, lancer une vague) en coordonnant le domaine et la persistance. Et tout autour, l'infrastructure s'occupe de la technique : les controllers traduisent le HTTP, les DTO définissent le format JSON, les entités JPA et leurs mappers s'occupent de la base PostgreSQL. Le domaine ne parle jamais directement à la base ou au web : il définit des interfaces ('ports'), et c'est l'infrastructure qui les implémente ('adapters'). Ça permet de tester toute la logique de jeu sans serveur ni base de données, et de faire évoluer la technique (changer de base, ajouter un autre frontend) sans toucher aux règles du jeu."
