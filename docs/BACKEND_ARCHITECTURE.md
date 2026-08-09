@@ -2,7 +2,7 @@
 
 > Objectif de ce document : pouvoir expliquer à quelqu'un qui ne connaît pas le projet comment le backend est construit, pourquoi il est découpé ainsi, et quels design patterns sont utilisés où. Tous les exemples ci-dessous pointent vers de vrais fichiers du dépôt (`backend/src/main/java/com/kcdformes/...`), pas du code théorique.
 
-Dernière mise à jour : 2026-06-26
+Dernière mise à jour : 2026-08-09 (architecture inchangée ; ajout du chemin serpentin par waypoints, du multi temps réel à venir — voir `docs/MULTIPLAYER.md`)
 
 ## 1. La question de départ : pourquoi ne pas juste mettre toute la logique dans les Controllers ?
 

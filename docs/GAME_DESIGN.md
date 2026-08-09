@@ -2,7 +2,7 @@
 
 > Document vivant : à mettre à jour à chaque décision de gameplay qui change ou affine ce qui suit. Versionné avec le code (git), pas un artefact figé.
 
-Dernière mise à jour : 2026-06-26 (premier boss + palier de bonus)
+Dernière mise à jour : 2026-08-09 (chemin serpentin, habillage v2 : pixel-art / son / tuto, cap sur le multi coop temps réel)
 
 ## 1. Vision et piliers
 
@@ -26,7 +26,7 @@ Toute décision de gameplay ci-dessous doit rester cohérente avec ces trois pil
 - **Orc**, **Troll** : ennemis "élite", débloqués à partir d'un seuil de vague (voir 2.2). Le Troll porte en plus un rayon de démolition d'appoint (`Ray` 1/tick, portée 2,5) : en défilant, il grignote la tour la plus proche — pression diffuse qui s'ajoute aux vecteurs dédiés (Sapeur, Chariot, Boss).
 - **Chevalier noir (Dark Knight)** : élite lourde et rapide, unité régulière du mix depuis la vague 6 (voir le calendrier en 2.2 — anciennement un burst tous les 5 vagues), toujours absente des vagues à Boss. **Armure enchantée** (`magicArmor`) : seuls les Mages le blessent. Les tours physiques le **ciblent et tirent quand même — tout ricoche** (dégâts 0, éclats de Catapulte compris) : il fait office de **leurre**, aspirant la cadence de la défense pendant que la piétaille défile derrière lui. Double punition pour un build sans Mage : il fuit ET gaspille vos tirs. Seule la priorité perce-blindage de la Baliste l'évite (choisir délibérément une cible invulnérable serait absurde — en ciblage « plus proche » normal, elle se fait leurrer comme les autres). Contre les murs, il frappe **×3 façon Sapeur** (`wallDamage` 12) : un défonceur de portes qu'on ne peut dissoudre qu'à la magie pendant qu'il cogne. Liseré arcane violet à l'écran.
 - **Sapeur** : dévie du chemin pour foncer sur la tour la plus proche et la détruire à coups de dégâts de siège (la case redevient constructible) ; s'il survit à sa cible, il enchaîne sur la tour suivante la plus proche, et ainsi de suite jusqu'à ce qu'il ne reste plus aucune tour sur la map — ce n'est qu'à ce moment-là qu'il reprend sa route vers le château. Débloqué dans le même mix "élite" qu'Orc/Troll. Dégâts de siège 12 → 8 : premier ajustement piloté par le harnais (voir 2.5) — à 12, le churn de tours détruites/rachetées étouffait l'économie et rendait le boss vague 10 inatteignable (mort médiane vague 7 tous builds confondus).
-- **Chariot-baliste (`CHARIOT`)** : engin de siège (vague 5, max 4/vague, poids de tirage relevé — retour de partie : trop rare et trop fragile pour peser en première version) qui descend le couloir **sans jamais dévier ni s'arrêter**, en canalisant un rayon (3/tick, portée 3) sur la tour la plus proche — retarget permanent, il tire sur ce qui passe à portée. 450 PV de base : le blindage est son identité. Décision de design : le Sapeur ne doit pas être l'unique menace sur les tours (son contre une fois construit, plus rien n'usait la défense — partie gagnée d'avance, constaté en jeu). Trois vecteurs anti-tours, trois contres : Sapeur (se snipe avant contact), Chariot (massif → cible ×2 de la Baliste, ou s'encaisse en réparant), Boss (positionnement). Silhouette carrée cyan à l'écran, rayon cyan.
+- **Chariot-baliste (`CHARIOT`)** : engin de siège (vague 5, max 4/vague, poids de tirage relevé — retour de partie : trop rare et trop fragile pour peser en première version) qui descend le couloir **sans jamais dévier ni s'arrêter**, en canalisant un rayon (3/tick, portée 3) sur la tour la plus proche — retarget permanent, il tire sur ce qui passe à portée. 450 PV de base : le blindage est son identité. Décision de design : le Sapeur ne doit pas être l'unique menace sur les tours (son contre une fois construit, plus rien n'usait la défense — partie gagnée d'avance, constaté en jeu). Trois vecteurs anti-tours, trois contres : Sapeur (se snipe avant contact), Chariot (massif → cible ×2 de la Baliste, ou s'encaisse en réparant), Boss (positionnement). **Renommé « Démon de givre » à l'affichage** (renommage cosmétique uniquement — l'enum reste `CHARIOT`) : sprite animé, tir en **dard de glace** (projectile) et **impact givré** à l'arrivée, plus de trait cyan.
 - **Boss (Seigneur de guerre / `BOSS_WARLORD`)** : premier vrai boss du jeu, voir 2.3.
 - `goldReward` de chaque type calibré au fil de plusieurs passes d'équilibrage (dernier ajustement : +20 % sur tous les types, pour rendre la vague 10 atteignable sans la garantir) — c'est cette valeur qui sert aussi de "coût de menace" dans le système de budget décrit ci-dessous.
 
@@ -70,10 +70,10 @@ Toute décision de gameplay ci-dessous doit rester cohérente avec ces trois pil
 
 ### 2.6 Terrain : couloir strict (décision)
 
-- **Décision** : le jeu est un tower defense à **couloir strict**, pas un labyrinthe. Le chemin des ennemis est fixe pour toute la partie (calculé en ignorant les tours), et le couloir — chemin élargi d'une case de part et d'autre, là où circulent les files d'ennemis (`laneOffset` ±0.8) — est **inconstructible** (`CellOnPathException`).
+- **Décision** : le jeu est un tower defense à **couloir strict** en **tracé serpentin** (un « S » sur trois voies horizontales), pas un labyrinthe. Le chemin des ennemis est **fixe** pour toute la partie, défini par une liste de **waypoints** alignés deux à deux (le tracé réel = concaténation des segments droits qui les relient), calculé en ignorant les tours ; le couloir — chemin élargi d'une case de part et d'autre, là où circulent les files d'ennemis (`laneOffset` ±0.8) — est **inconstructible** (`CellOnPathException`). Le serpentin **allonge le temps d'exposition** des ennemis à la défense : un simple couloir horizontal sous-exploitait la carte.
 - **Pourquoi** : l'ancien modèle implicite (A* qui contournait les tours, seul le blocage complet étant interdit) était un labyrinthe qui s'ignorait — on pouvait poser des tours dans le couloir dessiné et dévier les mobs hors de celui-ci, incohérence visuelle et stratégique. Le couloir strict colle au rendu existant, au style Bloons TD visé, et garde l'équilibrage maîtrisable (le harnais 2.5 suppose un chemin stable).
 - **Exception assumée** : le Sapeur reste le seul ennemi autorisé à sortir du couloir (c'est sa mécanique, voir 2.1) — une exception lisible plutôt qu'une règle molle.
-- **Implémentation** : `PathfindingService.findCorridorPath` (A* ignorant les tours) et `corridorCells` (bande chemin ±1) ; rejet dans `PlaceTowerService` ; la simulation suit le chemin de couloir ; le frontend filtre les clics sur la bande (`GameScene`, `CORRIDOR_MIN_Y/MAX_Y`). `findPath`/`hasPath` (tours = murs) sont conservés comme point de réentrée si un mode labyrinthe voit le jour.
+- **Implémentation** : les **waypoints** vivent dans `GameMap` côté backend (arbitre final) et sont **dupliqués à l'identique** côté frontend (`components/game/constants.ts`, `WAYPOINTS`) — sinon le décor ne collerait pas au déplacement réel calculé côté serveur. `PathfindingService.findCorridorPath` relie les waypoints par des segments (A* ignorant les tours) et `corridorCells` = bande chemin ±1 ; rejet dans `PlaceTowerService` ; la simulation suit le chemin de couloir ; le frontend dérive le couloir des waypoints (`isCorridorCell`) et oriente murs / armes rotatives / effets selon le sens du flux (`pathDirectionAt`), et rend une **vraie route** (tuiles + virages arrondis) sur le tracé. `findPath`/`hasPath` (tours = murs) restent conservés comme point de réentrée si un mode labyrinthe voit le jour.
 
 ### 2.7 Mur-barrage (`WALL`) et identité de la Baliste
 
@@ -85,59 +85,36 @@ Toute décision de gameplay ci-dessous doit rester cohérente avec ces trois pil
 - Le château (arrivée du couloir) encaisse `castleDamage` de chaque ennemi parvenu au bout (mécanique existante, PV du château). Il a en plus une **défense intégrée** (archers des remparts, `WaveSimulationService.CASTLE_DEFENSE_*`) : à cadence fixe, il tire sur l'ennemi vivant le plus proche de l'arrivée dans un rayon donné — dernière ligne contre les fuyards, volontairement modeste (aide à finir les stragglers, ne remplace pas la défense du joueur). Signalé au frontend par `castleAttacks` (flèche de feu depuis les remparts).
 - **Visuel** : château du joueur à l'arrivée (à défendre), château ennemi décoratif au spawn (immersion) — sprites CraftPix, le tien retourné pour faire face aux assaillants.
 
+## 2.9 Présentation / frontend (habillage v2)
+
+Ces éléments sont **purement de présentation** : la simulation reste autoritaire côté serveur (le frontend ne fait que rejouer les ticks). Ils ne changent pas les règles, mais font l'essentiel de l'effet « jeu fini » / portfolio.
+
+- **Moteur de rendu** : **Phaser** (canvas/WebGL) monté dans Next.js (import dynamique `ssr:false`), `Scale.FIT` + `pixelArt`.
+- **Habillage pixel-art médiéval** : UI reskinnée avec le pack CraftPix « Basic Pixel Art UI » (panneaux 9-slice `border-image`, boutons, HUD haut, barre de PV pixel), polices `MedievalSharp` / `Pixelify Sans`. Les **chiffres du HUD** (or, PV, coûts) sont en MedievalSharp pour la lisibilité.
+- **Terrain « champ de bataille »** : sol terre foncée + **route serpentine** générée (tuiles + virages arrondis) suivant les waypoints (voir §2.6), props décoratifs.
+- **Tutoriel (bulle BD)** : à la **1ʳᵉ apparition** de chaque ennemi (met la vague en pause) et à la **1ʳᵉ pose** de chaque tour — **par compte** (localStorage par pseudo), avec un bouton « Revoir le tuto ».
+- **Armes rotatives** : Archer, Baliste et Catapulte ont une base + une arme animée qui **vise la cible** ; les projectiles (flèche/carreau, dard de givre) volent vers la cible et l'**impact s'oriente sur la trajectoire**.
+- **Effets distincts** : destruction de tour ≠ explosion de catapulte ≠ chute du château ; démon de givre = dard + impact givré (voir §2.1).
+- **Système de son** : bruitages (certains générés, d'autres assets médiévaux) + musiques de fond (menu / combat), **bus SFX et musique séparés**, réglage **mute + volume** persisté (localStorage), déblocage du contexte audio au 1er geste.
+- **Accueil animé** : fond héros (zoom/pan Ken Burns), braises, titre pixel qui « respire », formulaire connexion/inscription (indications de validation, email non vérifié).
+- **Responsive** : `Scale.FIT` + layout adaptatif — jouable sur mobile/tablette (cible tactile préservée dès le solo, cf. §5).
+
 ## 3. Couche compétitive légère (avant le multi temps réel)
 
 - **Leaderboard** : classement global par meilleure vague atteinte. *Implémenté* : top N (borné à 50) + rang du joueur demandeur même hors du top (rang de compétition : 1 + nombre de joueurs strictement meilleurs), tri stable par username entre ex æquo. `GET /api/v1/leaderboard` (`LeaderboardService`), carte dans le panneau de jeu, rafraîchie à chaque fin de vague. L'elo de `PlayerEntity` reste réservé au futur PvP — ce classement n'en dépend pas.
 - **Défi "ghost"** : un joueur peut affronter la même vague (même seed) qu'une partie déjà enregistrée d'un autre joueur, en asynchrone — première étape vers le PvP avant d'investir dans le temps réel.
 
-## 4. Mode multi — "Château contre château" (siège mutuel)
+## 4. Mode multijoueur temps réel → voir `docs/MULTIPLAYER.md`
 
-Deux joueurs s'affrontent en duel temps réel, chacun défendant son château et attaquant celui de l'autre.
+> La conception détaillée du multijoueur vit maintenant dans **`docs/MULTIPLAYER.md`** (document dédié).
 
-### 4.1 Économie partagée (modèle Bloons TD Battles)
+**Décision v2** : on part sur du **temps réel via WebSocket/STOMP**, avec une **boucle de jeu autoritaire live** côté serveur (réutilisant les règles de domaine), dans cet ordre :
 
-- L'or ne vient **que** des ennemis tués sur son propre plateau.
-- Ce même or finance à la fois la défense (poser des tours) et l'attaque (envoyer des unités chez l'adversaire) — un seul pool, pas deux ressources séparées.
-- Conséquence de design : une bonne défense est la seule source d'attaque. Pas de ressource passive (contrairement au modèle Clash Royale, écarté).
+1. **Coop** (2 joueurs défendent la même carte) — pose toute la tuyauterie réseau proprement.
+2. **Versus rush** (deux voies, on s'envoie des ennemis) — réutilise la base coop.
+3. **Asymétrique live** (un défend, l'autre spawne) — le plus original.
 
-### 4.2 Rosters
-
-- **Tours de défense** : identiques au solo (Archer / Mage / Catapulte). Pas de duplication.
-- **Roster d'attaque (envoi chez l'adversaire)** : unités humaines dédiées au PvP — Recrue, Archer, Chevalier, Bélier de siège. Prix indexé sur une force équivalente (même logique que le `goldReward` des ennemis solo).
-- **Roster ennemis solo** (Goblin / Orc / Troll / Dark Knight / Sapeur / Chariot / Boss, voir 2.1) : reste exclusif au mode solo, ne sert pas en PvP. Cohérence thématique : monstres en PvE, armées humaines en PvP.
-
-### 4.3 Structure du plateau
-
-- Plateaux **séparés en miroir** : chaque joueur a son propre plateau, avec la même carte des deux côtés. Pas de carte unique partagée.
-- Chaque plateau tourne comme une instance indépendante de la simulation solo existante (`WaveSimulationService`, pathfinding) — aucune refonte nécessaire, juste de l'orchestration en plus.
-
-### 4.4 Spawn et rythme des vagues
-
-- Vague de base auto-générée sur chaque plateau (réutilise `WaveFactory`, même montée en difficulté que le solo).
-- Les unités envoyées par l'adversaire viennent s'ajouter au même flux que la vague de base — évite les parties stagnantes où personne n'attaque.
-- **Synchronisation par horloge serveur partagée** : le déclenchement de chaque vague est cadencé par un timer serveur commun aux deux joueurs, pas par un système "les deux doivent être prêts". Évite qu'un joueur lent ou passif bloque la partie de l'autre. Implémentation : caler les deux appels `simulate()` (un par plateau) sur le même tick serveur.
-
-### 4.5 Fin de partie et format
-
-- **Mort subite** : le premier château à 0 PV perd (réutilise `Castle.hp` / `isDestroyed()` tel quel).
-- Pas de minuteur de partie.
-- Format : round unique en mode rapide ; **best-of-3** en mode classé (une fois l'ELO en place).
-
-### 4.6 Visualisation de l'adversaire
-
-- Mini-aperçu visuel en temps réel du plateau adverse (plateau miniature), affiché en plus des stats numériques (PV château, or, numéro de vague).
-- Données diffusées en snapshots périodiques (positions des tours/ennemis pour l'affichage), pas une simulation autoritaire partagée — le calcul réel reste local à chaque plateau.
-
-### 4.7 Matchmaking
-
-- **MVP** : file d'attente simple (premier disponible apparié avec premier disponible), pas de classement.
-- **V2** : ELO, réutilisant le même système que le défi async (3.) — ne pas construire le classement avant d'avoir un mode multi qui tourne et des joueurs pour le tester.
-
-### 4.8 Réseau
-
-- **Tier WebSocket "simple"** : diffusion de l'état (snapshots : PV, or, vague, positions pour l'aperçu visuel), pas de synchronisation tick-par-tick en lockstep.
-- La simulation par lot existante côté serveur n'est pas modifiée — elle est juste déclenchée par le timer partagé (4.4) et ses résultats sont diffusés en plus d'être appliqués localement.
-- Le tier "complexe" (vrai lockstep tick-par-tick, carte unique partagée) a été écarté : trop de refonte d'architecture pour le bénéfice apporté à ce stade.
+> L'ancien plan « **château contre château** » (siège mutuel, tier WebSocket « simple » diffusant seulement des snapshots par-dessus la simulation par lot) qui figurait ici est **remplacé** par cette approche temps réel autoritaire. On garde l'idée d'économie partagée et de synchronisation par horloge serveur si elles servent le Versus. Détails, modèle de données, canaux STOMP et jalons : `docs/MULTIPLAYER.md`.
 
 ## 5. Portage mobile
 
@@ -152,9 +129,9 @@ Deux joueurs s'affrontent en duel temps réel, chacun défendant son château et
 1. Boucle solo (vagues infinies, score, économie de run).
 2. Progression de compte (déblocages liés au meilleur score).
 3. Leaderboard + défi ghost asynchrone.
-4. Multi "château contre château" (tier WebSocket simple).
+4. Multi **temps réel** : coop → versus rush → asymétrique (WebSocket/STOMP, boucle autoritaire) — voir `docs/MULTIPLAYER.md`.
 5. Matchmaking + ELO (partagé avec le défi async).
-6. Portage mobile (web responsive, puis app native si pertinent).
+6. Portage mobile (web responsive déjà en place, puis app native si pertinent).
 
 ## 7. Principes de maintenabilité et d'évolutivité
 
@@ -164,3 +141,4 @@ Deux joueurs s'affrontent en duel temps réel, chacun défendant son château et
 - **Séparation stricte des économies** : or de compte (meta-progression) et or de partie (run) sont deux concepts distincts dans le modèle de données, pour pouvoir faire évoluer l'un sans migration ni risque de casser l'autre.
 - **Tests** : suivre la convention existante (JUnit 5 + AssertJ, `@DisplayName` en français) pour toute nouvelle logique de simulation ou d'économie — voir `WaveSimulationServiceTest`, `GameMapMapperTest`, `WaveFactoryTest` comme modèles.
 - **Workflow git** : une branche par fonctionnalité, commit à chaque étape logique testable, merge sur `develop` seulement après validation locale par test manuel — convention déjà en place sur ce projet, à conserver pour toute la suite de ce plan.
+- **Déploiement / prod** : le jeu tourne en ligne sur **https://kcd-formes.fr** (VPS OVH). Stack conteneurisée (Docker Compose : PostgreSQL + backend + frontend + reverse-proxy **Caddy** avec HTTPS Let's Encrypt auto-renouvelé), déploiement **automatique via GitHub Actions** à chaque push sur `main`. Détails : `DEPLOY.md`. Les assets sous licence (sprites CraftPix, musiques) restent hors git et sont transférés par `scripts/pack-assets.sh` / `unpack-assets.sh`.
