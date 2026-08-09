@@ -36,5 +36,5 @@ jobs:
             git reset --hard origin/main
             # Assets déjà présents sur le VPS (public/sprites/) ; on vérifie.
             test -d frontend-web/public/sprites || { echo "Assets manquants — lance scripts/unpack-assets.sh"; exit 1; }
-            docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+            docker compose -f docker-compose.prod.yml --env-file .env up -d --build --remove-orphans
             docker image prune -f

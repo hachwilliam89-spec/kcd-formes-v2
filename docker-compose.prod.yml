@@ -52,17 +52,21 @@ services:
       - backend
     # Pas de port publié : nginx proxifie / → frontend:3000 en interne.
 
-  nginx:
-    image: nginx:alpine
+  caddy:
+    image: caddy:2-alpine
     restart: unless-stopped
     ports:
       - "80:80"
-      # - "443:443"   # activer avec un certificat TLS (voir DEPLOY.md, certbot)
+      - "443:443"
     volumes:
-      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # certificats Let's Encrypt (persistés = pas de re-émission à chaque redéploiement)
+      - caddy_config:/config
     depends_on:
       - frontend
       - backend
 
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:

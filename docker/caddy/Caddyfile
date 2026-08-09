@@ -1,0 +1,22 @@
+# Reverse-proxy + HTTPS automatique (Let's Encrypt) pour KCD Formes.
+# Caddy obtient et renouvelle seul le certificat TLS du domaine, et redirige
+# HTTP → HTTPS. Même origine que le front (pas de CORS) : /api → backend Spring,
+# tout le reste → front Next.js (standalone).
+{
+	email hach.william89@outlook.fr
+}
+
+kcd-formes.fr, www.kcd-formes.fr {
+	encode gzip zstd
+
+	# API Spring Boot — on NE retire PAS le préfixe /api (les contrôleurs sont
+	# mappés sur /api/v1/...), donc handle (et non handle_path).
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+
+	# Tout le reste → front Next.js.
+	handle {
+		reverse_proxy frontend:3000
+	}
+}
