@@ -4,8 +4,10 @@ import com.kcdformes.application.usecase.MatchService;
 import com.kcdformes.domain.model.match.Match;
 import com.kcdformes.infrastructure.ws.dto.JoinMatchMessage;
 import com.kcdformes.infrastructure.ws.dto.MatchStateResponse;
+import com.kcdformes.infrastructure.ws.dto.PlaceTowerMessage;
 import com.kcdformes.infrastructure.ws.dto.ReadyMessage;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
+import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.annotation.SendToUser;
@@ -13,6 +15,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -66,10 +69,27 @@ public class MatchStompController {
         matchService.startGame(id, caller.playerId());
     }
 
+    @MessageMapping("/match/{id}/tower")
+    public void placeTower(@DestinationVariable UUID id,
+                           @Payload PlaceTowerMessage message,
+                           Principal principal) {
+        Caller caller = Caller.from(principal);
+        matchService.placeTower(id, caller.playerId(), message.type(), message.x(), message.y());
+    }
+
     @MessageMapping("/match/{id}/leave")
     public void leave(@DestinationVariable UUID id, Principal principal) {
         Caller caller = Caller.from(principal);
         matchService.leave(id, caller.playerId());
+    }
+
+    /** Renvoie au joueur le motif d'un refus (pose invalide, or insuffisant…)
+     *  sur /user/queue/errors, au lieu d'un échec silencieux. */
+    @MessageExceptionHandler
+    @SendToUser("/queue/errors")
+    public Map<String, String> handleError(Exception e) {
+        String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+        return Map.of("error", msg);
     }
 
     /** Identité de l'appelant extraite du Principal STOMP. */

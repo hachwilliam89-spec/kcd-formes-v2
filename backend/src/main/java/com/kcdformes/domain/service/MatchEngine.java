@@ -26,6 +26,7 @@ public class MatchEngine {
     private static final double SOLO_TICK_MS = 120.0;
     private static final int SPAWN_INTERVAL_TICKS = 18;
     private static final int CASTLE_MAX_HP = 100;
+    private static final int STARTING_GOLD = 250;   // or PARTAGÉ au départ (coop)
     private static final int FIRST_WAVE_SIZE = 6;
 
     private final PathfindingService pathfindingService;
@@ -37,7 +38,7 @@ public class MatchEngine {
     /** Prépare l'état de jeu au démarrage d'un match (chemin + PV château). */
     public MatchGameState start(GameMap map) {
         List<Position> path = pathfindingService.findCorridorPath(map);
-        return new MatchGameState(path, CASTLE_MAX_HP, FIRST_WAVE_SIZE);
+        return new MatchGameState(path, map, CASTLE_MAX_HP, STARTING_GOLD, FIRST_WAVE_SIZE);
     }
 
     /** Avance l'état d'un tick (dtMs = durée réelle du tick). */

@@ -14,13 +14,22 @@ const W = GRID_W * CELL
 const H = GRID_H * CELL
 
 type Enemy = { id: string; type: string; x: number; y: number; hp: number; maxHp: number }
-type Snapshot = { tick: number; wave: number; castleHp: number; castleMaxHp: number; status: string; enemies: Enemy[] }
+type TowerV = { id: string; type: string; x: number; y: number; level: number }
+type Snapshot = { tick: number; wave: number; gold: number; castleHp: number; castleMaxHp: number; status: string; enemies: Enemy[]; towers: TowerV[] }
+
+const TOWER_COLORS: Record<string, string> = {
+    ARCHER: '#3fa34d', MAGE: '#8e5bd8', CATAPULT: '#d2691e', BALLISTA: '#9aa0a6', WALL: '#8a7a5a',
+}
+const TOWER_TYPES = ['ARCHER', 'MAGE', 'CATAPULT', 'WALL']
 
 export default function GameTestPage() {
     const [status, setStatus] = useState('déconnecté')
     const [code, setCode] = useState('')
     const [matchId, setMatchId] = useState<string | null>(null)
-    const [hud, setHud] = useState({ wave: 0, castleHp: 0, castleMaxHp: 0, status: '' })
+    const [towerType, setTowerType] = useState('ARCHER')
+    const [hud, setHud] = useState({ wave: 0, gold: 0, castleHp: 0, castleMaxHp: 0, status: '' })
+    const [err, setErr] = useState('')
+    const matchIdRef = useRef<string | null>(null)
     const clientRef = useRef<Client | null>(null)
     const lobbySubRef = useRef<StompSubscription | null>(null)
     const stateSubRef = useRef<StompSubscription | null>(null)
@@ -31,14 +40,15 @@ export default function GameTestPage() {
 
     function subscribeMatch(id: string) {
         const client = clientRef.current
-        if (!client || matchId === id) return
+        if (!client || matchIdRef.current === id) return
         setMatchId(id)
+        matchIdRef.current = id
         lobbySubRef.current = client.subscribe(`/topic/match/${id}`, () => {})
         stateSubRef.current = client.subscribe(`/topic/match/${id}/state`, (m) => {
             const snap: Snapshot = JSON.parse(m.body)
             prevRef.current = currRef.current
             currRef.current = { snap, t: performance.now() }
-            setHud({ wave: snap.wave, castleHp: snap.castleHp, castleMaxHp: snap.castleMaxHp, status: snap.status })
+            setHud({ wave: snap.wave, gold: snap.gold, castleHp: snap.castleHp, castleMaxHp: snap.castleMaxHp, status: snap.status })
         })
     }
 
@@ -56,6 +66,8 @@ export default function GameTestPage() {
                     setCode(st.code)
                     subscribeMatch(st.id)
                 })
+                // Motifs de refus (pose invalide, or insuffisant…) renvoyés par le serveur.
+                client.subscribe('/user/queue/errors', (m) => setErr('❌ ' + JSON.parse(m.body).error))
             },
             onStompError: (f) => setStatus('erreur : ' + (f.headers['message'] ?? '')),
             onWebSocketError: () => setStatus('erreur WS'),
@@ -66,6 +78,17 @@ export default function GameTestPage() {
 
     const send = (dest: string, body?: object) =>
         clientRef.current?.publish({ destination: dest, body: body ? JSON.stringify(body) : '{}' })
+
+    function onCanvasClick(e: React.MouseEvent<HTMLCanvasElement>) {
+        const id = matchIdRef.current
+        if (!id) return
+        setErr('')
+        // Ratio → grille : robuste même si le canvas est redimensionné/zoomé.
+        const rect = e.currentTarget.getBoundingClientRect()
+        const cx = Math.floor((e.clientX - rect.left) / rect.width * GRID_W)
+        const cy = Math.floor((e.clientY - rect.top) / rect.height * GRID_H)
+        send(`/app/match/${id}/tower`, { type: towerType, x: cx, y: cy })
+    }
 
     // Boucle de rendu : interpole entre les deux derniers snapshots.
     useEffect(() => {
@@ -88,6 +111,12 @@ export default function GameTestPage() {
             const end = WAYPOINTS[WAYPOINTS.length - 1]
             ctx.fillStyle = '#c9a24b'
             ctx.fillRect(end.x * CELL, end.y * CELL, CELL, CELL)
+
+            // tours (dernier snapshot, pas d'interpolation — statiques)
+            for (const t of currRef.current?.snap.towers ?? []) {
+                ctx.fillStyle = TOWER_COLORS[t.type] ?? '#ccc'
+                ctx.fillRect(t.x * CELL + 3, t.y * CELL + 3, CELL - 6, CELL - 6)
+            }
 
             // ennemis interpolés
             const curr = currRef.current, prev = prevRef.current
@@ -113,8 +142,20 @@ export default function GameTestPage() {
         <main style={{ maxWidth: 760, margin: '24px auto', padding: 16, fontFamily: 'monospace' }}>
             <h1 style={{ fontSize: 20 }}>Test boucle live (Jalon 3a)</h1>
             <p>Connexion : <strong>{status}</strong>
-                {matchId && <> — vague <strong>{hud.wave}</strong> — château <strong>{hud.castleHp}/{hud.castleMaxHp}</strong> — {hud.status}</>}
+                {matchId && <> — vague <strong>{hud.wave}</strong> — or <strong>{hud.gold}</strong> — château <strong>{hud.castleHp}/{hud.castleMaxHp}</strong> — {hud.status}</>}
             </p>
+            {matchId && (
+                <div style={{ display: 'flex', gap: 6, margin: '6px 0' }}>
+                    {TOWER_TYPES.map((t) => (
+                        <button key={t} onClick={() => setTowerType(t)}
+                                style={{ padding: '4px 8px', outline: towerType === t ? '2px solid #4caf50' : 'none' }}>
+                            {t}
+                        </button>
+                    ))}
+                    <span style={{ color: '#666' }}>(clique la grille pour poser)</span>
+                </div>
+            )}
+            {err && <p style={{ color: '#c0392b', margin: '4px 0' }}>{err}</p>}
             <div style={{ display: 'flex', gap: 8, margin: '10px 0', flexWrap: 'wrap' }}>
                 <button onClick={connect}>Se connecter</button>
                 <button onClick={() => send('/app/match/create')}>Créer</button>
@@ -123,7 +164,8 @@ export default function GameTestPage() {
                 <button onClick={() => send(`/app/match/${matchId}/ready`, { ready: true })} disabled={!matchId}>Prêt</button>
                 <button onClick={() => send(`/app/match/${matchId}/start`)} disabled={!matchId}>Démarrer</button>
             </div>
-            <canvas ref={canvasRef} width={W} height={H} style={{ border: '2px solid #2f1c0d', borderRadius: 6, background: '#2a1f16' }} />
+            <canvas ref={canvasRef} width={W} height={H} onClick={onCanvasClick}
+                    style={{ border: '2px solid #2f1c0d', borderRadius: 6, background: '#2a1f16', cursor: 'crosshair' }} />
             {matchId && <p style={{ color: '#666', marginTop: 8 }}>Code du match : <strong>{code || '(créé — voir l’autre écran)'}</strong> — id {matchId.slice(0, 8)}…</p>}
         </main>
     )

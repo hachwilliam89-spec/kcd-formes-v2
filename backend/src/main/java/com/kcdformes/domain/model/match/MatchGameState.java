@@ -1,5 +1,6 @@
 package com.kcdformes.domain.model.match;
 
+import com.kcdformes.domain.model.GameMap;
 import com.kcdformes.domain.model.Position;
 
 import java.util.ArrayList;
@@ -14,7 +15,9 @@ import java.util.List;
 public class MatchGameState {
 
     public final List<Position> path;                 // cases du chemin, spawn -> château
+    public final GameMap map;                         // porte les tours posées (coop : or partagé)
     public final List<LiveEnemy> enemies = new ArrayList<>();
+    public int gold;                                  // or PARTAGÉ entre les deux joueurs (coop)
     public long tick = 0;
     public int wave = 1;
     public int castleHp;
@@ -25,10 +28,12 @@ public class MatchGameState {
     public int spawnedThisWave = 0;
     public int waveSize;
 
-    public MatchGameState(List<Position> path, int castleMaxHp, int firstWaveSize) {
+    public MatchGameState(List<Position> path, GameMap map, int castleMaxHp, int startingGold, int firstWaveSize) {
         this.path = path;
+        this.map = map;
         this.castleMaxHp = castleMaxHp;
         this.castleHp = castleMaxHp;
+        this.gold = startingGold;
         this.waveSize = firstWaveSize;
     }
 }
