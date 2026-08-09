@@ -1,9 +1,11 @@
 package com.kcdformes.infrastructure.persistence.repository;
 
 import com.kcdformes.domain.model.match.Match;
+import com.kcdformes.domain.model.match.MatchStatus;
 import com.kcdformes.domain.port.out.MatchRepository;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,6 +39,13 @@ public class InMemoryMatchRepository implements MatchRepository {
     public Optional<Match> findByCode(String code) {
         UUID id = byCode.get(code);
         return id == null ? Optional.empty() : findById(id);
+    }
+
+    @Override
+    public Collection<Match> findRunning() {
+        return byId.values().stream()
+                .filter(m -> m.getStatus() == MatchStatus.RUNNING)
+                .toList();
     }
 
     @Override

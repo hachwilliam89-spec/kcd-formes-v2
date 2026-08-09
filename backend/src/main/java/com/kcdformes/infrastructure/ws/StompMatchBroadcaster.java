@@ -2,6 +2,7 @@ package com.kcdformes.infrastructure.ws;
 
 import com.kcdformes.domain.model.match.Match;
 import com.kcdformes.domain.port.out.MatchBroadcaster;
+import com.kcdformes.infrastructure.ws.dto.MatchSnapshotResponse;
 import com.kcdformes.infrastructure.ws.dto.MatchStateResponse;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
@@ -24,5 +25,12 @@ public class StompMatchBroadcaster implements MatchBroadcaster {
         messagingTemplate.convertAndSend(
                 "/topic/match/" + match.getId(),
                 MatchStateResponse.from(match));
+    }
+
+    @Override
+    public void broadcastGame(Match match) {
+        messagingTemplate.convertAndSend(
+                "/topic/match/" + match.getId() + "/state",
+                MatchSnapshotResponse.from(match));
     }
 }

@@ -19,6 +19,7 @@ public class Match {
     private final int maxPlayers;
     private MatchStatus status;
     private final List<MatchPlayer> players = new ArrayList<>();
+    private MatchGameState gameState;   // null tant que le match n'a pas démarré (LOBBY)
 
     public Match(UUID id, String code, MatchMode mode) {
         this.id = id;
@@ -72,4 +73,6 @@ public class Match {
     public MatchStatus getStatus() { return status; }
     public void setStatus(MatchStatus status) { this.status = status; }
     public List<MatchPlayer> getPlayers() { return List.copyOf(players); }
+    public MatchGameState getGameState() { return gameState; }
+    public void setGameState(MatchGameState gameState) { this.gameState = gameState; }
 }

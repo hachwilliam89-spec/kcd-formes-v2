@@ -1,5 +1,6 @@
 package com.kcdformes.infrastructure.config;
 
+import com.kcdformes.domain.service.MatchEngine;
 import com.kcdformes.domain.service.PathfindingService;
 import com.kcdformes.domain.service.WaveFactory;
 import com.kcdformes.domain.service.WaveSimulationService;
@@ -26,5 +27,10 @@ public class DomainConfig {
     @Bean
     public WaveSimulationService waveSimulationService(PathfindingService pathfindingService) {
         return new WaveSimulationService(pathfindingService);
+    }
+
+    @Bean
+    public MatchEngine matchEngine(PathfindingService pathfindingService) {
+        return new MatchEngine(pathfindingService);
     }
 }

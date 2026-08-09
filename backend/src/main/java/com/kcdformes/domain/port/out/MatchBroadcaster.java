@@ -8,6 +8,9 @@ import com.kcdformes.domain.model.match.Match;
  * Le domaine/application ignore que c'est du WebSocket derrière.
  */
 public interface MatchBroadcaster {
-    /** Diffuse l'état courant du match sur son canal (/topic/match/{id}). */
+    /** Diffuse l'état du LOBBY sur /topic/match/{id} (joueurs, prêt, statut). */
     void broadcastState(Match match);
+
+    /** Diffuse un SNAPSHOT de jeu live sur /topic/match/{id}/state (ennemis, PV…). */
+    void broadcastGame(Match match);
 }

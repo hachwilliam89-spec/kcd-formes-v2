@@ -60,6 +60,12 @@ public class MatchStompController {
         matchService.setReady(id, caller.playerId(), message.ready());
     }
 
+    @MessageMapping("/match/{id}/start")
+    public void start(@DestinationVariable UUID id, Principal principal) {
+        Caller caller = Caller.from(principal);
+        matchService.startGame(id, caller.playerId());
+    }
+
     @MessageMapping("/match/{id}/leave")
     public void leave(@DestinationVariable UUID id, Principal principal) {
         Caller caller = Caller.from(principal);

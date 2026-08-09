@@ -1,13 +1,18 @@
 package com.kcdformes.application.usecase;
 
+import com.kcdformes.domain.model.GameMap;
+import com.kcdformes.domain.model.Position;
 import com.kcdformes.domain.model.match.Match;
 import com.kcdformes.domain.model.match.MatchMode;
 import com.kcdformes.domain.model.match.MatchPlayer;
+import com.kcdformes.domain.model.match.MatchStatus;
 import com.kcdformes.domain.port.out.MatchBroadcaster;
 import com.kcdformes.domain.port.out.MatchRepository;
+import com.kcdformes.domain.service.MatchEngine;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -25,10 +30,12 @@ public class MatchService {
 
     private final MatchRepository matchRepository;
     private final MatchBroadcaster broadcaster;
+    private final MatchEngine matchEngine;
 
-    public MatchService(MatchRepository matchRepository, MatchBroadcaster broadcaster) {
+    public MatchService(MatchRepository matchRepository, MatchBroadcaster broadcaster, MatchEngine matchEngine) {
         this.matchRepository = matchRepository;
         this.broadcaster = broadcaster;
+        this.matchEngine = matchEngine;
     }
 
     /** Crée un match en LOBBY avec l'hôte comme premier joueur. */
@@ -56,6 +63,35 @@ public class MatchService {
         matchRepository.save(match);
         broadcaster.broadcastState(match);
         return match;
+    }
+
+    /** Démarre la partie : exige que tout le monde soit prêt, initialise l'état
+     *  de jeu live puis passe le match en RUNNING (la boucle de tick prend le relais). */
+    public Match startGame(UUID matchId, UUID playerId) {
+        Match match = requireMatch(matchId);
+        if (match.findPlayer(playerId).isEmpty()) {
+            throw new IllegalArgumentException("Joueur non membre de ce match");
+        }
+        if (!match.canStart()) {
+            throw new IllegalStateException("Tous les joueurs doivent être prêts (et le lobby plein)");
+        }
+        match.setGameState(matchEngine.start(defaultCoopMap()));
+        match.setStatus(MatchStatus.RUNNING);
+        matchRepository.save(match);
+        broadcaster.broadcastState(match); // signale aux clients que la partie démarre
+        return match;
+    }
+
+    /** Carte coop par défaut — mêmes waypoints que le solo (voir GameService),
+     *  pour que le décor du frontend colle au déplacement des ennemis. */
+    private GameMap defaultCoopMap() {
+        return new GameMap(20, 15, List.of(
+                new Position(0, 3),
+                new Position(17, 3),
+                new Position(17, 8),
+                new Position(2, 8),
+                new Position(2, 13),
+                new Position(19, 13)));
     }
 
     /** Un joueur quitte : match supprimé s'il devient vide, sinon diffusé. */
