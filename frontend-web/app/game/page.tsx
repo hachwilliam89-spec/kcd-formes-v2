@@ -438,7 +438,7 @@ export default function GamePage() {
                     )}
 
                     <div className="kcd-panel-titled">
-                        <h3 className="font-med text-center text-base mb-3 -mt-4 text-[#43310f]">Tours</h3>
+                        <h3 className="kcd-title font-med text-center text-lg mb-3">Tours</h3>
                         <div className="flex flex-col gap-2">
                             {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(
                                 ([type, info]) => {
@@ -532,8 +532,8 @@ export default function GamePage() {
                         className="kcd-panel-titled font-pixel w-80 max-w-[90vw]"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between -mt-4 mb-2">
-                            <h2 className="font-med text-lg flex items-center gap-2 text-[#43310f]">
+                        <div className="kcd-title flex items-center justify-between mb-3">
+                            <h2 className="font-med text-lg flex items-center gap-2">
                                 <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 20 }} />
                                 Classement
                             </h2>
@@ -577,7 +577,7 @@ export default function GamePage() {
             {awaitingBonusChoice && !isGameOver && !combatRunning && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 font-pixel p-4">
                     <div className="kcd-panel-titled w-96 max-w-[92vw]">
-                        <h2 className="font-med text-lg text-[#43310f] -mt-4 mb-1 flex items-center gap-2">
+                        <h2 className="kcd-title font-med text-lg mb-3 flex items-center gap-2">
                             <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 20 }} />
                             Vague {waveNumber} repoussée
                         </h2>
