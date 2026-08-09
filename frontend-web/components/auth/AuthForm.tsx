@@ -6,6 +6,22 @@ import { audio } from '@/lib/audio'
 
 type Mode = 'login' | 'register'
 
+// Extrait un message lisible depuis une erreur axios (le backend renvoie
+// { error: "..." }) et traduit les cas connus en français.
+function readError(err: unknown): string {
+    const e = err as { response?: { status?: number; data?: { error?: string } }; message?: string }
+    const raw = e?.response?.data?.error
+    if (raw) {
+        if (/already taken/i.test(raw)) return 'Ce nom d’utilisateur est déjà pris — choisis-en un autre.'
+        if (/password/i.test(raw)) return 'Mot de passe invalide (8 caractères minimum).'
+        if (/email/i.test(raw)) return 'Adresse email invalide.'
+        if (/username/i.test(raw)) return 'Nom d’utilisateur invalide (3 caractères minimum).'
+        return raw
+    }
+    if (e?.response?.status === 401) return 'Identifiants incorrects.'
+    return e?.message ?? 'Une erreur est survenue'
+}
+
 export default function AuthForm() {
     const { handleLogin, handleRegister } = useAuth()
 
@@ -38,7 +54,7 @@ export default function AuthForm() {
                 await handleRegister(username, email, password)
             }
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Une erreur est survenue')
+            setError(readError(err))
         } finally {
             setLoading(false)
         }
@@ -76,8 +92,12 @@ export default function AuthForm() {
                         onChange={(e) => setUsername(e.target.value)}
                         placeholder="kim"
                         required
+                        minLength={mode === 'register' ? 3 : undefined}
                         className="w-full px-2.5 py-2 text-sm text-[#3a2a12] rounded border-[3px] border-[#b9975a] bg-[#fbf3dd] outline-none focus:border-[#7a5a2c]"
                     />
+                    {mode === 'register' && (
+                        <p className="text-[11px] text-[#8a6a2c] mt-1">3 caractères min., unique.</p>
+                    )}
                 </div>
 
                 {mode === 'register' && (
@@ -104,8 +124,12 @@ export default function AuthForm() {
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
                         required
+                        minLength={mode === 'register' ? 8 : undefined}
                         className="w-full px-2.5 py-2 text-sm text-[#3a2a12] rounded border-[3px] border-[#b9975a] bg-[#fbf3dd] outline-none focus:border-[#7a5a2c]"
                     />
+                    {mode === 'register' && (
+                        <p className="text-[11px] text-[#8a6a2c] mt-1">8 caractères minimum.</p>
+                    )}
                 </div>
 
                 {error && <p className="text-sm text-[#8a3d12]">{error}</p>}
