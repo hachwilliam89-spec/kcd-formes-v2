@@ -252,6 +252,10 @@ Chaque flèche traverse une frontière de couche, et à chaque frontière, l'obj
 | **Polymorphisme par énumération** | `TowerType`, `EnemyType`, `DamageType` | Donner un comportement différent par "type" sans créer une hiérarchie de sous-classes Java. |
 | **Centralized Exception Handling** (idiome Spring) | `GlobalExceptionHandler` (`@RestControllerAdvice`) | Traduire les exceptions métier du domaine en codes HTTP appropriés, à un seul endroit. |
 
-## 8. Comment raconter ça en une minute à quelqu'un
+## 8. En résumé
 
-"J'ai découpé le backend en trois couches. Au centre, le domaine contient toutes les règles du jeu — tours, ennemis, vagues, économie — sans rien savoir de la base de données ni du web. Autour, la couche application orchestre les actions (créer une partie, poser une tour, lancer une vague) en coordonnant le domaine et la persistance. Et tout autour, l'infrastructure s'occupe de la technique : les controllers traduisent le HTTP, les DTO définissent le format JSON, les entités JPA et leurs mappers s'occupent de la base PostgreSQL. Le domaine ne parle jamais directement à la base ou au web : il définit des interfaces ('ports'), et c'est l'infrastructure qui les implémente ('adapters'). Ça permet de tester toute la logique de jeu sans serveur ni base de données, et de faire évoluer la technique (changer de base, ajouter un autre frontend) sans toucher aux règles du jeu."
+L'idée tient en une phrase : **le jeu au centre, la technique autour.**
+
+Au centre, le **domaine** porte toutes les règles (tours, ennemis, vagues, économie) et ne connaît ni la base ni le web. La couche **application** coordonne les actions — créer une partie, poser une tour, lancer une vague. Et l'**infrastructure**, tout autour, gère la technique : HTTP, JSON, PostgreSQL.
+
+Le point important : le domaine ne dépend jamais de la technique. Il déclare ce dont il a besoin (les *ports*), et l'infrastructure fournit l'implémentation (les *adapters*). Concrètement, ça me permet de tester toute la logique du jeu sans lancer de serveur ni de base, et de changer un choix technique (la base, un autre frontend) sans toucher aux règles.
