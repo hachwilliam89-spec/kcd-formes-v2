@@ -108,10 +108,13 @@ export default function AuthForm() {
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="kim@kcdformes.com"
+                            placeholder="joueur@exemple.fr"
                             required
                             className="w-full px-2.5 py-2 text-sm text-[#3a2a12] rounded border-[3px] border-[#b9975a] bg-[#fbf3dd] outline-none focus:border-[#7a5a2c]"
                         />
+                        <p className="text-[11px] text-[#8a6a2c] mt-1">
+                            Non vérifié pour l&apos;instant — un email fictif au bon format suffit.
+                        </p>
                     </div>
                 )}
 
