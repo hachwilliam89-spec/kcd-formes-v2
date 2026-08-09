@@ -4,7 +4,10 @@ import com.kcdformes.domain.model.GameMap;
 import com.kcdformes.domain.model.Position;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * État de jeu LIVE d'un match en cours (Jalon 3a : ennemis qui avancent sur le
@@ -27,6 +30,11 @@ public class MatchGameState {
     public int ticksToNextSpawn = 0;
     public int spawnedThisWave = 0;
     public int waveSize;
+
+    // Combat : cooldown de tir par tour (en « ticks solo »), et tirs du tick
+    // courant pour le rendu ({fromX, fromY, toX, toY}), remis à zéro à chaque step.
+    public final Map<UUID, Double> towerCooldowns = new HashMap<>();
+    public final List<double[]> shots = new ArrayList<>();
 
     public MatchGameState(List<Position> path, GameMap map, int castleMaxHp, int startingGold, int firstWaveSize) {
         this.path = path;

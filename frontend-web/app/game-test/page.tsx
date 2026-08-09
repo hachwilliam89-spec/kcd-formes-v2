@@ -15,7 +15,8 @@ const H = GRID_H * CELL
 
 type Enemy = { id: string; type: string; x: number; y: number; hp: number; maxHp: number }
 type TowerV = { id: string; type: string; x: number; y: number; level: number }
-type Snapshot = { tick: number; wave: number; gold: number; castleHp: number; castleMaxHp: number; status: string; enemies: Enemy[]; towers: TowerV[] }
+type Shot = { fromX: number; fromY: number; toX: number; toY: number }
+type Snapshot = { tick: number; wave: number; gold: number; castleHp: number; castleMaxHp: number; status: string; enemies: Enemy[]; towers: TowerV[]; shots: Shot[] }
 
 const TOWER_COLORS: Record<string, string> = {
     ARCHER: '#3fa34d', MAGE: '#8e5bd8', CATAPULT: '#d2691e', BALLISTA: '#9aa0a6', WALL: '#8a7a5a',
@@ -118,6 +119,16 @@ export default function GameTestPage() {
                 ctx.fillRect(t.x * CELL + 3, t.y * CELL + 3, CELL - 6, CELL - 6)
             }
 
+            // tirs du tick (traits tour → ennemi)
+            ctx.strokeStyle = 'rgba(255,235,130,0.9)'
+            ctx.lineWidth = 1.5
+            for (const sh of currRef.current?.snap.shots ?? []) {
+                ctx.beginPath()
+                ctx.moveTo(sh.fromX * CELL + CELL / 2, sh.fromY * CELL + CELL / 2)
+                ctx.lineTo(sh.toX * CELL + CELL / 2, sh.toY * CELL + CELL / 2)
+                ctx.stroke()
+            }
+
             // ennemis interpolés
             const curr = currRef.current, prev = prevRef.current
             if (curr) {
@@ -127,10 +138,16 @@ export default function GameTestPage() {
                     const p = prevById.get(e.id)
                     const x = p ? p.x + (e.x - p.x) * alpha : e.x
                     const y = p ? p.y + (e.y - p.y) * alpha : e.y
+                    const px = x * CELL + CELL / 2, py = y * CELL + CELL / 2
                     ctx.fillStyle = '#4caf50'
                     ctx.beginPath()
-                    ctx.arc(x * CELL + CELL / 2, y * CELL + CELL / 2, CELL * 0.3, 0, Math.PI * 2)
+                    ctx.arc(px, py, CELL * 0.3, 0, Math.PI * 2)
                     ctx.fill()
+                    // barre de vie
+                    const bw = CELL * 0.6, bx = px - bw / 2, by = py - CELL * 0.45
+                    ctx.fillStyle = '#000'; ctx.fillRect(bx, by, bw, 3)
+                    ctx.fillStyle = e.hp / e.maxHp > 0.3 ? '#4caf50' : '#e74c3c'
+                    ctx.fillRect(bx, by, bw * Math.max(0, e.hp / e.maxHp), 3)
                 }
             }
         }

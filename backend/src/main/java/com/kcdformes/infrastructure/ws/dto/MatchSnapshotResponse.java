@@ -19,18 +19,23 @@ public record MatchSnapshotResponse(
         int castleMaxHp,
         String status,
         List<EnemyView> enemies,
-        List<TowerView> towers
+        List<TowerView> towers,
+        List<ShotView> shots
 ) {
     public record EnemyView(String id, String type, double x, double y, int hp, int maxHp) {}
     public record TowerView(String id, String type, int x, int y, int level) {}
+    public record ShotView(double fromX, double fromY, double toX, double toY) {}
 
     public static MatchSnapshotResponse from(Match match) {
         MatchGameState s = match.getGameState();
         List<EnemyView> enemies = s.enemies.stream().map(MatchSnapshotResponse::toView).toList();
         List<TowerView> towers = s.map.getTowers().stream().map(MatchSnapshotResponse::toView).toList();
+        List<ShotView> shots = s.shots.stream()
+                .map(sh -> new ShotView(sh[0], sh[1], sh[2], sh[3]))
+                .toList();
         return new MatchSnapshotResponse(
                 s.tick, s.wave, s.gold, s.castleHp, s.castleMaxHp,
-                match.getStatus().name(), enemies, towers);
+                match.getStatus().name(), enemies, towers, shots);
     }
 
     private static EnemyView toView(LiveEnemy e) {

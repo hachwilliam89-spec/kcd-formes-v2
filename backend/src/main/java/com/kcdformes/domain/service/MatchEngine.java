@@ -3,6 +3,8 @@ package com.kcdformes.domain.service;
 import com.kcdformes.domain.model.EnemyType;
 import com.kcdformes.domain.model.GameMap;
 import com.kcdformes.domain.model.Position;
+import com.kcdformes.domain.model.Tower;
+import com.kcdformes.domain.model.TowerType;
 import com.kcdformes.domain.model.match.LiveEnemy;
 import com.kcdformes.domain.model.match.MatchGameState;
 
@@ -44,6 +46,8 @@ public class MatchEngine {
     /** Avance l'état d'un tick (dtMs = durée réelle du tick). */
     public void step(MatchGameState s, double dtMs) {
         s.tick++;
+        s.shots.clear();
+        double soloTicks = dtMs / SOLO_TICK_MS; // « ticks solo » écoulés ce tick live
 
         // 1) Spawn cadencé jusqu'à atteindre la taille de vague.
         if (s.spawnedThisWave < s.waveSize) {
@@ -68,12 +72,57 @@ public class MatchEngine {
             }
         }
 
-        // 3) Vague suivante quand tout est spawné et nettoyé.
+        // 3) Combat : chaque tour (hors mur) vise l'ennemi le plus proche à portée
+        // selon sa cadence, et lui inflige ses dégâts. (3b : cible unique pour tous
+        // les types — l'AOE de la Catapulte et l'armure du Chevalier viendront après.)
+        for (Tower tower : s.map.getTowers()) {
+            if (tower.getType() == TowerType.WALL) continue;
+            double cd = s.towerCooldowns.getOrDefault(tower.getId(), 0.0) - soloTicks;
+            if (cd <= 0) {
+                LiveEnemy target = nearestInRange(tower, s.enemies);
+                if (target != null) {
+                    target.hp -= tower.getDamage();
+                    s.shots.add(new double[]{tower.getX(), tower.getY(), target.x, target.y});
+                    cd = 1.0 / tower.getType().attackSpeed; // prochaine salve (en ticks solo)
+                } else {
+                    cd = 0; // pas de cible : reste prêt à tirer
+                }
+            }
+            s.towerCooldowns.put(tower.getId(), cd);
+        }
+
+        // 4) Morts : retire les ennemis à 0 PV et crédite l'or PARTAGÉ.
+        Iterator<LiveEnemy> dead = s.enemies.iterator();
+        while (dead.hasNext()) {
+            LiveEnemy e = dead.next();
+            if (e.hp <= 0) {
+                s.gold += e.type.goldReward;
+                dead.remove();
+            }
+        }
+
+        // 5) Vague suivante quand tout est spawné et nettoyé.
         if (s.spawnedThisWave >= s.waveSize && s.enemies.isEmpty()) {
             s.wave++;
             s.spawnedThisWave = 0;
             s.waveSize += 2;
         }
+    }
+
+    /** Ennemi vivant le plus proche dans la portée de la tour (cases). */
+    private LiveEnemy nearestInRange(Tower tower, List<LiveEnemy> enemies) {
+        double range = tower.getRange();
+        LiveEnemy best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (LiveEnemy e : enemies) {
+            if (e.hp <= 0) continue;
+            double d = Math.hypot(tower.getX() - e.x, tower.getY() - e.y);
+            if (d <= range && d < bestDist) {
+                bestDist = d;
+                best = e;
+            }
+        }
+        return best;
     }
 
     /** Fait avancer un ennemi de `dist` cases le long du chemin. */
