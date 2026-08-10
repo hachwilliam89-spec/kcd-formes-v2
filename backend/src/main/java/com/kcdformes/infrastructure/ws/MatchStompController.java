@@ -3,6 +3,7 @@ package com.kcdformes.infrastructure.ws;
 import com.kcdformes.application.usecase.MatchService;
 import com.kcdformes.domain.model.match.Match;
 import com.kcdformes.domain.model.match.MatchMode;
+import com.kcdformes.infrastructure.ws.dto.ChatSendMessage;
 import com.kcdformes.infrastructure.ws.dto.ChooseBonusMessage;
 import com.kcdformes.infrastructure.ws.dto.CreateMatchMessage;
 import com.kcdformes.infrastructure.ws.dto.JoinMatchMessage;
@@ -106,6 +107,14 @@ public class MatchStompController {
                       Principal principal) {
         Caller caller = Caller.from(principal);
         matchService.chooseBonus(id, caller.playerId(), message.type());
+    }
+
+    @MessageMapping("/match/{id}/chat")
+    public void chat(@DestinationVariable UUID id,
+                     @Payload ChatSendMessage message,
+                     Principal principal) {
+        Caller caller = Caller.from(principal);
+        matchService.sendChat(id, caller.playerId(), caller.username(), message.text());
     }
 
     @MessageMapping("/match/{id}/leave")

@@ -212,6 +212,19 @@ public class MatchService {
         broadcastLive(match);
     }
 
+    /** Chat de match : rediffuse le message aux joueurs (membres uniquement, texte borné). */
+    public void sendChat(UUID matchId, UUID playerId, String username, String text) {
+        Match match = requireMatch(matchId);
+        if (match.findPlayer(playerId).isEmpty()) {
+            throw new IllegalArgumentException("Joueur non membre de ce match");
+        }
+        if (text == null) return;
+        String clean = text.strip();
+        if (clean.isEmpty()) return;
+        if (clean.length() > 300) clean = clean.substring(0, 300);
+        broadcaster.broadcastChat(match, playerId.toString(), username, clean);
+    }
+
     /** Diffuse l'état live selon le mode (versus = deux boards, coop = board partagé). */
     private void broadcastLive(Match match) {
         if (match.getMode() == MatchMode.VERSUS) broadcaster.broadcastVersus(match);

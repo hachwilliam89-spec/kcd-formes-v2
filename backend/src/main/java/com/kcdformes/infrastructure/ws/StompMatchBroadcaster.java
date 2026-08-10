@@ -3,6 +3,7 @@ package com.kcdformes.infrastructure.ws;
 import com.kcdformes.domain.model.match.Match;
 import com.kcdformes.domain.port.out.MatchBroadcaster;
 import com.kcdformes.domain.model.match.MatchPlayer;
+import com.kcdformes.infrastructure.ws.dto.ChatMessageResponse;
 import com.kcdformes.infrastructure.ws.dto.MatchSnapshotResponse;
 import com.kcdformes.infrastructure.ws.dto.MatchStateResponse;
 import com.kcdformes.infrastructure.ws.dto.VersusPlayerView;
@@ -47,5 +48,12 @@ public class StompMatchBroadcaster implements MatchBroadcaster {
                     "/topic/match/" + match.getId() + "/player/" + p.getPlayerId(),
                     VersusPlayerView.from(match, p));
         }
+    }
+
+    @Override
+    public void broadcastChat(Match match, String senderId, String username, String text) {
+        messagingTemplate.convertAndSend(
+                "/topic/match/" + match.getId() + "/chat",
+                new ChatMessageResponse(senderId, username, text, System.currentTimeMillis()));
     }
 }

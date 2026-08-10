@@ -6,6 +6,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { Client, type StompSubscription } from '@stomp/stompjs'
 import { wsBaseUrl } from '@/lib/ws'
+import type { ChatMessage } from '@/components/game/ChatPanel'
 
 export type PlayerView = { playerId: string; username: string; ready: boolean; connected: boolean }
 export type MatchState = {
@@ -28,10 +29,12 @@ export function useCoop() {
     const [error, setError] = useState<string | null>(null)
     const [match, setMatch] = useState<MatchState | null>(null)
     const [hud, setHud] = useState<CoopHud | null>(null)
+    const [chat, setChat] = useState<ChatMessage[]>([])
 
     const clientRef = useRef<Client | null>(null)
     const topicSub = useRef<StompSubscription | null>(null)
     const stateSub = useRef<StompSubscription | null>(null)
+    const chatSub = useRef<StompSubscription | null>(null)
     const matchIdRef = useRef<string | null>(null)
     // Consommateur du flux de snapshots (le plateau Phaser) — branché par la page.
     const snapHandlerRef = useRef<((snap: Snapshot) => void) | null>(null)
@@ -48,9 +51,14 @@ export function useCoop() {
         // (reconnexion) lève une exception qui avortait le ré-abonnement → try/catch.
         try { topicSub.current?.unsubscribe() } catch { /* connexion morte */ }
         try { stateSub.current?.unsubscribe() } catch { /* connexion morte */ }
+        try { chatSub.current?.unsubscribe() } catch { /* connexion morte */ }
         topicSub.current = client.subscribe(`/topic/match/${id}`, (m) => {
             lastMsgRef.current = Date.now()
             setMatch(JSON.parse(m.body))
+        })
+        chatSub.current = client.subscribe(`/topic/match/${id}/chat`, (m) => {
+            const c: ChatMessage = JSON.parse(m.body)
+            setChat((prev) => [...prev, c].slice(-100))
         })
         stateSub.current = client.subscribe(`/topic/match/${id}/state`, (m) => {
             lastMsgRef.current = Date.now()
@@ -114,14 +122,15 @@ export function useCoop() {
         start: () => mid() && send(`/app/match/${mid()}/start`),
         placeTower: (type: string, x: number, y: number) => { setError(null); mid() && send(`/app/match/${mid()}/tower`, { type, x, y }) },
         chooseBonus: (type: string) => { setError(null); mid() && send(`/app/match/${mid()}/bonus`, { type }) },
+        sendChat: (text: string) => { mid() && send(`/app/match/${mid()}/chat`, { text }) },
         leave: () => {
             if (mid()) send(`/app/match/${mid()}/leave`)
-            topicSub.current?.unsubscribe(); stateSub.current?.unsubscribe()
-            topicSub.current = stateSub.current = null
+            topicSub.current?.unsubscribe(); stateSub.current?.unsubscribe(); chatSub.current?.unsubscribe()
+            topicSub.current = stateSub.current = chatSub.current = null
             matchIdRef.current = null
             statusRef.current = ''; lastMsgRef.current = 0
             if (watchdogRef.current) { clearInterval(watchdogRef.current); watchdogRef.current = null }
-            setMatch(null); setHud(null)
+            setMatch(null); setHud(null); setChat([])
         },
         clearError: () => setError(null),
         // Branche le consommateur du flux de snapshots (plateau Phaser).
@@ -131,11 +140,11 @@ export function useCoop() {
             if (watchdogRef.current) { clearInterval(watchdogRef.current); watchdogRef.current = null }
             try { clientRef.current?.deactivate() } catch { /* déjà mort */ }
             clientRef.current = null
-            topicSub.current = stateSub.current = null
+            topicSub.current = stateSub.current = chatSub.current = null
             matchIdRef.current = null; statusRef.current = ''; lastMsgRef.current = 0
-            setConnected(false)
+            setConnected(false); setChat([])
         },
     }
 
-    return { connected, error, match, hud, actions }
+    return { connected, error, match, hud, chat, actions }
 }

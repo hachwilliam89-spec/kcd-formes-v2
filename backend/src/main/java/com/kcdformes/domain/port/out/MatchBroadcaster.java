@@ -16,4 +16,7 @@ public interface MatchBroadcaster {
 
     /** Diffuse un SNAPSHOT versus (les DEUX boards) sur /topic/match/{id}/state. */
     void broadcastVersus(Match match);
+
+    /** Diffuse un message de chat aux joueurs du match sur /topic/match/{id}/chat. */
+    void broadcastChat(Match match, String senderId, String username, String text);
 }
