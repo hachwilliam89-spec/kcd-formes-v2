@@ -364,6 +364,12 @@ export default function GamePage() {
                         <span className="font-med text-sm text-[#f0e2c4]">{liveCastleHp}/{castleMaxHp}</span>
                     </div>
                     <span className="text-[#d8c193]">{player?.username}</span>
+                    <button onClick={() => router.push('/coop')} className="kcd-btn text-xs py-1 px-3">
+                        🤝 Coop
+                    </button>
+                    <button onClick={() => router.push('/versus')} className="kcd-btn text-xs py-1 px-3">
+                        ⚔ Versus
+                    </button>
                     <button onClick={handleLogout} className="kcd-btn text-xs py-1 px-3">
                         Déconnexion
                     </button>
