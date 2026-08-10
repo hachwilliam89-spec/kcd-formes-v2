@@ -53,12 +53,14 @@ const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCa
         gameRef.current = new Phaser.Game({
             type: Phaser.AUTO,
             parent: 'coop-phaser-container',
-            backgroundColor: '#0f172a',
+            transparent: true, // la marge laisse transparaître le décor de la page
             scene: scene,
             pixelArt: true,
             scale: {
                 mode: Phaser.Scale.FIT,
-                autoCenter: Phaser.Scale.CENTER_BOTH,
+                // Centré verticalement mais CALÉ À GAUCHE : tout l'espace vide se
+                // retrouve à droite, où vient se loger le chat (sans rogner le plateau).
+                autoCenter: Phaser.Scale.CENTER_VERTICALLY,
                 width: 800,
                 height: 600,
             },

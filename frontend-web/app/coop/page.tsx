@@ -12,6 +12,8 @@ import { useCoop } from '@/hooks/useCoop'
 import type { CoopCanvasHandle } from '@/components/coop/CoopCanvas'
 import { TowerIcon } from '@/components/game/UnitIcon'
 import { UnitChip } from '@/components/game/UnitChip'
+import { ChatPanel } from '@/components/game/ChatPanel'
+import { useHasGutter } from '@/components/game/useHasGutter'
 import { isCorridorCell } from '@/components/game/constants'
 import { audio } from '@/lib/audio'
 
@@ -43,12 +45,14 @@ const BONUSES: { type: string; label: string }[] = [
 export default function CoopPage() {
     const router = useRouter()
     const { player, isAuthenticated, hasHydrated } = useAuthStore()
-    const { connected, error, match, hud, actions } = useCoop()
+    const { connected, error, match, hud, chat, actions } = useCoop()
 
     const [code, setCode] = useState('')
     const [selectedTower, setSelectedTower] = useState<TowerType>('ARCHER')
     const [notice, setNotice] = useState<string | null>(null)
     const canvasRef = useRef<CoopCanvasHandle>(null)
+    const { ref: boardRef, gutter } = useHasGutter()
+    const showChat = gutter >= 340
 
     useEffect(() => {
         actions.setSnapshotHandler((snap) => canvasRef.current?.pushSnapshot(snap))
@@ -103,32 +107,39 @@ export default function CoopPage() {
         >
             <div className="absolute inset-0 bg-[#160f08]/85" />
 
-            {/* ---- HUD compact ---- */}
-            <div className="relative z-10 kcd-panel-wood flex flex-wrap items-center gap-x-4 gap-y-2 mb-2 shrink-0 py-2">
-                <h1 className="font-med text-xl md:text-2xl text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>Coop</h1>
+            {/* ---- HUD : 3 zones (ressources · vague · équipe + menu) ---- */}
+            <div className="relative z-10 kcd-panel-wood flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-2 shrink-0 py-1">
+                {/* Gauche : titre + ressources */}
+                <div className="flex items-center gap-3">
+                    <h1 className="font-med text-xl md:text-2xl text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>Coop</h1>
+                    {running && hud && (
+                        <>
+                            <span className="flex items-center gap-1 text-yellow-300 font-med text-xl">
+                                <img src="/sprites/ui/icon_gold.png" alt="or" className="kcd-icon" /> {gold}
+                            </span>
+                            <span className="flex items-center gap-2">
+                                <img src="/sprites/ui/icon_heart.png" alt="PV" className="kcd-icon" style={{ height: 18 }} />
+                                <span className="w-28 h-4 overflow-hidden inline-block align-middle" style={{ background: '#2a1810', border: '2px solid #120a06' }}>
+                                    <span className="h-full block transition-all" style={{ width: `${castleRatio * 100}%`, background: castleRatio > 0.3 ? '#5bbd3a' : '#d64545' }} />
+                                </span>
+                                <span className="font-med text-sm">{hud.castleHp}/{hud.castleMaxHp}</span>
+                            </span>
+                        </>
+                    )}
+                </div>
 
+                {/* Centre : vague */}
                 {running && hud && (
-                    <>
-                        <span className="flex items-center gap-1 text-yellow-300 font-med text-xl">
-                            <img src="/sprites/ui/icon_gold.png" alt="or" className="kcd-icon" /> {gold}
-                        </span>
-                        <span className="font-med text-yellow-300 text-lg">Vague {hud.wave}</span>
-                        <div className="flex items-center gap-2">
-                            <img src="/sprites/ui/icon_heart.png" alt="PV" className="kcd-icon" style={{ height: 18 }} />
-                            <div className="w-28 h-4 overflow-hidden" style={{ background: '#2a1810', border: '2px solid #120a06' }}>
-                                <div className="h-full transition-all" style={{ width: `${castleRatio * 100}%`, background: castleRatio > 0.3 ? '#5bbd3a' : '#d64545' }} />
-                            </div>
-                            <span className="font-med text-sm">{hud.castleHp}/{hud.castleMaxHp}</span>
-                        </div>
-                        {match && (
-                            <span className="text-[#5a3d16] text-xs hidden md:inline">Équipe : {match.players.map((p) => p.username).join(', ')}</span>
-                        )}
-                    </>
+                    <span className="font-med text-yellow-300 text-2xl">Vague {hud.wave}</span>
                 )}
 
-                <div className="ml-auto flex items-center gap-3">
+                {/* Droite : équipe + menu */}
+                <div className="flex items-center gap-3">
+                    {running && match && (
+                        <span className="text-[#d8c193] text-xs hidden md:inline">Équipe : {match.players.map((p) => p.username).join(', ')}</span>
+                    )}
                     {!connected && <span className="text-[#e9d9b0] text-xs">Connexion…</span>}
-                    <span className="text-[#d8c193] text-sm hidden sm:inline">{player?.username}</span>
+                    <span className="text-[#d8c193] text-sm hidden lg:inline">{player?.username}</span>
                     <button onClick={() => { actions.leave(); router.push('/game') }} className="kcd-btn text-xs py-1 px-3">← Solo</button>
                 </div>
             </div>
@@ -214,7 +225,8 @@ export default function CoopPage() {
             {/* ---- PARTIE EN COURS : plateau plein écran + barre d'action ---- */}
             {running && (
                 <div className="relative z-10 flex-1 min-h-0 flex flex-col gap-2">
-                    <div className="relative flex-1 min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
+                    <div ref={boardRef} className="flex-1 min-h-0 flex gap-2 justify-center">
+                    <div className={`relative min-h-0 rounded-lg overflow-hidden ${showChat ? 'h-full aspect-[4/3] shrink-0' : 'flex-1'}`} style={{ border: '2px solid #2f1c0d' }}>
                         <CoopCanvas ref={canvasRef} onCellClick={place} selectedTower={selectedTower} />
                         {(notice || error) && (
                             <div className="absolute left-1/2 -translate-x-1/2 bottom-2 z-20 kcd-panel text-xs px-3 py-1 whitespace-nowrap">
@@ -222,7 +234,7 @@ export default function CoopPage() {
                             </div>
                         )}
                         {hud && hud.pendingBonuses > 0 && (
-                            <div className="absolute top-2 right-2 z-20 flex items-center gap-2 px-3 py-2 rounded-lg ring-2 ring-yellow-400" style={{ background: 'rgba(58,44,20,.95)' }}>
+                            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3 py-2 rounded-lg ring-2 ring-yellow-400" style={{ background: 'rgba(58,44,20,.95)' }}>
                                 <span className="font-med text-sm text-yellow-300">Bonus{hud.pendingBonuses > 1 ? ` x${hud.pendingBonuses}` : ''} !</span>
                                 {BONUSES.map((b) => (
                                     <button key={b.type} onClick={() => actions.chooseBonus(b.type)}
@@ -233,8 +245,13 @@ export default function CoopPage() {
                             </div>
                         )}
                     </div>
+                    {showChat && (
+                        <ChatPanel messages={chat} myId={player?.playerId} onSend={actions.sendChat}
+                                   className="w-[320px] shrink-0 min-h-0" />
+                    )}
+                    </div>
 
-                    <div className="kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-2">
+                    <div className="kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-1.5">
                         <span className="font-med text-sm text-[#e9d9b0] w-20 shrink-0">Tours</span>
                         <div className="flex flex-wrap gap-1.5">
                             {TOWERS.map((t) => (

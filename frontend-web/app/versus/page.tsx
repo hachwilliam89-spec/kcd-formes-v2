@@ -14,6 +14,8 @@ import { useVersus } from '@/hooks/useVersus'
 import type { CoopCanvasHandle } from '@/components/coop/CoopCanvas'
 import { TowerIcon, EnemyIcon } from '@/components/game/UnitIcon'
 import { UnitChip } from '@/components/game/UnitChip'
+import { ChatPanel, type ChatMessage } from '@/components/game/ChatPanel'
+import { useHasGutter } from '@/components/game/useHasGutter'
 import { isCorridorCell } from '@/components/game/constants'
 import { audio } from '@/lib/audio'
 
@@ -43,6 +45,16 @@ const BONUSES: { type: string; label: string }[] = [
     { type: 'TOWER_REPAIR', label: '🔧 Tours' },
 ]
 
+// Tuto guidé : le Héraut parle dans le chat, et chaque phrase surligne la zone
+// (target) qu'elle décrit — plateau, barre des tours, envois, panneau, adversaire.
+const TUTO_STEPS: { target: string; text: string }[] = [
+    { target: 'board', text: "Bienvenue, seigneur ! Voici ton champ de bataille — protège ton château." },
+    { target: 'towers', text: "Pose tes tours depuis cette barre, sur les cases hors du chemin." },
+    { target: 'sends', text: "Dépense ton or ici pour envoyer des créatures chez l'adversaire — ton revenu grimpe." },
+    { target: 'bonus', text: "Tous les 50 ennemis tués, un bonus t'attend dans ce panneau." },
+    { target: 'opponent', text: "Garde un œil sur l'adversaire ici. Le dernier château debout l'emporte !" },
+]
+
 // Catalogue d'envois (miroir de SendCatalog côté backend) : coût / revenu / couleur.
 const SENDS: { type: string; label: string; cost: number; income: number; color: string }[] = [
     { type: 'GOBLIN', label: 'Gobelin', cost: 70, income: 2, color: '#84cc16' },
@@ -57,12 +69,24 @@ const SENDS: { type: string; label: string; cost: number; income: number; color:
 export default function VersusPage() {
     const router = useRouter()
     const { player, isAuthenticated, hasHydrated } = useAuthStore()
-    const { connected, error, match, myHud, oppHud, winnerId, actions } = useVersus(player?.playerId)
+    const { connected, error, match, myHud, oppHud, winnerId, chat, actions } = useVersus(player?.playerId)
 
     const [code, setCode] = useState('')
     const [selectedTower, setSelectedTower] = useState<TowerType>('ARCHER')
     const [notice, setNotice] = useState<string | null>(null)
     const canvasRef = useRef<CoopCanvasHandle>(null)
+    // Marge dispo à côté du plateau 4:3 → on n'affiche les panneaux latéraux que
+    // s'il y a la place, sans jamais rogner la grille (prioritaire).
+    const { ref: boardRef, gutter } = useHasGutter()
+    const showChat = gutter >= 340            // chat collé à droite du plateau
+    const showOpp = gutter >= 660             // + aperçu adversaire à gauche (grand écran)
+
+    // Tuto guidé : au lancement, on dévoile une phrase du Héraut toutes les 5 s ;
+    // la zone correspondante est surlignée le temps de son étape. Désactivable (retenu).
+    const [tutoStep, setTutoStep] = useState(-1)
+    const [tutoOff, setTutoOff] = useState(false)
+    useEffect(() => { try { if (localStorage.getItem('kcd_tuto_off') === '1') setTutoOff(true) } catch { /* ignore */ } }, [])
+    const skipTuto = () => { setTutoStep(-1); setTutoOff(true); try { localStorage.setItem('kcd_tuto_off', '1') } catch { /* ignore */ } }
 
     useEffect(() => {
         if (hasHydrated && !isAuthenticated) router.push('/')
@@ -98,6 +122,19 @@ export default function VersusPage() {
     const me = match?.players.find((p) => p.playerId === player?.playerId)
     const iWon = winnerId != null && winnerId === player?.playerId
 
+    // Démarre / rejoue le tuto à chaque nouvelle partie (sauf s'il est désactivé).
+    useEffect(() => {
+        if (!running || tutoOff) { setTutoStep(-1); return }
+        setTutoStep(0)
+        const id = setInterval(() => setTutoStep((s) => (s >= TUTO_STEPS.length - 1 ? s : s + 1)), 5000)
+        return () => clearInterval(id)
+    }, [running, tutoOff])
+
+    const hlTarget = tutoStep >= 0 ? TUTO_STEPS[tutoStep].target : null
+    const tutoMsgs: ChatMessage[] = tutoStep < 0
+        ? []
+        : TUTO_STEPS.slice(0, tutoStep + 1).map((s, i) => ({ senderId: 'guide', username: 'Le Héraut', text: s.text, ts: i }))
+
     function place(x: number, y: number) {
         if (!running) return
         setNotice(null)
@@ -121,41 +158,47 @@ export default function VersusPage() {
         >
             <div className="absolute inset-0 bg-[#160f08]/85" />
 
-            {/* ---- HUD compact (une ligne, se réagence) ---- */}
-            <div className="relative z-10 kcd-panel-wood flex flex-wrap items-center gap-x-4 gap-y-2 mb-2 shrink-0 py-2">
-                <h1 className="font-med text-xl md:text-2xl text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>Versus</h1>
+            {/* ---- HUD : 3 zones (tes ressources · vague · adversaire + menu) ---- */}
+            <div className="relative z-10 kcd-panel-wood flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-2 shrink-0 py-1">
+                {/* Gauche : titre + tes ressources */}
+                <div className="flex items-center gap-3">
+                    <h1 className="font-med text-xl md:text-2xl text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>Versus</h1>
+                    {running && myHud && (
+                        <>
+                            <span className="flex items-center gap-1 text-yellow-300 font-med text-xl">
+                                <img src="/sprites/ui/icon_gold.png" alt="or" className="kcd-icon" /> {gold}
+                                <span className="text-green-300 text-xs ml-1">+{myHud.income}/vague</span>
+                            </span>
+                            <span className="flex items-center gap-2">
+                                <img src="/sprites/ui/icon_heart.png" alt="PV" className="kcd-icon" style={{ height: 18 }} />
+                                <span className="w-24 h-4 overflow-hidden inline-block align-middle" style={{ background: '#2a1810', border: '2px solid #120a06' }}>
+                                    <span className="h-full block transition-all" style={{ width: `${myRatio * 100}%`, background: myRatio > 0.3 ? '#5bbd3a' : '#d64545' }} />
+                                </span>
+                                <span className="font-med text-sm">{myHud.castleHp}</span>
+                            </span>
+                            <span className="font-med text-sm text-[#d8c193]" title="Tes ennemis tués">{myHud.score} 💀</span>
+                        </>
+                    )}
+                </div>
 
+                {/* Centre : vague */}
                 {running && myHud && (
-                    <>
-                        <span className="flex items-center gap-1 text-yellow-300 font-med text-xl">
-                            <img src="/sprites/ui/icon_gold.png" alt="or" className="kcd-icon" /> {gold}
-                            <span className="text-green-300 text-xs ml-1">+{myHud.income}/vague</span>
-                        </span>
-                        <span className="font-med text-yellow-300 text-lg">Vague {myHud.wave}</span>
-                        <span className="font-med text-sm text-[#d8c193]" title="Tes ennemis tués">{myHud.score} 💀</span>
-                        <div className="flex items-center gap-2">
-                            <img src="/sprites/ui/icon_heart.png" alt="PV" className="kcd-icon" style={{ height: 18 }} />
-                            <div className="w-24 h-4 overflow-hidden" style={{ background: '#2a1810', border: '2px solid #120a06' }}>
-                                <div className="h-full transition-all" style={{ width: `${myRatio * 100}%`, background: myRatio > 0.3 ? '#5bbd3a' : '#d64545' }} />
+                    <span className="font-med text-yellow-300 text-2xl">Vague {myHud.wave}</span>
+                )}
+
+                {/* Droite : adversaire + menu */}
+                <div className="flex items-center gap-3">
+                    {running && oppHud && !showOpp && (
+                        <div className="flex items-center gap-2 pr-3 border-r-2 border-[#4a3418]">
+                            <span className="font-med text-xs text-[#d8c193]">{oppHud.score}💀 · V{oppHud.wave} · {oppHud.castleHp}</span>
+                            <div className="w-20 h-4 overflow-hidden" style={{ background: '#2a1810', border: '2px solid #120a06' }}>
+                                <div className="h-full transition-all" style={{ width: `${oppRatio * 100}%`, background: oppRatio > 0.3 ? '#5bbd3a' : '#d64545' }} />
                             </div>
-                            <span className="font-med text-sm">{myHud.castleHp}</span>
+                            <span className="text-[#e6b3a0] text-sm">⚔ {oppHud.username}{oppHud.defeated && ' 💀'}</span>
                         </div>
-                    </>
-                )}
-
-                {running && oppHud && (
-                    <div className="flex items-center gap-2 pl-3 border-l-2 border-[#4a3418]">
-                        <span className="text-[#e6b3a0] text-sm">⚔ {oppHud.username}{oppHud.defeated && ' 💀'}</span>
-                        <div className="w-20 h-4 overflow-hidden" style={{ background: '#2a1810', border: '2px solid #120a06' }}>
-                            <div className="h-full transition-all" style={{ width: `${oppRatio * 100}%`, background: oppRatio > 0.3 ? '#5bbd3a' : '#d64545' }} />
-                        </div>
-                        <span className="font-med text-xs text-[#d8c193]">{oppHud.castleHp} · V{oppHud.wave} · {oppHud.score}💀</span>
-                    </div>
-                )}
-
-                <div className="ml-auto flex items-center gap-3">
+                    )}
                     {!connected && <span className="text-[#e9d9b0] text-xs">Connexion…</span>}
-                    <span className="text-[#d8c193] text-sm hidden sm:inline">{player?.username}</span>
+                    <span className="text-[#d8c193] text-sm hidden lg:inline">{player?.username}</span>
                     <button onClick={() => { actions.leave(); router.push('/game') }} className="kcd-btn text-xs py-1 px-3">← Solo</button>
                 </div>
             </div>
@@ -238,8 +281,45 @@ export default function VersusPage() {
             {/* ---- DUEL EN COURS : plateau plein écran + barre d'action ---- */}
             {running && (
                 <div className="relative z-10 flex-1 min-h-0 flex flex-col gap-2">
-                    {/* Plateau */}
-                    <div className="relative flex-1 min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
+                    {/* Adversaire (gauche) · plateau (centre, prioritaire) · chat (droite) */}
+                    <div ref={boardRef} className="flex-1 min-h-0 flex gap-2 justify-center">
+                    {showOpp && (
+                        <div className={`w-[300px] shrink-0 min-h-0 flex flex-col gap-2 rounded-lg ${hlTarget === 'bonus' ? 'ring-4 ring-yellow-400' : ''}`}>
+                        {/* Bonus : dans le panneau plutôt qu'en surimpression du plateau */}
+                        {myHud && myHud.pendingBonuses > 0 && (
+                            <div className="kcd-panel-titled ring-2 ring-yellow-400 shrink-0">
+                                <h3 className="kcd-title font-med text-center text-lg text-yellow-700">
+                                    Bonus{myHud.pendingBonuses > 1 ? ` x${myHud.pendingBonuses}` : ''} !
+                                </h3>
+                                <div className="flex flex-col gap-2 mt-2">
+                                    {BONUSES.map((b) => (
+                                        <button key={b.type} onClick={() => actions.chooseBonus(b.type)} className="kcd-btn text-sm py-2">
+                                            {b.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {oppHud && (
+                        <aside className={`kcd-panel-titled flex-1 min-h-0 flex flex-col gap-3 overflow-hidden ${hlTarget === 'opponent' ? 'ring-4 ring-yellow-400' : ''}`}>
+                            <h3 className="kcd-title font-med text-center text-lg truncate">⚔ {oppHud.username}{oppHud.defeated && ' 💀'}</h3>
+                            <div>
+                                <div className="flex justify-between text-xs text-[#8a6a2c] mb-1"><span>Château</span><span>{oppHud.castleHp}</span></div>
+                                <div className="h-4 overflow-hidden" style={{ background: '#2a1810', border: '2px solid #120a06' }}>
+                                    <div className="h-full transition-all" style={{ width: `${oppRatio * 100}%`, background: oppRatio > 0.3 ? '#5bbd3a' : '#d64545' }} />
+                                </div>
+                            </div>
+                            <div className="text-center text-xs text-[#8a6a2c]">Vague {oppHud.wave} · {oppHud.score} tués</div>
+                            {/* Emplacement de la future mini-map du plateau adverse. */}
+                            <div className="flex-1 min-h-0 rounded flex items-center justify-center text-center text-[11px] text-[#8a6a2c] italic px-2"
+                                 style={{ background: '#e0cf9e', border: '1px dashed #b89b62' }}>
+                                Aperçu de sa grille<br />(à venir)
+                            </div>
+                        </aside>
+                        )}
+                        </div>
+                    )}
+                    <div className={`relative min-h-0 rounded-lg overflow-hidden ${showChat ? 'h-full aspect-[4/3] shrink-0' : 'flex-1'} ${hlTarget === 'board' ? 'ring-4 ring-inset ring-yellow-400' : ''}`} style={{ border: '2px solid #2f1c0d' }}>
                         <CoopCanvas ref={canvasRef} onCellClick={place} selectedTower={selectedTower} />
                         {/* Toast messages, flottant sur le plateau. */}
                         {(notice || error) && (
@@ -247,9 +327,9 @@ export default function VersusPage() {
                                 {notice ?? `⚠ ${error}`}
                             </div>
                         )}
-                        {/* Bonus au nombre de kills : bulle flottante (overlay, ne pousse pas le layout). */}
-                        {myHud && myHud.pendingBonuses > 0 && (
-                            <div className="absolute top-2 right-2 z-20 flex items-center gap-2 px-3 py-2 rounded-lg ring-2 ring-yellow-400" style={{ background: 'rgba(58,44,20,.95)' }}>
+                        {/* Bonus : bulle flottante en repli quand le panneau latéral n'est pas affiché. */}
+                        {!showOpp && myHud && myHud.pendingBonuses > 0 && (
+                            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3 py-2 rounded-lg ring-2 ring-yellow-400" style={{ background: 'rgba(58,44,20,.95)' }}>
                                 <span className="font-med text-sm text-yellow-300">Bonus{myHud.pendingBonuses > 1 ? ` x${myHud.pendingBonuses}` : ''} !</span>
                                 {BONUSES.map((b) => (
                                     <button key={b.type} onClick={() => actions.chooseBonus(b.type)}
@@ -260,11 +340,17 @@ export default function VersusPage() {
                             </div>
                         )}
                     </div>
+                    {showChat && (
+                        <ChatPanel messages={[...tutoMsgs, ...chat]} myId={player?.playerId} onSend={actions.sendChat}
+                                   onSkipTuto={tutoStep >= 0 ? skipTuto : undefined}
+                                   className="w-[320px] shrink-0 min-h-0" />
+                    )}
+                    </div>
 
                     {/* Barre d'action — deux lignes alignées : Tours (+ Bonus) / Envoyer */}
-                    <div className="kcd-panel-wood shrink-0 flex flex-col gap-2 py-2">
+                    <div className="kcd-panel-wood shrink-0 flex flex-col gap-1 py-1.5">
                         {/* Ligne 1 : Tours + Bonus */}
-                        <div className="flex items-center gap-3 flex-wrap">
+                        <div className={`flex items-center gap-3 flex-wrap rounded-md ${hlTarget === 'towers' ? 'ring-2 ring-yellow-400' : ''}`}>
                             <span className="font-med text-sm text-[#e9d9b0] w-20 shrink-0">Tours</span>
                             <div className="flex flex-wrap gap-1.5">
                                 {TOWERS.map((t) => (
@@ -283,7 +369,7 @@ export default function VersusPage() {
                         </div>
 
                         {/* Ligne 2 : Envoyer */}
-                        <div className="flex items-center gap-3 flex-wrap">
+                        <div className={`flex items-center gap-3 flex-wrap rounded-md ${hlTarget === 'sends' ? 'ring-2 ring-yellow-400' : ''}`}>
                             <span className="font-med text-sm text-[#e9d9b0] w-20 shrink-0">Envoyer</span>
                             <div className="flex flex-wrap gap-1.5">
                                 {SENDS.map((s) => (
