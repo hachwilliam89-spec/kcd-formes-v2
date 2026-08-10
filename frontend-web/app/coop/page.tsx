@@ -12,7 +12,7 @@ import { useCoop } from '@/hooks/useCoop'
 import type { CoopCanvasHandle } from '@/components/coop/CoopCanvas'
 import { TowerIcon } from '@/components/game/UnitIcon'
 import { UnitChip } from '@/components/game/UnitChip'
-import { ChatPanel } from '@/components/game/ChatPanel'
+import { ChatPanel, type ChatMessage } from '@/components/game/ChatPanel'
 import { useHasGutter } from '@/components/game/useHasGutter'
 import { isCorridorCell } from '@/components/game/constants'
 import { audio } from '@/lib/audio'
@@ -42,6 +42,15 @@ const BONUSES: { type: string; label: string }[] = [
     { type: 'TOWER_REPAIR', label: '🔧 Tours' },
 ]
 
+// Tuto guidé coop : le Héraut parle dans le chat, chaque phrase surligne sa zone.
+// Coop = défense partagée (or commun, château commun), pas d'envois à l'adversaire.
+const TUTO_STEPS: { target: string; text: string }[] = [
+    { target: 'board', text: "Bienvenue ! Défendez ensemble votre château contre les vagues." },
+    { target: 'towers', text: "Posez vos tours depuis cette barre, sur les cases hors du chemin." },
+    { target: 'board', text: "L'or est commun : concertez-vous avant de dépenser. Chaque vague est plus rude." },
+    { target: 'chat', text: "Coordonnez-vous ici, dans le chat. Bonne défense, seigneurs !" },
+]
+
 export default function CoopPage() {
     const router = useRouter()
     const { player, isAuthenticated, hasHydrated } = useAuthStore()
@@ -53,6 +62,13 @@ export default function CoopPage() {
     const canvasRef = useRef<CoopCanvasHandle>(null)
     const { ref: boardRef, gutter } = useHasGutter()
     const showChat = gutter >= 340
+
+    // Tuto guidé (mêmes mécaniques que le versus) : phrases dévoilées + surlignage,
+    // désactivable et retenu (clé partagée avec le versus).
+    const [tutoStep, setTutoStep] = useState(-1)
+    const [tutoOff, setTutoOff] = useState(false)
+    useEffect(() => { try { if (localStorage.getItem('kcd_tuto_off') === '1') setTutoOff(true) } catch { /* ignore */ } }, [])
+    const skipTuto = () => { setTutoStep(-1); setTutoOff(true); try { localStorage.setItem('kcd_tuto_off', '1') } catch { /* ignore */ } }
 
     useEffect(() => {
         actions.setSnapshotHandler((snap) => canvasRef.current?.pushSnapshot(snap))
@@ -84,6 +100,19 @@ export default function CoopPage() {
     const running = match?.status === 'RUNNING'
     const isHost = useMemo(() => match?.players[0]?.playerId === player?.playerId, [match, player])
     const me = match?.players.find((p) => p.playerId === player?.playerId)
+
+    // Démarre / rejoue le tuto à chaque partie (sauf s'il est désactivé).
+    useEffect(() => {
+        if (!running || tutoOff) { setTutoStep(-1); return }
+        setTutoStep(0)
+        const id = setInterval(() => setTutoStep((s) => (s >= TUTO_STEPS.length - 1 ? s : s + 1)), 5000)
+        return () => clearInterval(id)
+    }, [running, tutoOff])
+
+    const hlTarget = tutoStep >= 0 ? TUTO_STEPS[tutoStep].target : null
+    const tutoMsgs: ChatMessage[] = tutoStep < 0
+        ? []
+        : TUTO_STEPS.slice(0, tutoStep + 1).map((s, i) => ({ senderId: 'guide', username: 'Le Héraut', text: s.text, ts: i }))
 
     function place(x: number, y: number) {
         if (!running) return
@@ -226,7 +255,7 @@ export default function CoopPage() {
             {running && (
                 <div className="relative z-10 flex-1 min-h-0 flex flex-col gap-2">
                     <div ref={boardRef} className="flex-1 min-h-0 flex gap-2 justify-center">
-                    <div className={`relative min-h-0 rounded-lg overflow-hidden ${showChat ? 'h-full aspect-[4/3] shrink-0' : 'flex-1'}`} style={{ border: '2px solid #2f1c0d' }}>
+                    <div className={`relative min-h-0 rounded-lg overflow-hidden ${showChat ? 'h-full aspect-[4/3] shrink-0' : 'flex-1'} ${hlTarget === 'board' ? 'ring-4 ring-inset ring-yellow-400' : ''}`} style={{ border: '2px solid #2f1c0d' }}>
                         <CoopCanvas ref={canvasRef} onCellClick={place} selectedTower={selectedTower} />
                         {(notice || error) && (
                             <div className="absolute left-1/2 -translate-x-1/2 bottom-2 z-20 kcd-panel text-xs px-3 py-1 whitespace-nowrap">
@@ -246,12 +275,13 @@ export default function CoopPage() {
                         )}
                     </div>
                     {showChat && (
-                        <ChatPanel messages={chat} myId={player?.playerId} onSend={actions.sendChat}
-                                   className="w-[320px] shrink-0 min-h-0" />
+                        <ChatPanel messages={[...tutoMsgs, ...chat]} myId={player?.playerId} onSend={actions.sendChat}
+                                   onSkipTuto={tutoStep >= 0 ? skipTuto : undefined}
+                                   className={`w-[320px] shrink-0 min-h-0 ${hlTarget === 'chat' ? 'ring-4 ring-yellow-400 rounded-lg' : ''}`} />
                     )}
                     </div>
 
-                    <div className="kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-1.5">
+                    <div className={`kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-1.5 ${hlTarget === 'towers' ? 'ring-2 ring-inset ring-yellow-400' : ''}`}>
                         <span className="font-med text-sm text-[#e9d9b0] w-20 shrink-0">Tours</span>
                         <div className="flex flex-wrap gap-1.5">
                             {TOWERS.map((t) => (
