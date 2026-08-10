@@ -265,6 +265,23 @@ export class GameScene extends Phaser.Scene {
     // scintillement continu sans spawn à chaque tick — voir drawEffects).
     private magicFxTick = new Map<string, number>()
 
+    // ── Multijoueur coop ──────────────────────────────────────────────────
+    // La même scène sert au rendu du flux de snapshots serveur (15 Hz) : au lieu
+    // de rejouer une vague pré-calculée (playWave), on reçoit l'état autoritaire
+    // et on l'interpole image par image (update). coopActive bascule ce mode.
+    private coopActive = false
+    private coopPrev: { enemies: EnemySnapshot[]; t: number } | null = null
+    private coopCurr: { enemies: EnemySnapshot[]; t: number } | null = null
+    // Ennemis disparus entre deux snapshots, classés pour rejouer la bonne anim
+    // (le snapshot ne dit pas POURQUOI un ennemi part) : mort (tué par une tour)
+    // ou arrivée au château (proche de PATH_END).
+    private coopDeaths: string[] = []
+    private coopReached = new Set<string>()
+    private onCoopReady?: () => void
+    // Cadence de la boucle live serveur (voir MatchTicker TICK_MS = 120 ms,
+    // aligné sur un tick solo pour un combat fidèle).
+    private static readonly COOP_TICK_MS = 120
+
     constructor() {
         super({ key: 'GameScene' })
     }
@@ -456,10 +473,25 @@ export class GameScene extends Phaser.Scene {
                 this.onCellClick?.(cellX, cellY)
             }
         })
+
+        // Coop : signale que la scène est prête (textures chargées, calques créés)
+        // pour que le canvas commence à pousser les snapshots serveur.
+        this.onCoopReady?.()
     }
 
     update() {
-        // Game loop — la boucle de combat est rejouée via playWave(), pas ici.
+        // Solo : la boucle de combat est rejouée via playWave(), pas ici.
+        // Coop : on interpole les ennemis entre les deux derniers snapshots
+        // serveur (15 Hz) pour un mouvement fluide à 60 fps.
+        if (!this.coopActive || !this.coopCurr) return
+        const curr = this.coopCurr, prev = this.coopPrev
+        const alpha = prev ? Math.min(1, (performance.now() - curr.t) / GameScene.COOP_TICK_MS) : 1
+        const prevById = new Map((prev?.enemies ?? []).map((e) => [e.id, e]))
+        const interp = curr.enemies.map((e) => {
+            const p = prevById.get(e.id)
+            return p ? { ...e, x: p.x + (e.x - p.x) * alpha, y: p.y + (e.y - p.y) * alpha } : e
+        })
+        this.drawEnemies(interp, this.coopDeaths, new Set(), this.coopReached)
     }
 
     shutdown() {
@@ -473,6 +505,88 @@ export class GameScene extends Phaser.Scene {
 
     setOnCellClick(callback: (x: number, y: number) => void) {
         this.onCellClick = callback
+    }
+
+    // ── API coop (rendu du flux serveur) ─────────────────────────────────
+
+    setOnCoopReady(callback: () => void) {
+        this.onCoopReady = callback
+        // La scène est peut-être déjà créée (callback branché tardivement) : dans
+        // ce cas on l'appelle tout de suite.
+        if (this.enemiesGraphics) callback()
+    }
+
+    startCoop() {
+        this.coopActive = true
+    }
+
+    /**
+     * Reçoit un snapshot serveur (15 Hz) : réconcilie les tours, déclenche les
+     * effets de tir du tick, et met à jour le buffer d'ennemis interpolé par
+     * update(). Les ennemis disparus sont classés mort/arrivée pour rejouer la
+     * bonne animation (le snapshot ne porte pas l'info explicitement).
+     */
+    pushCoopSnapshot(
+        enemies: EnemySnapshot[],
+        towers: { id: string; type: string; x: number; y: number; level: number }[],
+        shots: { fromX: number; fromY: number; toX: number; toY: number }[],
+    ) {
+        // Tours : réutilise le rendu solo (sprites, base+arme, PV…).
+        this.drawTowers(towers.map((t) => ({
+            id: t.id, type: t.type as TowerData['type'], x: t.x, y: t.y, level: t.level,
+        })))
+
+        // Diff ennemis pour distinguer morts (tués) et arrivées (au château).
+        const prevEnemies = this.coopCurr?.enemies ?? []
+        const currIds = new Set(enemies.map((e) => e.id))
+        const deaths: string[] = []
+        const reached = new Set<string>()
+        for (const e of prevEnemies) {
+            if (currIds.has(e.id)) continue
+            const distToCastle = Math.hypot(e.x - PATH_END.x, e.y - PATH_END.y)
+            if (distToCastle <= 1.3) reached.add(e.id)
+            else deaths.push(e.id)
+        }
+        this.coopDeaths = deaths
+        this.coopReached = reached
+        this.coopPrev = this.coopCurr
+        this.coopCurr = { enemies, t: performance.now() }
+
+        // Tirs du tick : mêmes projectiles / impacts / sons que le solo.
+        const towerByCell = new Map(towers.map((t) => [`${t.x},${t.y}`, t]))
+        for (const sh of shots) this.renderCoopShot(sh, towerByCell)
+    }
+
+    /** Effet visuel + sonore d'un tir coop (tour → ennemi), par type de tour. */
+    private renderCoopShot(
+        sh: { fromX: number; fromY: number; toX: number; toY: number },
+        towerByCell: Map<string, { id: string; type: string }>,
+    ) {
+        const tower = towerByCell.get(`${sh.fromX},${sh.fromY}`)
+        const type = tower?.type
+        const fromPx = sh.fromX * CELL_SIZE + CELL_SIZE / 2
+        const fromPy = sh.fromY * CELL_SIZE + CELL_SIZE / 2
+        const toPx = sh.toX * CELL_SIZE + CELL_SIZE / 2
+        const toPy = sh.toY * CELL_SIZE + CELL_SIZE / 2
+        const angle = Phaser.Math.RadToDeg(Math.atan2(toPy - fromPy, toPx - fromPx)) + 180
+
+        if (tower && type && ROT_WEAPON[type] && PROJECTILES[type]) {
+            // Archer / Baliste : arme qui pivote + projectile volant + impact.
+            this.aimAndFireWeapon(tower.id, type, toPx, toPy)
+            this.playSfx(type === 'BALLISTA' ? 'shoot_bolt' : 'shoot_arrow', 40, 0.7)
+            this.spawnProjectile(PROJECTILES[type].key, fromPx, fromPy, toPx, toPy,
+                () => this.spawnImpact(TOWER_IMPACT[type], sh.toX, sh.toY, 0.9, angle))
+        } else if (type === 'MAGE' && tower) {
+            this.playTowerFire(tower.id, 'MAGE')
+            this.playSfx('shoot_mage', 60, 0.6)
+            this.spawnImpact('fireball', sh.toX, sh.toY, 0.9)
+        } else if (type === 'CATAPULT') {
+            this.playSfx('shoot_catapult', 80, 0.7)
+            this.spawnImpact('explosion', sh.toX, sh.toY, 1.5)
+        } else {
+            // Type inconnu : impact léger orienté (fallback).
+            this.spawnImpact('firearrow', sh.toX, sh.toY, 0.7, angle)
+        }
     }
 
     drawTowers(towers: TowerData[]) {

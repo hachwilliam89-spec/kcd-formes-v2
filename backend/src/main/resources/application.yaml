@@ -30,7 +30,9 @@ server:
   port: ${SERVER_PORT:8080}
 
 jwt:
-  secret: ${JWT_SECRET:kcd_dev_secret_key_32_chars_min}
+  # Défaut de DEV uniquement (en prod, JWT_SECRET est fourni, fort). Doit faire
+  # >= 32 caractères (256 bits) : jjwt refuse les clés HMAC-SHA plus courtes.
+  secret: ${JWT_SECRET:kcd_dev_secret_key_change_me_at_least_32_chars_long}
   expiration-ms: ${JWT_EXPIRATION_MS:86400000}
 
 logging:
