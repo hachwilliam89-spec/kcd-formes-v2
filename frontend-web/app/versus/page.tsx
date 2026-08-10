@@ -15,6 +15,7 @@ import type { CoopCanvasHandle } from '@/components/coop/CoopCanvas'
 import { TowerIcon, EnemyIcon } from '@/components/game/UnitIcon'
 import { UnitChip } from '@/components/game/UnitChip'
 import { ChatPanel, type ChatMessage } from '@/components/game/ChatPanel'
+import { MiniBoard } from '@/components/game/MiniBoard'
 import { useHasGutter } from '@/components/game/useHasGutter'
 import { isCorridorCell } from '@/components/game/constants'
 import { audio } from '@/lib/audio'
@@ -309,10 +310,9 @@ export default function VersusPage() {
                                 </div>
                             </div>
                             <div className="text-center text-xs text-[#8a6a2c]">Vague {oppHud.wave} · {oppHud.score} tués</div>
-                            {/* Emplacement de la future mini-map du plateau adverse. */}
-                            <div className="flex-1 min-h-0 rounded flex items-center justify-center text-center text-[11px] text-[#8a6a2c] italic px-2"
-                                 style={{ background: '#e0cf9e', border: '1px dashed #b89b62' }}>
-                                Aperçu de sa grille<br />(à venir)
+                            {/* Aperçu live de sa grille (mini-map). */}
+                            <div className="flex-1 min-h-0 flex items-center justify-center">
+                                <MiniBoard enemies={oppHud.enemies} towers={oppHud.towers} className="w-full h-full" />
                             </div>
                         </aside>
                         )}

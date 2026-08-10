@@ -15,10 +15,13 @@ export type VersusMatchState = MatchState & { winnerId?: string | null }
 
 // Vue versus adressée à CE joueur (canal /user/queue/game) : mon board complet
 // + un résumé de l'adversaire (voir VersusPlayerView côté backend).
+export type Blip = { x: number; y: number }
+export type TowerBlip = { x: number; y: number; type: string }
 type OpponentView = {
     playerId: string; username: string
     wave: number; gold: number; castleHp: number; castleMaxHp: number
     score: number; defeated: boolean
+    enemies: Blip[]; towers: TowerBlip[]
 }
 type VersusPlayerView = {
     status: string; winnerId: string | null
@@ -36,6 +39,9 @@ export type SideHud = {
     score: number
     pendingBonuses: number
     defeated: boolean
+    // Aperçu de la grille (rempli pour l'adversaire uniquement).
+    enemies?: Blip[]
+    towers?: TowerBlip[]
 }
 
 export function useVersus(myPlayerId: string | undefined) {
@@ -79,6 +85,7 @@ export function useVersus(myPlayerId: string | undefined) {
             username: v.opponent.username, wave: v.opponent.wave, gold: v.opponent.gold,
             castleHp: v.opponent.castleHp, castleMaxHp: v.opponent.castleMaxHp,
             income: 0, score: v.opponent.score, pendingBonuses: 0, defeated: v.opponent.defeated,
+            enemies: v.opponent.enemies ?? [], towers: v.opponent.towers ?? [],
         })
         if (v.winnerId) setWinnerId(v.winnerId)
         setMatch((mm) => (mm ? { ...mm, status: v.status } : mm))

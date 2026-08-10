@@ -4,6 +4,8 @@ import com.kcdformes.domain.model.match.Match;
 import com.kcdformes.domain.model.match.MatchGameState;
 import com.kcdformes.domain.model.match.MatchPlayer;
 
+import java.util.List;
+
 /**
  * Vue versus ADRESSÉE À UN joueur (envoyée sur /user/queue/game via
  * convertAndSendToUser). Contient SON board complet + un simple résumé de
@@ -23,7 +25,12 @@ public record VersusPlayerView(
     public record OpponentView(
             String playerId, String username,
             int wave, int gold, int castleHp, int castleMaxHp,
-            int score, boolean defeated) {}
+            int score, boolean defeated,
+            // Aperçu léger de SA grille : positions des ennemis + tours (sans hp/tirs).
+            List<EnemyBlip> enemies, List<TowerBlip> towers) {}
+
+    public record EnemyBlip(double x, double y) {}
+    public record TowerBlip(int x, int y, String type) {}
 
     public static VersusPlayerView from(Match match, MatchPlayer me) {
         String status = match.getStatus().name();
@@ -33,6 +40,12 @@ public record VersusPlayerView(
         OpponentView opponent = match.opponentOf(me.getPlayerId())
                 .map(opp -> {
                     MatchGameState os = match.getPlayerState(opp.getPlayerId());
+                    List<EnemyBlip> oppEnemies = os != null
+                            ? os.enemies.stream().map(e -> new EnemyBlip(e.x, e.y)).toList()
+                            : List.of();
+                    List<TowerBlip> oppTowers = os != null
+                            ? os.map.getTowers().stream().map(t -> new TowerBlip(t.getX(), t.getY(), t.getType().name())).toList()
+                            : List.of();
                     return new OpponentView(
                             opp.getPlayerId().toString(), opp.getUsername(),
                             os != null ? os.wave : 0,
@@ -40,7 +53,8 @@ public record VersusPlayerView(
                             os != null ? os.castleHp : 0,
                             os != null ? os.castleMaxHp : 100,
                             os != null ? os.enemiesKilled : 0,
-                            os != null && os.defeated);
+                            os != null && os.defeated,
+                            oppEnemies, oppTowers);
                 })
                 .orElse(null);
 
