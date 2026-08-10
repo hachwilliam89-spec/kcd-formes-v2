@@ -7,14 +7,16 @@ import { useEffect, useRef, useState } from 'react'
 export type ChatMessage = { senderId: string; username: string; text: string; ts: number }
 
 export function ChatPanel({
-    messages, myId, onSend, className = '', onSkipTuto,
+    messages, myId, onSend, className = '', onSkipTuto, onNextTuto, tutoLast,
 }: {
     messages: ChatMessage[]
     myId?: string
     onSend: (text: string) => void
     className?: string
-    // Fourni tant que le tuto est en cours → affiche un bouton pour le couper.
+    // Fournis tant que le tuto est en cours : couper (skip) / avancer à son rythme.
     onSkipTuto?: () => void
+    onNextTuto?: () => void
+    tutoLast?: boolean
 }) {
     const [text, setText] = useState('')
     const listRef = useRef<HTMLDivElement>(null)
@@ -64,6 +66,11 @@ export function ChatPanel({
                     )
                 })}
             </div>
+            {onNextTuto && (
+                <button onClick={onNextTuto} className="kcd-btn text-sm py-1.5 mt-2 shrink-0 ring-1 ring-yellow-400/60">
+                    {tutoLast ? 'Compris ✓' : 'Suivant →'}
+                </button>
+            )}
             <div className="flex gap-1 mt-2 shrink-0">
                 <input
                     value={text}

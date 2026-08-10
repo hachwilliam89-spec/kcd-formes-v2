@@ -123,12 +123,11 @@ export default function VersusPage() {
     const iWon = winnerId != null && winnerId === player?.playerId
 
     // Démarre / rejoue le tuto à chaque nouvelle partie (sauf s'il est désactivé).
+    // L'avancement est manuel (bouton « Suivant ») pour laisser apprendre à son rythme.
     useEffect(() => {
-        if (!running || tutoOff) { setTutoStep(-1); return }
-        setTutoStep(0)
-        const id = setInterval(() => setTutoStep((s) => (s >= TUTO_STEPS.length - 1 ? s : s + 1)), 5000)
-        return () => clearInterval(id)
+        setTutoStep(!running || tutoOff ? -1 : 0)
     }, [running, tutoOff])
+    const nextTuto = () => setTutoStep((s) => (s >= TUTO_STEPS.length - 1 ? -1 : s + 1))
 
     const hlTarget = tutoStep >= 0 ? TUTO_STEPS[tutoStep].target : null
     const tutoMsgs: ChatMessage[] = tutoStep < 0
@@ -343,6 +342,8 @@ export default function VersusPage() {
                     {showChat && (
                         <ChatPanel messages={[...tutoMsgs, ...chat]} myId={player?.playerId} onSend={actions.sendChat}
                                    onSkipTuto={tutoStep >= 0 ? skipTuto : undefined}
+                                   onNextTuto={tutoStep >= 0 ? nextTuto : undefined}
+                                   tutoLast={tutoStep === TUTO_STEPS.length - 1}
                                    className="w-[320px] shrink-0 min-h-0" />
                     )}
                     </div>
