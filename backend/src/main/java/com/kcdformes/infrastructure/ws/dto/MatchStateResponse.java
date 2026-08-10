@@ -16,6 +16,7 @@ public record MatchStateResponse(
         String mode,
         int maxPlayers,
         boolean canStart,
+        String winnerId,      // null sauf à la fin d'un versus (dernier debout)
         List<PlayerView> players
 ) {
     public record PlayerView(String playerId, String username, boolean ready, boolean connected) {}
@@ -31,6 +32,7 @@ public record MatchStateResponse(
                 m.getMode().name(),
                 m.getMaxPlayers(),
                 m.canStart(),
+                m.getWinnerId() != null ? m.getWinnerId().toString() : null,
                 players);
     }
 

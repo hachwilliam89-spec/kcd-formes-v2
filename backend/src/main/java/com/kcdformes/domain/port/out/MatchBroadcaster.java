@@ -13,4 +13,7 @@ public interface MatchBroadcaster {
 
     /** Diffuse un SNAPSHOT de jeu live sur /topic/match/{id}/state (ennemis, PV…). */
     void broadcastGame(Match match);
+
+    /** Diffuse un SNAPSHOT versus (les DEUX boards) sur /topic/match/{id}/state. */
+    void broadcastVersus(Match match);
 }

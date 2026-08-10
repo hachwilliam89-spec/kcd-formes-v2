@@ -17,6 +17,7 @@ public record MatchSnapshotResponse(
         int gold,
         int castleHp,
         int castleMaxHp,
+        int pendingBonuses,   // bonus gagnés au nombre de kills, en attente de choix
         String status,
         List<EnemyView> enemies,
         List<TowerView> towers,
@@ -27,15 +28,19 @@ public record MatchSnapshotResponse(
     public record ShotView(double fromX, double fromY, double toX, double toY) {}
 
     public static MatchSnapshotResponse from(Match match) {
-        MatchGameState s = match.getGameState();
+        return fromState(match.getGameState(), match.getStatus().name());
+    }
+
+    /** Snapshot d'UN board donné (coop = board partagé, versus = board d'un joueur). */
+    public static MatchSnapshotResponse fromState(MatchGameState s, String status) {
         List<EnemyView> enemies = s.enemies.stream().map(MatchSnapshotResponse::toView).toList();
         List<TowerView> towers = s.map.getTowers().stream().map(MatchSnapshotResponse::toView).toList();
         List<ShotView> shots = s.shots.stream()
                 .map(sh -> new ShotView(sh[0], sh[1], sh[2], sh[3]))
                 .toList();
         return new MatchSnapshotResponse(
-                s.tick, s.wave, s.gold, s.castleHp, s.castleMaxHp,
-                match.getStatus().name(), enemies, towers, shots);
+                s.tick, s.wave, s.gold, s.castleHp, s.castleMaxHp, s.pendingBonuses,
+                status, enemies, towers, shots);
     }
 
     private static EnemyView toView(LiveEnemy e) {

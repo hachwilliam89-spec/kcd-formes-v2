@@ -22,10 +22,15 @@ public class LiveEnemy {
     public boolean reachedEnd = false;
 
     public LiveEnemy(EnemyType type, double x, double y) {
+        this(type, x, y, type.baseHp);
+    }
+
+    /** PV explicites : PV scalés par vague (voir MatchEngine.scaledHp), comme en solo. */
+    public LiveEnemy(EnemyType type, double x, double y, int hp) {
         this.type = type;
         this.x = x;
         this.y = y;
-        this.maxHp = type.baseHp;
-        this.hp = type.baseHp;
+        this.maxHp = hp;
+        this.hp = hp;
     }
 }

@@ -7,6 +7,7 @@ import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 
 /**
  * Configuration WebSocket + STOMP pour le multijoueur temps réel (voir
@@ -48,5 +49,19 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.interceptors(authInterceptor);
+    }
+
+    /**
+     * Limites de transport élargies : les snapshots live (jusqu'à 80 ennemis ×2
+     * boards, ~15 Hz) peuvent momentanément engorger un client lent/throttlé.
+     * Aux valeurs par défaut (buffer 512 Ko, envoi 10 s), Spring FERME la session
+     * du client trop lent — ce qui figeait un des deux joueurs. On agrandit le
+     * tampon et on rallonge le délai d'envoi pour tolérer ces à-coups.
+     */
+    @Override
+    public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
+        registration.setSendBufferSizeLimit(2 * 1024 * 1024); // 2 Mo (défaut 512 Ko)
+        registration.setSendTimeLimit(30 * 1000);             // 30 s (défaut 10 s)
+        registration.setMessageSizeLimit(256 * 1024);         // 256 Ko par message
     }
 }

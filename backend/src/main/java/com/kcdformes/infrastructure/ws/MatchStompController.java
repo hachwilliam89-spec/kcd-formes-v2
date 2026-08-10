@@ -2,10 +2,14 @@ package com.kcdformes.infrastructure.ws;
 
 import com.kcdformes.application.usecase.MatchService;
 import com.kcdformes.domain.model.match.Match;
+import com.kcdformes.domain.model.match.MatchMode;
+import com.kcdformes.infrastructure.ws.dto.ChooseBonusMessage;
+import com.kcdformes.infrastructure.ws.dto.CreateMatchMessage;
 import com.kcdformes.infrastructure.ws.dto.JoinMatchMessage;
 import com.kcdformes.infrastructure.ws.dto.MatchStateResponse;
 import com.kcdformes.infrastructure.ws.dto.PlaceTowerMessage;
 import com.kcdformes.infrastructure.ws.dto.ReadyMessage;
+import com.kcdformes.infrastructure.ws.dto.SendCreepMessage;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -41,10 +45,21 @@ public class MatchStompController {
 
     @MessageMapping("/match/create")
     @SendToUser("/queue/match")
-    public MatchStateResponse create(Principal principal) {
+    public MatchStateResponse create(@Payload(required = false) CreateMatchMessage message, Principal principal) {
         Caller caller = Caller.from(principal);
-        Match match = matchService.createMatch(caller.playerId(), caller.username());
+        MatchMode mode = parseMode(message);
+        Match match = matchService.createMatch(caller.playerId(), caller.username(), mode);
         return MatchStateResponse.from(match);
+    }
+
+    /** Mode demandé (défaut COOP si absent/inconnu). */
+    private MatchMode parseMode(CreateMatchMessage message) {
+        if (message == null || message.mode() == null) return MatchMode.COOP;
+        try {
+            return MatchMode.valueOf(message.mode());
+        } catch (IllegalArgumentException e) {
+            return MatchMode.COOP;
+        }
     }
 
     @MessageMapping("/match/join")
@@ -75,6 +90,22 @@ public class MatchStompController {
                            Principal principal) {
         Caller caller = Caller.from(principal);
         matchService.placeTower(id, caller.playerId(), message.type(), message.x(), message.y());
+    }
+
+    @MessageMapping("/match/{id}/send")
+    public void send(@DestinationVariable UUID id,
+                     @Payload SendCreepMessage message,
+                     Principal principal) {
+        Caller caller = Caller.from(principal);
+        matchService.sendCreep(id, caller.playerId(), message.type());
+    }
+
+    @MessageMapping("/match/{id}/bonus")
+    public void bonus(@DestinationVariable UUID id,
+                      @Payload ChooseBonusMessage message,
+                      Principal principal) {
+        Caller caller = Caller.from(principal);
+        matchService.chooseBonus(id, caller.playerId(), message.type());
     }
 
     @MessageMapping("/match/{id}/leave")

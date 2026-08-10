@@ -1,5 +1,6 @@
 package com.kcdformes.domain.model.match;
 
+import com.kcdformes.domain.model.EnemyType;
 import com.kcdformes.domain.model.GameMap;
 import com.kcdformes.domain.model.Position;
 
@@ -7,7 +8,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * État de jeu LIVE d'un match en cours (Jalon 3a : ennemis qui avancent sur le
@@ -30,11 +33,42 @@ public class MatchGameState {
     public int ticksToNextSpawn = 0;
     public int spawnedThisWave = 0;
     public int waveSize;
+    // File des ennemis à faire apparaître pour la vague courante (composition
+    // construite par MatchEngine.buildWave — gobelins + élites selon la vague).
+    public final java.util.Deque<EnemyType> spawnQueue = new java.util.ArrayDeque<>();
 
     // Combat : cooldown de tir par tour (en « ticks solo »), et tirs du tick
     // courant pour le rendu ({fromX, fromY, toX, toY}), remis à zéro à chaque step.
     public final Map<UUID, Double> towerCooldowns = new HashMap<>();
     public final List<double[]> shots = new ArrayList<>();
+
+    // État de combat persistant entre ticks (porté du solo WaveSimulationService,
+    // pour que les particularités des unités soient identiques au solo) :
+    // - siegeTargets : tour visée par chaque Sapeur une fois dévié du chemin.
+    // - bossCooldowns : compte à rebours avant la prochaine pulsation d'un Boss.
+    // - towerStuns : tours étourdies par un pulse (ticks restants), ne tirent plus.
+    public final Map<UUID, UUID> siegeTargets = new HashMap<>();
+    public final Map<UUID, Integer> bossCooldowns = new HashMap<>();
+    public final Map<UUID, Integer> towerStuns = new HashMap<>();
+    public int castleCooldown = 0; // défense du château (archers des remparts)
+
+    // ── Versus ────────────────────────────────────────────────────────────
+    // Vaincu quand le château tombe (le board n'est plus avancé). Score = ennemis
+    // tués (départage si les deux tombent au même tick).
+    public boolean defeated = false;
+    public int enemiesKilled = 0;
+    // Revenu passif (versus rush) : crédité à chaque fin de vague. Augmente quand
+    // le joueur envoie des ennemis (voir SendCatalog) — cœur de la boucle rush.
+    public int income = 0;
+    // Bonus au nombre de kills (mêmes bonus que le solo) : tous les KILLS_PER_BONUS
+    // ennemis tués, un bonus est offert (pendingBonuses) — choix NON bloquant en
+    // temps réel (voir MatchService.chooseBonus).
+    public int killsSinceBonus = 0;
+    public int pendingBonuses = 0;
+    // File des ennemis ENVOYÉS par l'adversaire (rush, Jalon V2) : injectés au
+    // spawn en plus de la vague de base. Thread-safe : rempli depuis l'action
+    // d'envoi, vidé par le moteur dans le thread du ticker.
+    public final Queue<EnemyType> incomingSends = new ConcurrentLinkedQueue<>();
 
     public MatchGameState(List<Position> path, GameMap map, int castleMaxHp, int startingGold, int firstWaveSize) {
         this.path = path;

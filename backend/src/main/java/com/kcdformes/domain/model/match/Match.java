@@ -1,7 +1,9 @@
 package com.kcdformes.domain.model.match;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,7 +21,11 @@ public class Match {
     private final int maxPlayers;
     private MatchStatus status;
     private final List<MatchPlayer> players = new ArrayList<>();
-    private MatchGameState gameState;   // null tant que le match n'a pas démarré (LOBBY)
+    private MatchGameState gameState;   // COOP : board partagé (null en LOBBY)
+    // VERSUS : un board indépendant par joueur (chacun son or, ses tours, son
+    // château). LinkedHashMap pour garder l'ordre d'arrivée (hôte en premier).
+    private final Map<UUID, MatchGameState> playerStates = new LinkedHashMap<>();
+    private UUID winnerId;              // désigné à la fin d'un versus (dernier debout)
 
     public Match(UUID id, String code, MatchMode mode) {
         this.id = id;
@@ -75,4 +81,17 @@ public class Match {
     public List<MatchPlayer> getPlayers() { return List.copyOf(players); }
     public MatchGameState getGameState() { return gameState; }
     public void setGameState(MatchGameState gameState) { this.gameState = gameState; }
+
+    // ── Versus : boards par joueur ────────────────────────────────────────
+    public void setPlayerState(UUID playerId, MatchGameState state) { playerStates.put(playerId, state); }
+    public MatchGameState getPlayerState(UUID playerId) { return playerStates.get(playerId); }
+    public Map<UUID, MatchGameState> getPlayerStates() { return playerStates; }
+
+    /** Adversaire d'un joueur en 1v1 (le seul autre joueur du match). */
+    public Optional<MatchPlayer> opponentOf(UUID playerId) {
+        return players.stream().filter(p -> !p.getPlayerId().equals(playerId)).findFirst();
+    }
+
+    public UUID getWinnerId() { return winnerId; }
+    public void setWinnerId(UUID winnerId) { this.winnerId = winnerId; }
 }
