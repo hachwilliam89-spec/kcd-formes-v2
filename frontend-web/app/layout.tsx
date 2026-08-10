@@ -36,8 +36,9 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${medievalSharp.variable} ${pixelifySans.variable} h-full antialiased`}
+      lang="fr"
+      translate="no"
+      className={`notranslate ${geistSans.variable} ${geistMono.variable} ${medievalSharp.variable} ${pixelifySans.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

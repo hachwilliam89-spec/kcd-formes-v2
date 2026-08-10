@@ -113,6 +113,12 @@ const TOWER_COLORS: Record<string, number> = {
     WALL: 0x78716c,     // pierre — structure passive, volontairement terne
 }
 
+// Portée de chaque tour (cases), reprise de TowerType.baseRange côté backend :
+// sert au cercle de portée de l'aperçu de pose (voir setBuildPreview). 0 = mur.
+const TOWER_RANGE: Record<string, number> = {
+    ARCHER: 3.0, MAGE: 2.5, CATAPULT: 4.0, BALLISTA: 5.0, WALL: 0,
+}
+
 // Couleurs par type d'ennemi
 const ENEMY_COLORS: Record<string, number> = {
     GOBLIN: 0x84cc16,      // vert clair
@@ -227,6 +233,12 @@ export class GameScene extends Phaser.Scene {
     // mono-cible) — séparé de enemiesGraphics pour pouvoir le vider/redessiner
     // indépendamment à chaque tick sans repasser par drawEnemies.
     private effectsGraphics!: Phaser.GameObjects.Graphics
+    // Aperçu de pose (multi) : surbrillance verte/rouge de la case survolée + cercle
+    // de portée de la tour sélectionnée. Actif seulement si buildPreviewType est posé
+    // (via setBuildPreview) — le solo ne l'utilise pas, donc rien ne change côté solo.
+    private previewGraphics!: Phaser.GameObjects.Graphics
+    private buildPreviewType: string | null = null
+    private hoverCell: { x: number; y: number } | null = null
     private onCellClick?: (x: number, y: number) => void
     private waveTimer?: Phaser.Time.TimerEvent
     // Fonction de rendu du tick courant, conservée pour reprendre après une pause
@@ -351,6 +363,7 @@ export class GameScene extends Phaser.Scene {
         this.drawTerrain()
 
         this.gridGraphics = this.add.graphics()
+        this.previewGraphics = this.add.graphics() // sous les tours/ennemis (aperçu de pose)
         this.towersGraphics = this.add.graphics()
         this.enemiesGraphics = this.add.graphics()
         this.effectsGraphics = this.add.graphics()
@@ -474,6 +487,17 @@ export class GameScene extends Phaser.Scene {
             }
         })
 
+        // Aperçu de pose : suit le curseur (multi uniquement, voir setBuildPreview).
+        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            if (!this.buildPreviewType) return
+            this.hoverCell = { x: Math.floor(pointer.x / CELL_SIZE), y: Math.floor(pointer.y / CELL_SIZE) }
+            this.drawBuildPreview()
+        })
+        this.input.on('pointerout', () => {
+            this.hoverCell = null
+            this.previewGraphics?.clear()
+        })
+
         // Coop : signale que la scène est prête (textures chargées, calques créés)
         // pour que le canvas commence à pousser les snapshots serveur.
         this.onCoopReady?.()
@@ -505,6 +529,51 @@ export class GameScene extends Phaser.Scene {
 
     setOnCellClick(callback: (x: number, y: number) => void) {
         this.onCellClick = callback
+    }
+
+    /**
+     * Aperçu de pose (multi) : type de tour sélectionné → cercle de portée + case
+     * verte/rouge au survol. null = désactive (ex. hors partie). Le solo n'appelle
+     * jamais cette méthode, son rendu est donc inchangé.
+     */
+    setBuildPreview(type: string | null) {
+        this.buildPreviewType = type
+        if (!this.previewGraphics) return
+        if (!type) { this.hoverCell = null; this.previewGraphics.clear(); return }
+        this.drawBuildPreview()
+    }
+
+    /** Dessine la case survolée (verte si posable, rouge sinon) + le cercle de portée. */
+    private drawBuildPreview() {
+        if (!this.previewGraphics) return
+        this.previewGraphics.clear()
+        const type = this.buildPreviewType
+        const cell = this.hoverCell
+        if (!type || !cell) return
+
+        const inGrid = cell.x >= 0 && cell.x < GRID_WIDTH && cell.y >= 0 && cell.y < GRID_HEIGHT
+        if (!inGrid) return
+        const corridor = isCorridorCell(cell.x, cell.y)
+        const occupied = [...this.towersById.values()].some((t) => t.x === cell.x && t.y === cell.y)
+        // Mur : sur le couloir ; tours : hors couloir. Et case libre.
+        const ok = !occupied && (type === 'WALL' ? corridor : !corridor)
+
+        const px = cell.x * CELL_SIZE, py = cell.y * CELL_SIZE
+        const color = ok ? 0x5bbd3a : 0xd64545
+        this.previewGraphics.fillStyle(color, 0.3)
+        this.previewGraphics.fillRect(px, py, CELL_SIZE, CELL_SIZE)
+        this.previewGraphics.lineStyle(2, color, 0.9)
+        this.previewGraphics.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2)
+
+        // Cercle de portée (tours à tir uniquement).
+        const range = TOWER_RANGE[type] ?? 0
+        if (range > 0) {
+            const cx = px + CELL_SIZE / 2, cy = py + CELL_SIZE / 2
+            this.previewGraphics.fillStyle(0xffe066, 0.06)
+            this.previewGraphics.fillCircle(cx, cy, range * CELL_SIZE)
+            this.previewGraphics.lineStyle(2, 0xffe066, 0.6)
+            this.previewGraphics.strokeCircle(cx, cy, range * CELL_SIZE)
+        }
     }
 
     // ── API coop (rendu du flux serveur) ─────────────────────────────────

@@ -14,10 +14,12 @@ export interface CoopCanvasHandle {
 
 interface CoopCanvasProps {
     onCellClick: (x: number, y: number) => void
+    // Type de tour sélectionné → aperçu de pose (cercle de portée + case verte/rouge).
+    selectedTower?: string | null
 }
 
 const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCanvas(
-    { onCellClick },
+    { onCellClick, selectedTower = null },
     ref,
 ) {
     const gameRef = useRef<Phaser.Game | null>(null)
@@ -25,6 +27,9 @@ const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCa
     const readyRef = useRef(false)
     // Dernier snapshot reçu avant que la scène soit prête (create() est asynchrone).
     const pendingRef = useRef<Snapshot | null>(null)
+    // Sélection courante, appliquée dès que la scène est prête (ordre de montage).
+    const selectedRef = useRef(selectedTower)
+    selectedRef.current = selectedTower
 
     useEffect(() => {
         if (gameRef.current) return
@@ -37,6 +42,7 @@ const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCa
         scene.setOnCoopReady(() => {
             readyRef.current = true
             scene.startCoop()
+            scene.setBuildPreview(selectedRef.current ?? null)
             if (pendingRef.current) {
                 const s = pendingRef.current
                 pendingRef.current = null
@@ -68,6 +74,10 @@ const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCa
     useEffect(() => {
         sceneRef.current?.setOnCellClick(onCellClick)
     }, [onCellClick])
+
+    useEffect(() => {
+        if (readyRef.current) sceneRef.current?.setBuildPreview(selectedTower)
+    }, [selectedTower])
 
     useImperativeHandle(ref, () => ({
         pushSnapshot: (snap) => {
