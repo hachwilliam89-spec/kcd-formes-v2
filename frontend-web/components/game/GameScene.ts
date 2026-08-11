@@ -1561,6 +1561,14 @@ export class GameScene extends Phaser.Scene {
                     place(bushKeys[Math.floor(rnd() * bushKeys.length)], cx + (rnd() - 0.5) * 8, y * CELL_SIZE + CELL_SIZE * 0.92, 0.5 + rnd() * 0.28, CELL_SIZE * 0.32)
                 }
             }
+
+        // LIGNE LIBRE DU HAUT (rangée tampon, y=0) : lisière de sapins dont la cime
+        // sort de l'écran (base ancrée au bas de la rangée tampon → seul le pied est
+        // visible en haut). Remplit la bande vide tout en haut du plateau.
+        for (let x = 0; x < GRID_WIDTH; x++) {
+            const cx = x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 6
+            place(firKeys[Math.floor(rnd() * firKeys.length)], cx, TOP_RESERVED_ROWS * CELL_SIZE, 1.6 + rnd() * 0.5, CELL_SIZE * 0.4, true)
+        }
     }
 
     /** Terrain "cuit" sur un canvas : herbe tuilée partout + chemin de terre serpentin
