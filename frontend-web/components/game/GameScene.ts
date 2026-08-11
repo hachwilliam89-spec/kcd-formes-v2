@@ -1541,6 +1541,8 @@ export class GameScene extends Phaser.Scene {
 
         const firKeys = ['snow-fir-1', 'snow-fir-2', 'snow-fir-3']
         const bushKeys = ['snow-mound-1', 'snow-mound-2', 'snow-rock-1', 'snow-pebbles']
+        // Quelques accents (lanterne, statue) disséminés parmi les sapins.
+        const specials = [{ k: 'snow-lantern', n: 2 }, { k: 'snow-statue', n: 2 }]
 
         for (let x = 0; x < GRID_WIDTH; x++)
             for (let y = TOP_RESERVED_ROWS; y < GRID_HEIGHT; y++) {
@@ -1548,9 +1550,14 @@ export class GameScene extends Phaser.Scene {
                 const cx = x * CELL_SIZE + CELL_SIZE / 2
                 const cyBase = y * CELL_SIZE + CELL_SIZE + 2
                 if (firSafe(x, y)) {
-                    // Ligne du milieu des zones mortes : TOUJOURS un sapin (lisière pleine,
-                    // pas d'arbre nu ni de sujet spécial qui coupe la ligne).
-                    place(firKeys[Math.floor(rnd() * firKeys.length)], cx + (rnd() - 0.5) * 6, cyBase, 1.5 + rnd() * 0.55, CELL_SIZE * 0.45, true)
+                    // Sapin par défaut ; parfois un accent (lanterne/statue) tant qu'il reste du budget.
+                    const sp = specials.find((s) => s.n > 0 && rnd() < 0.05)
+                    if (sp) {
+                        sp.n--
+                        place(sp.k, cx + (rnd() - 0.5) * 4, cyBase, 1.15 + rnd() * 0.2, CELL_SIZE * 0.45, true)
+                    } else {
+                        place(firKeys[Math.floor(rnd() * firKeys.length)], cx + (rnd() - 0.5) * 6, cyBase, 1.5 + rnd() * 0.55, CELL_SIZE * 0.45, true)
+                    }
                 } else {
                     // Un sapin déborderait sur route/tour ici → buisson bas à la place.
                     place(bushKeys[Math.floor(rnd() * bushKeys.length)], cx + (rnd() - 0.5) * 8, y * CELL_SIZE + CELL_SIZE * 0.92, 0.5 + rnd() * 0.28, CELL_SIZE * 0.32)
