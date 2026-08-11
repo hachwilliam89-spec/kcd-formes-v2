@@ -10,6 +10,8 @@ interface GameCanvasProps {
     // Type de tour sélectionné → aperçu de pose (case verte/rouge + cercle de
     // portée) qui suit le curseur. null = aucun aperçu (ex. pendant le combat).
     selectedTower?: string | null
+    // Map active (tracé + biome). Changer de map = remonter le canvas (key côté page).
+    mapId?: string | null
 }
 
 export interface GameCanvasHandle {
@@ -24,7 +26,7 @@ export interface GameCanvasHandle {
 }
 
 const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCanvas(
-    { towers, onCellClick, selectedTower = null },
+    { towers, onCellClick, selectedTower = null, mapId = null },
     ref
 ) {
     const gameRef = useRef<Phaser.Game | null>(null)
@@ -34,6 +36,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
         if (gameRef.current) return
 
         const scene = new GameScene()
+        if (mapId) scene.setActiveMap(mapId)   // AVANT le boot : create() rend la bonne map
         sceneRef.current = scene
 
         gameRef.current = new Phaser.Game({

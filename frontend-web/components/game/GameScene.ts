@@ -1,5 +1,7 @@
 import Phaser from 'phaser'
-import { PATH_START, PATH_END, WAYPOINTS, pathDirectionAt, isCorridorCell, TOP_RESERVED_ROWS } from './constants'
+import type { Cell } from './constants'
+import { TOP_RESERVED_ROWS } from './constants'
+import { GAME_MAPS, DEFAULT_MAP_ID, getMapDef, mapIsCorridor, mapPathDir } from './maps'
 import { audio, Sfx } from '@/lib/audio'
 
 // Association effet visuel d'impact → bruitage, avec un intervalle mini (ms) pour
@@ -239,6 +241,14 @@ export class GameScene extends Phaser.Scene {
     private previewGraphics!: Phaser.GameObjects.Graphics
     private buildPreviewType: string | null = null
     private hoverCell: { x: number; y: number } | null = null
+
+    // Map active (tracé + biome). Fixée par le canvas AVANT le boot de la scène
+    // (setActiveMap) ; create() rend alors le bon terrain/décor. Défaut = désert.
+    private activeMapId: string = DEFAULT_MAP_ID
+    setActiveMap(id: string) { this.activeMapId = id }
+    private get mapDef() { return getMapDef(this.activeMapId) }
+    private get pathStart(): Cell { return this.mapDef.waypoints[0] }
+    private get pathEnd(): Cell { return this.mapDef.waypoints[this.mapDef.waypoints.length - 1] }
     private onCellClick?: (x: number, y: number) => void
     private waveTimer?: Phaser.Time.TimerEvent
     // Fonction de rendu du tick courant, conservée pour reprendre après une pause
@@ -354,7 +364,7 @@ export class GameScene extends Phaser.Scene {
         this.load.image('road_fill', '/sprites/terrain/road_fill.png')
         // Map "terres désolées" pré-composée (terre terne + piste sableuse aux bords
         // naturels) : image unique, rendu garanti (voir buildBakedTerrain).
-        this.load.image('desert-map', '/sprites/terrain/desert_map.png')
+        for (const m of GAME_MAPS) this.load.image(`map-${m.id}`, m.image)
         // Thème terres désolées / ruines : PAS d'arbres/herbe verts. Ruines "tall"
         // (colonne, tombes, croix, bannières, palissade, feu) calées en HAUTEUR ;
         // "flat" (ossements, tronc, rocher, souche) en LARGEUR ; rochers + petits cailloux.
@@ -563,7 +573,7 @@ export class GameScene extends Phaser.Scene {
 
         const inGrid = cell.x >= 0 && cell.x < GRID_WIDTH && cell.y >= 0 && cell.y < GRID_HEIGHT
         if (!inGrid) return
-        const corridor = isCorridorCell(cell.x, cell.y)
+        const corridor = mapIsCorridor(this.mapDef, cell.x, cell.y)
         const occupied = [...this.towersById.values()].some((t) => t.x === cell.x && t.y === cell.y)
         // Mur : sur le couloir ; tours : hors couloir. Case libre + hors rangée réservée.
         const ok = !occupied && cell.y >= TOP_RESERVED_ROWS && (type === 'WALL' ? corridor : !corridor)
@@ -622,7 +632,7 @@ export class GameScene extends Phaser.Scene {
         const reached = new Set<string>()
         for (const e of prevEnemies) {
             if (currIds.has(e.id)) continue
-            const distToCastle = Math.hypot(e.x - PATH_END.x, e.y - PATH_END.y)
+            const distToCastle = Math.hypot(e.x - this.pathEnd.x, e.y - this.pathEnd.y)
             if (distToCastle <= 1.3) reached.add(e.id)
             else deaths.push(e.id)
         }
@@ -762,7 +772,7 @@ export class GameScene extends Phaser.Scene {
                         // la droite (voie médiane) ou le haut (descentes) — l'angle
                         // s'adapte donc au lieu d'être figé.
                         sprite.setOrigin(0.5, 0.5)
-                        const { dx, dy } = pathDirectionAt(tower.x, tower.y)
+                        const { dx, dy } = mapPathDir(this.mapDef, tower.x, tower.y)
                         // Pointes = sens OPPOSÉ au déplacement (face aux assaillants).
                         const angle = dx > 0 ? -90 : dx < 0 ? 90 : dy < 0 ? 180 : 0
                         sprite.setAngle(angle)
@@ -942,8 +952,8 @@ export class GameScene extends Phaser.Scene {
                     this.time.delayedCall(i * 110, () => {
                         this.spawnImpact(
                             'bigboom',
-                            PATH_END.x + (Math.random() * 2 - 1),
-                            PATH_END.y + (Math.random() * 1.6 - 0.8),
+                            this.pathEnd.x + (Math.random() * 2 - 1),
+                            this.pathEnd.y + (Math.random() * 1.6 - 0.8),
                             2.6,
                         )
                     })
@@ -1081,8 +1091,8 @@ export class GameScene extends Phaser.Scene {
     private drawCastleAttacks(castleAttacks: string[], enemies: EnemySnapshot[]) {
         if (castleAttacks.length === 0) return
         const enemyById = new Map(enemies.map((e) => [e.id, e]))
-        const castleX = PATH_END.x * CELL_SIZE + CELL_SIZE / 2
-        const castleY = PATH_END.y * CELL_SIZE + CELL_SIZE / 2
+        const castleX = this.pathEnd.x * CELL_SIZE + CELL_SIZE / 2
+        const castleY = this.pathEnd.y * CELL_SIZE + CELL_SIZE / 2
 
         // Les archers des remparts décochent une VRAIE flèche (plus de trait) vers
         // chaque ennemi ciblé, avec le sifflement de flèche ; l'impact enflammé
@@ -1426,14 +1436,14 @@ export class GameScene extends Phaser.Scene {
         let seed = 1337
         const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
         const nearCastle = (x: number, y: number) =>
-            Math.max(Math.abs(x - PATH_START.x), Math.abs(y - PATH_START.y)) <= 2 ||
-            Math.max(Math.abs(x - PATH_END.x), Math.abs(y - PATH_END.y)) <= 2
+            Math.max(Math.abs(x - this.pathStart.x), Math.abs(y - this.pathStart.y)) <= 2 ||
+            Math.max(Math.abs(x - this.pathEnd.x), Math.abs(y - this.pathEnd.y)) <= 2
         const frame: { x: number; y: number }[] = []   // cadre → gros décor
         const small: { x: number; y: number }[] = []   // partout → petit décor
         for (let x = 0; x < GRID_WIDTH; x++)
             for (let y = 0; y < GRID_HEIGHT; y++) {
                 const edge = x === 0 || x === GRID_WIDTH - 1 || y === 0 || y === GRID_HEIGHT - 1
-                if (edge && !isCorridorCell(x, y) && !nearCastle(x, y)) frame.push({ x, y })
+                if (edge && !mapIsCorridor(this.mapDef, x, y) && !nearCastle(x, y)) frame.push({ x, y })
                 else if (!nearCastle(x, y)) small.push({ x, y })
             }
 
@@ -1483,7 +1493,7 @@ export class GameScene extends Phaser.Scene {
         // Map pré-composée (terre désolée + piste sableuse naturelle) : une seule image
         // mise à l'échelle du plateau. Rendu identique garanti, aucun masque runtime.
         const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
-        this.add.image(0, 0, 'desert-map').setOrigin(0, 0).setDepth(-20).setDisplaySize(w, h)
+        this.add.image(0, 0, `map-${this.mapDef.id}`).setOrigin(0, 0).setDepth(-20).setDisplaySize(w, h)
     }
 
     /** Vignette : assombrit les bords du champ pour l'ambiance (texture canvas radiale,
@@ -1514,7 +1524,7 @@ export class GameScene extends Phaser.Scene {
         // couloir (route) reste net.
         for (let x = 0; x < GRID_WIDTH; x++) {
             for (let y = 0; y < GRID_HEIGHT; y++) {
-                if (isCorridorCell(x, y) || y < TOP_RESERVED_ROWS) continue // rangée du haut réservée
+                if (mapIsCorridor(this.mapDef, x, y) || y < TOP_RESERVED_ROWS) continue // rangée du haut réservée
                 const px = x * CELL_SIZE
                 const py = y * CELL_SIZE
                 this.gridGraphics.fillStyle(0xffffff, 0.06)
@@ -1534,15 +1544,15 @@ export class GameScene extends Phaser.Scene {
         const castleW = CELL_SIZE * 2.4
 
         // Château ennemi au spawn (clair, orienté vers la droite = vers le champ).
-        const startX = PATH_START.x * CELL_SIZE + CELL_SIZE / 2
-        const startGroundY = (PATH_START.y + 2) * CELL_SIZE // +2 : descendu d'une case
+        const startX = this.pathStart.x * CELL_SIZE + CELL_SIZE / 2
+        const startGroundY = (this.pathStart.y + 2) * CELL_SIZE // +2 : descendu d'une case
         const enemyCastle = this.add.image(startX, startGroundY, 'castle').setOrigin(0.35, 1).setDepth(-15)
         enemyCastle.setScale(castleW / enemyCastle.width)
         enemyCastle.setFlipX(true)
 
         // Ton château à l'arrivée (sombre, orienté vers la gauche = vers le champ).
-        const endX = PATH_END.x * CELL_SIZE + CELL_SIZE / 2
-        const endGroundY = (PATH_END.y + 2) * CELL_SIZE // +2 : descendu d'une case
+        const endX = this.pathEnd.x * CELL_SIZE + CELL_SIZE / 2
+        const endGroundY = (this.pathEnd.y + 2) * CELL_SIZE // +2 : descendu d'une case
         const castle = this.add.image(endX, endGroundY, 'castle-enemy').setOrigin(0.65, 1).setDepth(-15)
         castle.setScale(castleW / castle.width)
     }

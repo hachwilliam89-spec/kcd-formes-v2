@@ -16,10 +16,12 @@ interface CoopCanvasProps {
     onCellClick: (x: number, y: number) => void
     // Type de tour sélectionné → aperçu de pose (cercle de portée + case verte/rouge).
     selectedTower?: string | null
+    // Map active de la partie (tracé + biome) — fixée avant le boot de la scène.
+    mapId?: string | null
 }
 
 const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCanvas(
-    { onCellClick, selectedTower = null },
+    { onCellClick, selectedTower = null, mapId = null },
     ref,
 ) {
     const gameRef = useRef<Phaser.Game | null>(null)
@@ -35,6 +37,7 @@ const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCa
         if (gameRef.current) return
 
         const scene = new GameScene()
+        if (mapId) scene.setActiveMap(mapId)   // AVANT le boot : bon terrain/décor
         sceneRef.current = scene
 
         // Branché avant le boot : appelé en fin de create() (ou tout de suite si
