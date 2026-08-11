@@ -1520,10 +1520,12 @@ export class GameScene extends Phaser.Scene {
         const isDead = (x: number, y: number) =>
             y >= TOP_RESERVED_ROWS && inGrid(x, y) &&
             !mapIsCorridor(this.mapDef, x, y) && !mapIsBuildable(this.mapDef, x, y)
-        // Une case "bloque" un sapin si elle est route/constructible ET visible (sur la
-        // grille, hors rangée tampon). Hors grille (au-dessus du plateau) = hors écran = OK.
+        // Une case "bloque" un sapin seulement si c'est la ROUTE (couloir) et qu'elle
+        // est visible : le décor est rendu DERRIÈRE les tours, donc déborder sur une case
+        // constructible ne gêne rien — seul recouvrir le chemin des unités est interdit.
+        // Hors grille (au-dessus du plateau) = hors écran = OK.
         const blocks = (x: number, y: number) =>
-            inGrid(x, y) && y >= TOP_RESERVED_ROWS && (mapIsCorridor(this.mapDef, x, y) || mapIsBuildable(this.mapDef, x, y))
+            inGrid(x, y) && y >= TOP_RESERVED_ROWS && mapIsCorridor(this.mapDef, x, y)
         // Sapin permis si son débordement (2 cases au-dessus + largeur) ne couvre aucune
         // case bloquante visible. Sur les bords, le haut sort de l'écran → autorisé.
         const firSafe = (x: number, y: number) =>
