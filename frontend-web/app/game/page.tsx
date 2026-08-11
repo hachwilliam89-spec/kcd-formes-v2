@@ -389,11 +389,14 @@ export default function GamePage() {
 
                 {/* Droite : identité + menu */}
                 <div className="flex items-center gap-2">
-                    <span className="text-[#d8c193] text-sm hidden lg:inline">{player?.username}</span>
-                    <button onClick={() => router.push('/coop')} className="kcd-btn text-xs py-1 px-2">🤝 Coop</button>
-                    <button onClick={() => router.push('/versus')} className="kcd-btn text-xs py-1 px-2">⚔ Versus</button>
+                    <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded text-sm text-[#e9d9b0]" style={{ background: '#3a2a17', border: '1px solid #6b4a24' }}>
+                        <img src="/sprites/ui/icon_star_gold.png" alt="" aria-hidden className="kcd-icon" style={{ height: 14 }} />
+                        {player?.username}
+                    </span>
+                    <button onClick={() => router.push('/coop')} className="kcd-btn kcd-btn--nav text-xs py-1 px-2">🤝 Coop</button>
+                    <button onClick={() => router.push('/versus')} className="kcd-btn kcd-btn--nav text-xs py-1 px-2">⚔ Versus</button>
                     <AudioControls />
-                    <button onClick={handleLogout} className="kcd-btn text-xs py-1 px-2">Déconnexion</button>
+                    <button onClick={handleLogout} className="kcd-btn kcd-btn--danger text-xs py-1 px-2">⏻ Déconnexion</button>
                 </div>
             </div>
 
@@ -538,13 +541,13 @@ export default function GamePage() {
 
                     <div className="ml-auto flex items-center gap-2">
                         {leaderboard && leaderboard.top.length > 0 && (
-                            <button onClick={() => setShowLeaderboard(true)} className="kcd-btn text-xs py-1 px-2 flex items-center gap-1">
+                            <button onClick={() => setShowLeaderboard(true)} className="kcd-btn kcd-btn--info text-xs py-1 px-2 flex items-center gap-1">
                                 <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 14 }} /> Classement
                             </button>
                         )}
                         <button
                             onClick={() => { resetTutorial(player?.username ?? ''); setMessage('Tuto réinitialisé — les conseils réapparaîtront.') }}
-                            className="kcd-btn text-xs py-1 px-2 opacity-90"
+                            className="kcd-btn kcd-btn--info text-xs py-1 px-2"
                         >
                             ↻ Tuto
                         </button>
@@ -552,7 +555,7 @@ export default function GamePage() {
                             <button
                                 onClick={() => { if (window.confirm('Abandonner cette partie et en commencer une nouvelle ?')) { setIsGameOver(false); setMessage(null); newGame() } }}
                                 disabled={combatRunning || loading}
-                                className="kcd-btn text-xs py-1 px-2 disabled:opacity-50"
+                                className="kcd-btn kcd-btn--danger text-xs py-1 px-2 disabled:opacity-50"
                             >
                                 ↻ Nouvelle partie
                             </button>
@@ -560,9 +563,9 @@ export default function GamePage() {
                         <button
                             onClick={handleStartWave}
                             disabled={loading || isGameOver || combatRunning || awaitingBonusChoice}
-                            className="kcd-btn font-med text-base py-2 px-5 disabled:opacity-50"
+                            className="kcd-btn kcd-btn--primary font-med text-base py-2 px-5 disabled:opacity-50"
                         >
-                            {awaitingBonusChoice ? 'Choisis un bonus' : '⚔ Lancer la vague'}
+                            {awaitingBonusChoice ? '★ Choisis un bonus' : '⚔ Lancer la vague'}
                         </button>
                     </div>
                 </div>

@@ -180,6 +180,14 @@
 .kcd-btn:active { transform: translateY(2px); }
 .kcd-btn:disabled { filter: grayscale(.7) brightness(.9); cursor: not-allowed; }
 
+/* Variantes de couleur (même sprite recoloré) pour hiérarchiser les boutons :
+   primaire = action clé, nav = navigation, danger = destructif, info = secondaire.
+   On ne surcharge que la SOURCE de la border-image (le reste vient de .kcd-btn). */
+.kcd-btn--primary { border-image-source: url('/sprites/ui/button_gold.png');  color: #43310f; }
+.kcd-btn--nav     { border-image-source: url('/sprites/ui/button_blue.png');  color: #eaf0ff; }
+.kcd-btn--danger  { border-image-source: url('/sprites/ui/button_red.png');   color: #3a0f0a; }
+.kcd-btn--info    { border-image-source: url('/sprites/ui/button_stone.png'); color: #2f2b24; }
+
 .kcd-icon { image-rendering: pixelated; height: 20px; width: auto; display: inline-block; vertical-align: middle; }
 /* ── Accueil animé (feel "jeu vidéo") ─────────────────────────────────── */
 /* Fond : lent zoom/pan (Ken Burns) pour que l'image respire. */
