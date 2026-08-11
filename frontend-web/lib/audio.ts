@@ -28,14 +28,20 @@ export type MusicKey = keyof typeof MUSIC
 
 const LS_KEY = 'kcd_audio'
 
-type Prefs = { volume: number; muted: boolean }
+// Gains de base des bus (mix de référence = 100 % pour l'utilisateur). Le réglage
+// utilisateur (0..1) multiplie ces bases.
+const SFX_BASE = 0.11
+const MUSIC_BASE = 0.8
+
+type Prefs = { volume: number; muted: boolean; sfx: number; music: number }
 function loadPrefs(): Prefs {
-    if (typeof window === 'undefined') return { volume: 0.7, muted: false }
+    const def: Prefs = { volume: 0.7, muted: false, sfx: 1, music: 1 }
+    if (typeof window === 'undefined') return def
     try {
         const raw = localStorage.getItem(LS_KEY)
-        if (raw) return { volume: 0.7, muted: false, ...JSON.parse(raw) }
+        if (raw) return { ...def, ...JSON.parse(raw) }
     } catch { /* ignore */ }
-    return { volume: 0.7, muted: false }
+    return def
 }
 
 class AudioManager {
@@ -63,8 +69,8 @@ class AudioManager {
         this.master.connect(this.ctx.destination)
         // Deux bus séparés sous le maître : les SFX sont mixés PLUS BAS que la
         // musique (sinon ils la couvrent). Ajuste SFX_BUS / MUSIC_BUS pour le mix.
-        this.sfxBus = this.ctx.createGain(); this.sfxBus.gain.value = 0.11
-        this.musicBus = this.ctx.createGain(); this.musicBus.gain.value = 0.8
+        this.sfxBus = this.ctx.createGain(); this.sfxBus.gain.value = SFX_BASE * this.prefs.sfx
+        this.musicBus = this.ctx.createGain(); this.musicBus.gain.value = MUSIC_BASE * this.prefs.music
         this.sfxBus.connect(this.master)
         this.musicBus.connect(this.master)
         SFX_LIST.forEach((n) => this.fetchBuffer(`/sounds/${n}.mp3`, n))
@@ -136,6 +142,20 @@ class AudioManager {
         this.persist()
     }
     toggleMute() { this.setMuted(!this.prefs.muted) }
+
+    // Réglages par canal (0..1) — multiplient le gain de base du bus. Persistés.
+    getSfx() { return this.prefs.sfx }
+    getMusic() { return this.prefs.music }
+    setSfxVolume(v: number) {
+        this.prefs.sfx = Math.max(0, Math.min(1, v))
+        if (this.sfxBus) this.sfxBus.gain.value = SFX_BASE * this.prefs.sfx
+        this.persist()
+    }
+    setMusicVolume(v: number) {
+        this.prefs.music = Math.max(0, Math.min(1, v))
+        if (this.musicBus) this.musicBus.gain.value = MUSIC_BASE * this.prefs.music
+        this.persist()
+    }
 
     subscribe(fn: () => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn) } }
     private persist() {

@@ -375,7 +375,7 @@ export default function GamePage() {
 
     return (
         <div
-            className="relative h-screen flex flex-col overflow-hidden text-[#f0e2c4] font-pixel p-2 md:p-3"
+            className="relative h-screen flex flex-col overflow-hidden text-[#f0e2c4] font-pixel p-1.5 md:p-2"
             onPointerDown={() => { audio.resume(); audio.music('game') }} // débloque l'audio + musique de fond au 1er geste
             style={{
                 backgroundImage: "url('/home-bg-alt.jpg')",
@@ -388,7 +388,7 @@ export default function GamePage() {
             <div className="absolute inset-0 bg-[#160f08]/80" />
 
             {/* HUD : 3 zones (ressources gauche · vague centre · menu droite) */}
-            <div className="relative z-10 kcd-panel-wood flex flex-wrap justify-between items-center gap-x-4 gap-y-1 mb-2 shrink-0 py-1">
+            <div className="relative z-10 kcd-panel-wood flex flex-wrap justify-between items-center gap-x-4 gap-y-1 mb-1.5 shrink-0 py-0.5">
                 {/* Gauche : titre + ressources */}
                 <div className="flex items-center gap-3">
                     <h1 className="text-lg md:text-2xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>KCD Formes v2</h1>
@@ -424,13 +424,13 @@ export default function GamePage() {
                 {/* Colonne principale : plateau prioritaire + barre d'action JUSTE dessous.
                     Fenêtre étroite (flex-col) → tours sous la grille (jouabilité) puis stats.
                     Grand écran → panneau stats/évolution à droite. */}
-                <div className="flex-1 min-h-0 flex flex-col gap-2 min-w-0">
+                <div className="flex-1 min-h-0 flex flex-col gap-1.5 min-w-0">
                     <div className="relative w-full flex-1 min-w-0 min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
                         <GameCanvas ref={canvasRef} towers={towers} onCellClick={handleCellClick} selectedTower={canAct ? selectedTower : null} />
                     </div>
 
                     {/* Barre d'action : tours en tuiles + actions (JUSTE sous la grille en étroit) */}
-                    <div className="kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-1.5">
+                    <div className="kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-1">
                         <span className="font-med text-sm text-[#e9d9b0] w-16 shrink-0">Tours</span>
                         <div className="flex flex-wrap gap-1.5">
                             {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(([type, info]) => {
