@@ -1588,22 +1588,34 @@ export class GameScene extends Phaser.Scene {
     }
 
     private drawProceduralRoad() {
-        // Chemin de PIERRE/TERRE texturé (plus naturel qu'un aplat) : on tuile la
-        // texture de route sur chaque case de couloir, sous les unités/tours.
-        for (const c of this.mapDef.path.corridorCells) {
-            this.add.image(c.x * CELL_SIZE, c.y * CELL_SIZE, 'road_fill')
-                .setOrigin(0, 0).setDepth(-18).setDisplaySize(CELL_SIZE + 1, CELL_SIZE + 1)
+        const cc = CELL_SIZE
+        const cells = this.mapDef.path.corridorCells
+        const g = this.add.graphics().setDepth(-18)
+        let seed = 4242
+        const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+
+        // Route ORGANIQUE (esprit du chemin sableux du désert) : des disques qui se
+        // chevauchent le long du couloir → bords ondulés, coins arrondis, AUCUN angle
+        // droit. Rayon un peu jitté pour un tracé irrégulier, pas lisse.
+        for (const c of cells) {
+            g.fillStyle(0x6f5636, 1)
+            g.fillCircle((c.x + 0.5) * cc, (c.y + 0.5) * cc, cc * (0.62 + rnd() * 0.12))
         }
-        // Léger liseré sombre sur le bord extérieur du chemin (contours nets) : une
-        // case de couloir dont un voisin n'est PAS couloir borde une case libre.
-        const g = this.add.graphics().setDepth(-17)
-        g.lineStyle(2, 0x3a3f45, 0.35)
-        for (const c of this.mapDef.path.corridorCells) {
-            const px = c.x * CELL_SIZE, py = c.y * CELL_SIZE
-            if (!mapIsCorridor(this.mapDef, c.x, c.y - 1)) g.lineBetween(px, py, px + CELL_SIZE, py)
-            if (!mapIsCorridor(this.mapDef, c.x, c.y + 1)) g.lineBetween(px, py + CELL_SIZE, px + CELL_SIZE, py + CELL_SIZE)
-            if (!mapIsCorridor(this.mapDef, c.x - 1, c.y)) g.lineBetween(px, py, px, py + CELL_SIZE)
-            if (!mapIsCorridor(this.mapDef, c.x + 1, c.y)) g.lineBetween(px + CELL_SIZE, py, px + CELL_SIZE, py + CELL_SIZE)
+        // Voie de circulation (centre usé), plus claire, décentrée aléatoirement.
+        for (const c of cells) {
+            g.fillStyle(0x8c6f47, 1)
+            g.fillCircle((c.x + 0.5) * cc + (rnd() - 0.5) * cc * 0.2, (c.y + 0.5) * cc + (rnd() - 0.5) * cc * 0.2, cc * (0.4 + rnd() * 0.1))
+        }
+        // Cailloux / petits éléments semés SUR la route (réalisme, pas lisse) — sous
+        // les unités (depth -17). Déterministe.
+        const pebbles = ['decor-small-1', 'decor-small-2', 'decor-small-3', 'snow-pebbles']
+        for (const c of cells) {
+            if (rnd() > 0.22) continue
+            const key = pebbles[Math.floor(rnd() * pebbles.length)]
+            const px = (c.x + 0.5) * cc + (rnd() - 0.5) * cc * 0.5
+            const py = (c.y + 0.55) * cc + (rnd() - 0.5) * cc * 0.4
+            this.add.image(px, py, key).setOrigin(0.5, 0.85).setDepth(-17)
+                .setDisplaySize(cc * (0.24 + rnd() * 0.12), cc * (0.18 + rnd() * 0.1))
         }
     }
 
