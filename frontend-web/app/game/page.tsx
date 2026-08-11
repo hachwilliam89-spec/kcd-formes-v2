@@ -402,10 +402,6 @@ export default function GamePage() {
                 <div className="flex-1 lg:min-h-0 flex flex-col lg:flex-row gap-3">
                     <div className="relative w-full aspect-[4/3] lg:aspect-auto lg:flex-1 min-w-0 lg:min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
                         <GameCanvas ref={canvasRef} towers={towers} onCellClick={handleCellClick} />
-                        {/* Message flottant sur le plateau (n'occupe plus la colonne). */}
-                        {message && (
-                            <div className="absolute left-1/2 -translate-x-1/2 bottom-2 z-20 kcd-panel text-xs px-3 py-1 text-center max-w-[92%]">{message}</div>
-                        )}
                     </div>
 
                     <aside className="w-full lg:w-64 shrink-0 lg:min-h-0 lg:overflow-y-auto flex flex-col gap-3">
