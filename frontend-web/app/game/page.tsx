@@ -61,18 +61,21 @@ const TOWER_ROLE: Record<TowerType, string> = {
 // Stats de base des tours (miroir de TowerType côté backend : baseDamage, baseRange).
 // cadence = descripteur de vitesse de tir (miroir qualitatif de attackSpeed :
 // ARCHER 0.6, CATAPULT 0.1, BALLISTA 0.12 ; MAGE applique ses dégâts en continu).
-const TOWER_STATS: Record<TowerType, { damage: number; range: number; kind: string; cadence: string }> = {
-    ARCHER:   { damage: 12,  range: 3.0, kind: 'Monocible',            cadence: 'Rapide' },
-    MAGE:     { damage: 11,  range: 2.5, kind: 'Continu · magique',    cadence: 'Continue' },
-    CATAPULT: { damage: 40,  range: 4.0, kind: 'Zone (AoE)',           cadence: 'Lente' },
-    BALLISTA: { damage: 110, range: 5.0, kind: 'Monocible · anti-gros', cadence: 'Lente' },
-    WALL:     { damage: 0,   range: 0,   kind: 'Barrage',              cadence: '—' },
+// hp = PV de structure au niveau 1 (miroir de Tower.getMaxHp : structureHp sinon baseCost×3).
+const TOWER_STATS: Record<TowerType, { damage: number; range: number; kind: string; cadence: string; hp: number }> = {
+    ARCHER:   { damage: 12,  range: 3.0, kind: 'Monocible',            cadence: 'Rapide',   hp: 150 },
+    MAGE:     { damage: 11,  range: 2.5, kind: 'Continu · magique',    cadence: 'Continue', hp: 300 },
+    CATAPULT: { damage: 40,  range: 4.0, kind: 'Zone (AoE)',           cadence: 'Lente',    hp: 450 },
+    BALLISTA: { damage: 110, range: 5.0, kind: 'Monocible · anti-gros', cadence: 'Lente',   hp: 600 },
+    WALL:     { damage: 0,   range: 0,   kind: 'Barrage',              cadence: '—',        hp: 450 },
 }
-// Montée en puissance par niveau (miroir de Tower.getDamage/getRange).
+// Montée en puissance par niveau (miroir de Tower.getDamage/getRange/getMaxHp).
 const dmgMult = (lvl: number) => (lvl >= 3 ? 2.6 : 1 + (lvl - 1) * 0.6)   // 1.0 / 1.6 / 2.6
 const rangeBonus = (lvl: number) => (lvl >= 3 ? 0.9 : (lvl - 1) * 0.35)   // +0 / +0.35 / +0.9
+const hpMult = (lvl: number) => (lvl >= 3 ? 2.2 : 1 + (lvl - 1) * 0.5)    // 1.0 / 1.5 / 2.2
 const towerDamage = (type: TowerType, lvl: number) => Math.floor(TOWER_STATS[type].damage * dmgMult(lvl))
 const towerRange = (type: TowerType, lvl: number) => Math.round((TOWER_STATS[type].range + rangeBonus(lvl)) * 10) / 10
+const towerHp = (type: TowerType, lvl: number) => Math.round(TOWER_STATS[type].hp * hpMult(lvl))
 
 // Modes de ciblage (voir backend TargetingMode) : libellés courts + explication.
 const TARGETING_MODES: { mode: 'CLOSEST' | 'FIRST' | 'STRONGEST'; label: string; hint: string }[] = [
@@ -514,6 +517,11 @@ export default function GamePage() {
                                         {towerRange(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
                                         {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerRange(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
                                     </span>
+                                    <span className="text-[#8a6a2c]">Solidité</span>
+                                    <span className="text-right font-med text-[#43310f]">
+                                        {towerHp(selectedTowerObj.type, selectedTowerObj.level ?? 1)} PV
+                                        {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerHp(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
+                                    </span>
                                     <span className="text-[#8a6a2c]">Cadence</span>
                                     <span className="text-right text-[#43310f]">{TOWER_STATS[selectedTowerObj.type].cadence}</span>
                                     <span className="text-[#8a6a2c]">Type</span>
@@ -531,8 +539,8 @@ export default function GamePage() {
                                     <>
                                         <div className="rounded px-2 py-1.5 text-[11px] text-[#5a3d16]" style={{ background: '#e6d6ab', borderLeft: '3px solid #b08a3c' }}>
                                             {(selectedTowerObj.level ?? 1) + 1 >= MAX_TOWER_LEVEL
-                                                ? `Niveau ${selectedTowerObj.level ?? 1} → ${MAX_TOWER_LEVEL} : bond décisif de dégâts et de portée.`
-                                                : `Niveau ${selectedTowerObj.level ?? 1} → ${(selectedTowerObj.level ?? 1) + 1} : dégâts et portée renforcés.`}
+                                                ? `Niveau ${selectedTowerObj.level ?? 1} → ${MAX_TOWER_LEVEL} : bond décisif de dégâts, portée et solidité.`
+                                                : `Niveau ${selectedTowerObj.level ?? 1} → ${(selectedTowerObj.level ?? 1) + 1} : dégâts, portée et solidité renforcés.`}
                                         </div>
                                         <button onClick={() => handleUpgradeSelected(selectedTowerObj)}
                                                 disabled={gold < upgradeCost(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
@@ -597,7 +605,7 @@ export default function GamePage() {
                                                             </div>
                                                             <p className="text-[11px] text-[#8a6a2c] leading-tight">{locked ? `Débloquée vague ${TOWER_INFO[type].unlockWave}` : TOWER_ROLE[type]}</p>
                                                             {!locked && (
-                                                                <p className="text-[10px] text-[#7a5320] leading-tight">Dégâts {TOWER_STATS[type].damage} · Portée {TOWER_STATS[type].range} · Cadence {TOWER_STATS[type].cadence}</p>
+                                                                <p className="text-[10px] text-[#7a5320] leading-tight">Dégâts {TOWER_STATS[type].damage} · Portée {TOWER_STATS[type].range} · {TOWER_STATS[type].hp} PV · Cadence {TOWER_STATS[type].cadence}</p>
                                                             )}
                                                         </div>
                                                     </div>

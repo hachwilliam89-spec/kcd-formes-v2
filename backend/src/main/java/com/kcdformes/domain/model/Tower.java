@@ -96,7 +96,11 @@ public class Tower {
         // structureHp > 0 : PV explicites découplés du coût (cas du WALL, voir
         // TowerType.structureHp) ; sinon formule standard dérivée du coût.
         int base = type.structureHp > 0 ? type.structureHp : type.baseCost * 3;
-        return (int) Math.round(base * (1 + (level - 1) * 0.2));
+        // Solidité fortement croissante avec le niveau (niv1=1.0, niv2=1.5, niv3=2.2) :
+        // une tour améliorée encaisse bien mieux les Sapeurs/rayons — c'est un vrai
+        // argument pour "peu de tours fortes" plutôt que "beaucoup de tours fragiles".
+        double mult = level >= 3 ? 2.2 : 1 + (level - 1) * 0.5;
+        return (int) Math.round(base * mult);
     }
 
     public boolean isDestroyed() {
