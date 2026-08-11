@@ -697,6 +697,18 @@ export class GameScene extends Phaser.Scene {
             const py = tower.y * CELL_SIZE
             const hasSprite = TOWER_SPRITE_TYPES.includes(tower.type)
 
+            // Repère de palier : pastilles dorées (✦) au-dessus d'une tour améliorée
+            // (niveau ≥ 2) pour distinguer d'un coup d'œil les tours évoluées. Texte
+            // indépendant, poussé dans towerTexts → détruit/reconstruit à chaque redraw.
+            const lvl = tower.level ?? 1
+            if (lvl >= 2 && tower.type !== 'WALL') {
+                const pips = this.add.text(px + CELL_SIZE / 2, py - 3, '✦'.repeat(lvl), {
+                    fontFamily: 'monospace', fontSize: '11px', color: '#f2c94c',
+                }).setOrigin(0.5, 1).setDepth(6)
+                pips.setStroke('#3a2a10', 3)
+                this.towerTexts.push(pips)
+            }
+
             if (hasSprite) {
                 const isWall = tower.type === 'WALL'
                 const rot = ROT_WEAPON[tower.type]

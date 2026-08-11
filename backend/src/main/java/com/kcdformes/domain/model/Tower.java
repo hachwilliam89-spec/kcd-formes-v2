@@ -4,6 +4,10 @@ import java.util.UUID;
 
 public class Tower {
 
+    /** Niveau d'amélioration maximum : une tour niv. 3 est un investissement final,
+     *  coûteux mais décisif (voir getDamage/getRange/getUpgradeCost). */
+    public static final int MAX_LEVEL = 3;
+
     private final UUID id;
     private final TowerType type;
     private final int x;
@@ -50,12 +54,21 @@ public class Tower {
         this.hp = hp;
     }
 
+    // Progression des dégâts/portée par niveau (1 → 3). Le niveau 3 offre un bond
+    // marqué (×2.6 dégâts, +0.9 portée) : une tour au max change vraiment le combat,
+    // pour justifier son coût élevé (voir getUpgradeCost).
     public int getDamage() {
-        return (int) (type.baseDamage * (1 + (level - 1) * 0.5));
+        double mult = level >= 3 ? 2.6 : 1 + (level - 1) * 0.6; // niv1=1.0, niv2=1.6, niv3=2.6
+        return (int) (type.baseDamage * mult);
     }
 
     public double getRange() {
-        return type.baseRange + (level - 1) * 0.3;
+        double bonus = level >= 3 ? 0.9 : (level - 1) * 0.35; // niv1=+0, niv2=+0.35, niv3=+0.9
+        return type.baseRange + bonus;
+    }
+
+    public boolean isMaxLevel() {
+        return level >= MAX_LEVEL;
     }
 
     public boolean canTarget(Enemy enemy) {
@@ -65,6 +78,7 @@ public class Tower {
     }
 
     public void upgrade() {
+        if (level >= MAX_LEVEL) return; // garde-fou : le cap est aussi refusé en amont (GameService)
         this.level++;
         // Une tour améliorée est reconstruite/renforcée : elle repart à pleine
         // vie au nouveau niveau (getMaxHp() en dépend) plutôt que de garder ses
@@ -109,10 +123,11 @@ public class Tower {
      * améliorer coûte autant que poser une tour neuve du même type — un vrai choix
      * à chaque fois, pas un coup gratuit — puis le coût grimpe avec le niveau
      * (x2, x3, ...) pour que réinvestir dans une tour existante reste un sacrifice
-     * face à l'achat de nouvelles tours faibles.
+     * face à l'achat de nouvelles tours faibles. Coût renforcé (× level × 2) : le
+     * passage au niveau 3 (baseCost × 4) est un vrai sacrifice pour un gain décisif.
      */
     public int getUpgradeCost() {
-        return type.baseCost * level;
+        return type.baseCost * level * 2;
     }
 
     public TargetingMode getTargetingMode() { return targetingMode; }

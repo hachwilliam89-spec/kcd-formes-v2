@@ -31,6 +31,13 @@ const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
 
 type TowerType = 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA' | 'WALL'
 
+// Cap d'amélioration (miroir de Tower.MAX_LEVEL côté backend) et coût du prochain
+// niveau (miroir de Tower.getUpgradeCost = baseCost × level × 2).
+const MAX_TOWER_LEVEL = 3
+const upgradeCost = (type: TowerType, level: number) => TOWER_INFO[type].cost * level * 2
+// Pastilles de niveau (repère de palier) : ✦ pleins = niveau atteint sur MAX.
+const levelStars = (level: number) => '✦'.repeat(level) + '·'.repeat(Math.max(0, MAX_TOWER_LEVEL - level))
+
 const TOWER_INFO: Record<TowerType, { label: string; cost: number; color: string; unlockWave: number }> = {
     ARCHER:   { label: 'Archer',    cost: 50,  color: 'bg-green-600',  unlockWave: 0 },
     MAGE:     { label: 'Mage',      cost: 100, color: 'bg-purple-600', unlockWave: 0 },
@@ -226,12 +233,16 @@ export default function GamePage() {
 
     async function handleUpgradeSelected(tower: TowerData) {
         const level = tower.level ?? 1
-        const cost = TOWER_INFO[tower.type].cost * level
+        if (level >= MAX_TOWER_LEVEL) { setMessage('Cette tour est déjà au niveau maximum (3).'); return }
+        const cost = upgradeCost(tower.type, level)
         try {
             await upgradeTower(tower.id, cost)
-            setMessage(`${TOWER_INFO[tower.type].label} améliorée au niveau ${level + 1} (-${cost} or)`)
+            const next = level + 1
+            setMessage(next >= MAX_TOWER_LEVEL
+                ? `${TOWER_INFO[tower.type].label} portée au niveau MAX — un vrai pilier ! (-${cost} or)`
+                : `${TOWER_INFO[tower.type].label} améliorée au niveau ${next} (-${cost} or)`)
         } catch {
-            setMessage("Impossible d'améliorer cette tour (or insuffisant)")
+            setMessage("Impossible d'améliorer cette tour (or insuffisant ou niveau max)")
         }
     }
 
@@ -405,24 +416,43 @@ export default function GamePage() {
                                 <div className="flex justify-between items-center">
                                     <span className="flex items-center gap-2 font-med text-base text-[#43310f]">
                                         <TowerIcon type={selectedTowerObj.type} size={22} />
-                                        {TOWER_INFO[selectedTowerObj.type].label} · niv. {selectedTowerObj.level ?? 1}
+                                        {TOWER_INFO[selectedTowerObj.type].label}
                                     </span>
                                     <button onClick={() => setSelectedTowerId(null)} aria-label="Fermer">
                                         <img src="/sprites/ui/icon_close.png" alt="Fermer" className="kcd-icon" style={{ height: 16 }} />
                                     </button>
                                 </div>
 
-                                <p className="text-[11px] text-[#8a6a2c]">{TOWER_ROLE[selectedTowerObj.type]}</p>
-
-                                <div className="rounded px-2 py-1.5 text-[11px] text-[#5a3d16]" style={{ background: '#e6d6ab', borderLeft: '3px solid #b08a3c' }}>
-                                    Niveau {selectedTowerObj.level ?? 1} → {(selectedTowerObj.level ?? 1) + 1} : dégâts et portée renforcés.
+                                <div className="flex items-center gap-2 -mt-1">
+                                    <span className="text-yellow-600 tracking-widest text-sm" title={`Niveau ${selectedTowerObj.level ?? 1} / ${MAX_TOWER_LEVEL}`}>{levelStars(selectedTowerObj.level ?? 1)}</span>
+                                    <span className="text-[11px] text-[#8a6a2c]">niv. {selectedTowerObj.level ?? 1}/{MAX_TOWER_LEVEL}</span>
                                 </div>
 
-                                <button onClick={() => handleUpgradeSelected(selectedTowerObj)} className="kcd-btn text-sm py-1.5 flex items-center justify-center gap-1">
-                                    ⬆ Améliorer
-                                    <img src="/sprites/ui/icon_gold.png" alt="" aria-hidden className="kcd-icon" style={{ height: 13 }} />
-                                    -{TOWER_INFO[selectedTowerObj.type].cost * (selectedTowerObj.level ?? 1)}
-                                </button>
+                                <p className="text-[11px] text-[#8a6a2c]">{TOWER_ROLE[selectedTowerObj.type]}</p>
+
+                                {(selectedTowerObj.level ?? 1) >= MAX_TOWER_LEVEL ? (
+                                    <>
+                                        <div className="rounded px-2 py-1.5 text-[11px] text-[#3a6a12] text-center font-semibold" style={{ background: '#dff0c8', border: '1px solid #8bbf5a' }}>
+                                            ✦ Niveau maximum atteint
+                                        </div>
+                                        <button disabled className="kcd-btn text-sm py-1.5 opacity-50">Niveau max</button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="rounded px-2 py-1.5 text-[11px] text-[#5a3d16]" style={{ background: '#e6d6ab', borderLeft: '3px solid #b08a3c' }}>
+                                            {(selectedTowerObj.level ?? 1) + 1 >= MAX_TOWER_LEVEL
+                                                ? `Niveau ${selectedTowerObj.level ?? 1} → ${MAX_TOWER_LEVEL} : bond décisif de dégâts et de portée.`
+                                                : `Niveau ${selectedTowerObj.level ?? 1} → ${(selectedTowerObj.level ?? 1) + 1} : dégâts et portée renforcés.`}
+                                        </div>
+                                        <button onClick={() => handleUpgradeSelected(selectedTowerObj)}
+                                                disabled={gold < upgradeCost(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
+                                                className="kcd-btn text-sm py-1.5 flex items-center justify-center gap-1 disabled:opacity-50">
+                                            ⬆ Améliorer
+                                            <img src="/sprites/ui/icon_gold.png" alt="" aria-hidden className="kcd-icon" style={{ height: 13 }} />
+                                            -{upgradeCost(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
+                                        </button>
+                                    </>
+                                )}
 
                                 <div>
                                     <p className="text-xs font-semibold text-[#5a3d16]">Priorité de tir</p>

@@ -206,6 +206,12 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         Tower existing = map.getTowerById(command.towerId())
                 .orElseThrow(() -> new IllegalArgumentException("Tower not found: " + command.towerId()));
 
+        // Cap d'amélioration : une tour au niveau max ne peut plus être améliorée
+        // (refusé ici avant tout débit d'or ; garde-fou aussi dans Tower.upgrade()).
+        if (existing.isMaxLevel()) {
+            throw new IllegalArgumentException("Tower already at max level: " + command.towerId());
+        }
+
         // Coût calculé sur le niveau courant, avant l'incrément (voir Tower.getUpgradeCost) :
         // on doit le lire ici, avant que le service domaine n'appelle tower.upgrade().
         int cost = existing.getUpgradeCost();
