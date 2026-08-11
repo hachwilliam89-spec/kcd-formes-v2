@@ -102,12 +102,12 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         // débordent vers le HAUT) ; en bas, la ligne 14 sert de marge aux pieds des
         // ennemis de la voie basse.
         GameMap initialMap = new GameMap(20, 15, List.of(
-                new Position(0, 3),   // spawn (haut-gauche)
-                new Position(17, 3),  // voie haute -> droite
-                new Position(17, 8),  // descente
-                new Position(2, 8),   // voie médiane -> gauche
-                new Position(2, 13),  // descente
-                new Position(19, 13)  // château (bas-droite)
+                new Position(0, 1),   // spawn (haut-gauche)
+                new Position(17, 1),  // voie haute -> droite
+                new Position(17, 6),  // descente
+                new Position(2, 6),   // voie médiane -> gauche
+                new Position(2, 11),  // descente
+                new Position(19, 11)  // château (bas-droite) — tracé remonté : bande de pose en bas
         ));
 
         CastleEntity castle = new CastleEntity();

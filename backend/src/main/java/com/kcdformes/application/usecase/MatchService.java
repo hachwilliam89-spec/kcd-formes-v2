@@ -235,12 +235,12 @@ public class MatchService {
      *  pour que le décor du frontend colle au déplacement des ennemis. */
     private GameMap defaultMap() {
         return new GameMap(20, 15, List.of(
-                new Position(0, 3),
-                new Position(17, 3),
-                new Position(17, 8),
-                new Position(2, 8),
-                new Position(2, 13),
-                new Position(19, 13)));
+                new Position(0, 1),
+                new Position(17, 1),
+                new Position(17, 6),
+                new Position(2, 6),
+                new Position(2, 11),
+                new Position(19, 11)));
     }
 
     /** Un joueur quitte : match supprimé s'il devient vide, sinon diffusé. */

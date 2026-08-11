@@ -1455,8 +1455,8 @@ export class GameScene extends Phaser.Scene {
             const c = frame[n]
             const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 6
             const cy = c.y * CELL_SIZE + CELL_SIZE + 2
-            // ruinT sans tombes ni feux de camp : 1=colonne, 5/6=bannières, 7=palissade.
-            const ruinTok = [1, 5, 6, 7]
+            // ruinT gardés : 1=colonne, 5/6=bannières (sans tombes, feux, ni barrière).
+            const ruinTok = [1, 5, 6]
             const r = rnd()
             if (r < 0.4) placeDecor(`decor-ruinT-${ruinTok[Math.floor(rnd() * ruinTok.length)]}`, cx, cy, 1.15 + rnd() * 0.25, CELL_SIZE * 0.4, true) // colonne/bannière/palissade
             else if (r < 0.72) placeDecor(`decor-ruinF-${1 + Math.floor(rnd() * 4)}`, cx, cy, 0.95 + rnd() * 0.2, CELL_SIZE * 0.5)   // ossements/rocher/tronc/souche
