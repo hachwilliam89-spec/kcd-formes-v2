@@ -353,7 +353,7 @@ export default function GamePage() {
 
     return (
         <div
-            className="relative min-h-screen lg:h-screen flex flex-col lg:overflow-hidden text-[#f0e2c4] font-pixel p-3 md:p-4"
+            className="relative h-screen flex flex-col overflow-hidden text-[#f0e2c4] font-pixel p-2 md:p-3"
             onPointerDown={() => { audio.resume(); audio.music('game') }} // débloque l'audio + musique de fond au 1er geste
             style={{
                 backgroundImage: "url('/home-bg-alt.jpg')",
@@ -398,12 +398,12 @@ export default function GamePage() {
                 </div>
             </div>
 
-            <div className="relative z-10 flex-1 lg:min-h-0 flex flex-col lg:flex-row gap-2 lg:gap-3">
+            <div className="relative z-10 flex-1 min-h-0 flex flex-col lg:flex-row gap-2 lg:gap-3">
                 {/* Colonne principale : plateau prioritaire + barre d'action JUSTE dessous.
                     Fenêtre étroite (flex-col) → tours sous la grille (jouabilité) puis stats.
                     Grand écran → panneau stats/évolution à droite. */}
-                <div className="flex-1 lg:min-h-0 flex flex-col gap-2 min-w-0">
-                    <div className="relative w-full aspect-[4/3] lg:aspect-auto lg:flex-1 min-w-0 lg:min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
+                <div className="flex-1 min-h-0 flex flex-col gap-2 min-w-0">
+                    <div className="relative w-full flex-1 min-w-0 min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
                         <GameCanvas ref={canvasRef} towers={towers} onCellClick={handleCellClick} selectedTower={canAct ? selectedTower : null} />
                     </div>
 
@@ -461,7 +461,7 @@ export default function GamePage() {
                     </div>
                 </div>
 
-                    <aside className="w-full lg:w-64 shrink-0 lg:min-h-0 lg:overflow-y-auto flex flex-col gap-3">
+                    <aside className="w-full lg:w-64 shrink-0 min-h-0 overflow-y-auto max-h-[38vh] lg:max-h-none flex flex-col gap-3">
                         {selectedTowerObj && canAct ? (
                             /* Carte d'évolution de la tour cliquée : niveau, amélioration,
                                aperçu du prochain niveau, priorité de tir. */
