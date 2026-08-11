@@ -357,8 +357,8 @@ export class GameScene extends Phaser.Scene {
         this.load.image('field-grass', '/sprites/terrain/grass_field.png')
         this.load.image('field-dirt', '/sprites/terrain/dirt_path.png')
         for (let i = 1; i <= 6; i++) this.load.image(`decor-tree-${i}`, `/sprites/decor/tree_${i}.png`)
-        for (let i = 1; i <= 4; i++) this.load.image(`decor-rock-${i}`, `/sprites/decor/rock_${i}.png`)
-        for (let i = 1; i <= 5; i++) this.load.image(`decor-bush-${i}`, `/sprites/decor/bush_${i}.png`)
+        for (let i = 1; i <= 16; i++) this.load.image(`decor-ruin-${i}`, `/sprites/decor/ruin_${i}.png`)   // gros décor bataille/ruines (bords)
+        for (let i = 1; i <= 6; i++) this.load.image(`decor-small-${i}`, `/sprites/decor/small_${i}.png`)   // petit décor (cases de pose)
         // Props décoratifs (rochers) pour habiller le champ.
         for (let i = 1; i <= 5; i++) this.load.image(`prop-stone-${i}`, `/sprites/props/stone_${i}.png`)
         // Châteaux : le tien (arrivée, à défendre) + celui de l'ennemi (spawn, décoratif).
@@ -1437,17 +1437,24 @@ export class GameScene extends Phaser.Scene {
         drawRoadShape(maskG, ROAD, 0xffffff)
         roadTex.setMask(maskG.createGeometryMask())
 
-        // 3) Décor du tileset nature (arbres, rochers, buissons), placement déterministe.
+        // 3) Décor déterministe. Convention TD : la zone de pose reste LISIBLE.
+        //    → GROS décor (arbres + ruines) seulement sur le CADRE (bords + rangée du
+        //      haut sacrifiée), loin des deux châteaux ; PETIT décor (herbe, cailloux)
+        //      dispersé sur les cases de pose (n'entrave pas la visibilité).
         let seed = 1337
         const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
-        const buildable: { x: number; y: number }[] = []
-        const border2: { x: number; y: number }[] = []
+        const nearCastle = (x: number, y: number) =>
+            Math.max(Math.abs(x - PATH_START.x), Math.abs(y - PATH_START.y)) <= 2 ||
+            Math.max(Math.abs(x - PATH_END.x), Math.abs(y - PATH_END.y)) <= 2
+        const frame: { x: number; y: number }[] = []      // cadre → gros décor
+        const inner: { x: number; y: number }[] = []       // cases de pose → petit décor
         for (let x = 0; x < GRID_WIDTH; x++)
-            for (let y = 0; y < GRID_HEIGHT; y++)
-                if (!isCorridorCell(x, y)) {
-                    buildable.push({ x, y })
-                    if (x <= 1 || x >= GRID_WIDTH - 2 || y <= 1 || y >= GRID_HEIGHT - 2) border2.push({ x, y })
-                }
+            for (let y = 0; y < GRID_HEIGHT; y++) {
+                if (isCorridorCell(x, y)) continue
+                const isEdge = x === 0 || x === GRID_WIDTH - 1 || y === 0 || y === GRID_HEIGHT - 1
+                if (isEdge) { if (!nearCastle(x, y)) frame.push({ x, y }) }
+                else inner.push({ x, y })
+            }
 
         // Ombre portée douce + sprite, ancré en bas de la case (déborde vers le haut).
         const placeDecor = (key: string, cx: number, cy: number, cellSpan: number, shadowW: number) => {
@@ -1458,23 +1465,30 @@ export class GameScene extends Phaser.Scene {
             img.setScale((CELL_SIZE * cellSpan) / img.width)
         }
 
-        // 3a) Arbres : surtout sur les bords (n'encombrent pas les cases centrales).
-        const usedT = new Set<string>()
-        for (let n = 0; n < 9 && border2.length; n++) {
-            const c = border2[Math.floor(rnd() * border2.length)]
-            const k = `${c.x},${c.y}`; if (usedT.has(k)) continue; usedT.add(k)
+        // 3a) GROS décor sur le cadre : mélange d'arbres et de ruines (bataille).
+        const bigKeys = [
+            ...Array.from({ length: 6 }, (_, i) => `decor-tree-${i + 1}`),
+            ...Array.from({ length: 16 }, (_, i) => `decor-ruin-${i + 1}`),
+        ]
+        const usedF = new Set<string>()
+        for (let n = 0; n < 26 && frame.length; n++) {
+            const c = frame[Math.floor(rnd() * frame.length)]
+            const k = `${c.x},${c.y}`; if (usedF.has(k)) continue; usedF.add(k)
+            const key = bigKeys[Math.floor(rnd() * bigKeys.length)]
+            const isTree = key.startsWith('decor-tree')
             const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 6
             const cy = c.y * CELL_SIZE + CELL_SIZE + 2
-            placeDecor(`decor-tree-${1 + Math.floor(rnd() * 6)}`, cx, cy, 1.7 + rnd() * 0.5, CELL_SIZE * 0.55)
+            placeDecor(key, cx, cy, (isTree ? 1.6 : 1.05) + rnd() * (isTree ? 0.5 : 0.35), CELL_SIZE * (isTree ? 0.55 : 0.45))
         }
-        // 3b) Buissons + rochers dispersés sur tout le champ.
-        for (let n = 0; n < 18 && buildable.length; n++) {
-            const c = buildable[Math.floor(rnd() * buildable.length)]
-            const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 10
-            const cy = c.y * CELL_SIZE + CELL_SIZE * 0.9 + (rnd() - 0.5) * 6
-            const isBush = rnd() < 0.6
-            const key = isBush ? `decor-bush-${1 + Math.floor(rnd() * 5)}` : `decor-rock-${1 + Math.floor(rnd() * 4)}`
-            placeDecor(key, cx, cy, (isBush ? 0.55 : 0.5) + rnd() * 0.25, CELL_SIZE * 0.35)
+
+        // 3b) PETIT décor sur les cases de pose (subtil, ne gêne pas la lecture).
+        const usedI = new Set<string>()
+        for (let n = 0; n < 22 && inner.length; n++) {
+            const c = inner[Math.floor(rnd() * inner.length)]
+            const k = `${c.x},${c.y}`; if (usedI.has(k)) continue; usedI.add(k)
+            const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 12
+            const cy = c.y * CELL_SIZE + CELL_SIZE * 0.85 + (rnd() - 0.5) * 8
+            placeDecor(`decor-small-${1 + Math.floor(rnd() * 6)}`, cx, cy, 0.38 + rnd() * 0.22, CELL_SIZE * 0.28)
         }
 
         // 4) Vignette d'ambiance : bords assombris (au-dessus du terrain, sous le jeu).
