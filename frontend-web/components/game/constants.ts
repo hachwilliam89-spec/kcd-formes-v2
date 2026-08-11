@@ -12,6 +12,13 @@ export const GRID_H = 16
 // de la première rangée jouable s'affichent en entier (elles débordent vers le haut).
 export const TOP_RESERVED_ROWS = 1
 
+/**
+ * Largeur (en cases) de la bande CONSTRUCTIBLE au bord des routes : on ne peut poser
+ * une tour QUE sur une case à cette distance (Chebyshev) du couloir. Au-delà = zone
+ * morte (décor). DOIT rester synchronisé avec le backend (PathfindingService.BUILD_BAND).
+ */
+export const BUILD_BAND = 1
+
 const key = (x: number, y: number) => `${x},${y}`
 
 // Données de chemin dérivées d'une liste de waypoints (identiques à l'ancien calcul,
@@ -21,7 +28,25 @@ export type PathData = {
   pathCells: Cell[]
   corridorSet: Set<string>
   corridorCells: Cell[]
+  buildableSet: Set<string>   // bande constructible au bord des routes (hors couloir)
   pathDir: Map<string, { dx: number; dy: number }>
+}
+
+/** Bande constructible = anneau de BUILD_BAND cases autour du couloir, hors couloir. */
+function computeBuildable(corridorSet: Set<string>, gridW: number, gridH: number): Set<string> {
+  const buildable = new Set<string>()
+  for (const k of corridorSet) {
+    const [cx, cy] = k.split(',').map(Number)
+    for (let dx = -BUILD_BAND; dx <= BUILD_BAND; dx++) {
+      for (let dy = -BUILD_BAND; dy <= BUILD_BAND; dy++) {
+        const nx = cx + dx
+        const ny = cy + dy
+        const nk = key(nx, ny)
+        if (nx >= 0 && nx < gridW && ny >= 0 && ny < gridH && !corridorSet.has(nk)) buildable.add(nk)
+      }
+    }
+  }
+  return buildable
 }
 
 /**
@@ -73,7 +98,8 @@ export function buildPathData(waypoints: Cell[], gridW = GRID_W, gridH = GRID_H)
     pathDir.set(key(a.x, a.y), { dx: Math.sign(b.x - a.x), dy: Math.sign(b.y - a.y) })
   }
 
-  return { waypoints, pathCells, corridorSet, corridorCells, pathDir }
+  const buildableSet = computeBuildable(corridorSet, gridW, gridH)
+  return { waypoints, pathCells, corridorSet, corridorCells, buildableSet, pathDir }
 }
 
 /**
@@ -120,11 +146,15 @@ export function buildLanesData(lanes: Cell[][], halfWidth = 1, gridW = GRID_W, g
     }
   }
 
-  return { waypoints: lanes[0], pathCells, corridorSet, corridorCells, pathDir }
+  const buildableSet = computeBuildable(corridorSet, gridW, gridH)
+  return { waypoints: lanes[0], pathCells, corridorSet, corridorCells, buildableSet, pathDir }
 }
 
 /** Une case est-elle sur le couloir (donc inconstructible pour une tour) ? */
 export const corridorHas = (data: PathData, x: number, y: number) => data.corridorSet.has(key(x, y))
+
+/** Une case est-elle constructible (bande au bord des routes) ? Sinon = décor. */
+export const buildableHas = (data: PathData, x: number, y: number) => data.buildableSet.has(key(x, y))
 
 /** Direction du chemin (sens des ennemis) à/près d'une case — pour orienter le mur. */
 export function pathDirectionAtIn(data: PathData, x: number, y: number): { dx: number; dy: number } {

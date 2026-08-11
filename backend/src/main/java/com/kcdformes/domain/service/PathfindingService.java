@@ -110,6 +110,37 @@ public class PathfindingService {
     }
 
     /**
+     * Largeur (en cases) de la BANDE CONSTRUCTIBLE au bord des routes : on ne peut
+     * poser une tour QUE sur une case à cette distance (Chebyshev) du couloir. Au-delà,
+     * la case est une « zone morte » réservée au décor — décision de design : le
+     * placement doit rester pertinent (à portée d'une route), pas éparpillé sur tout
+     * le champ. DOIT rester synchronisé avec le front (constants.ts BUILD_BAND).
+     */
+    public static final int BUILD_BAND = 1;
+
+    /**
+     * Cases CONSTRUCTIBLES : la bande de BUILD_BAND cases qui longe le couloir (hors
+     * couloir lui-même). Tout le reste est zone morte (décor), inconstructible.
+     */
+    public Set<Position> buildableCells(GameMap map) {
+        Set<Position> corridor = corridorCells(map);
+        Set<Position> buildable = new HashSet<>();
+        for (Position c : corridor) {
+            for (int dx = -BUILD_BAND; dx <= BUILD_BAND; dx++) {
+                for (int dy = -BUILD_BAND; dy <= BUILD_BAND; dy++) {
+                    int nx = c.x() + dx;
+                    int ny = c.y() + dy;
+                    Position p = new Position(nx, ny);
+                    if (map.isValidPosition(nx, ny) && !corridor.contains(p)) {
+                        buildable.add(p);
+                    }
+                }
+            }
+        }
+        return buildable;
+    }
+
+    /**
      * Calcule le chemin optimal (A*) de pathStart à pathEnd, en considérant les
      * tours comme des murs. Retourne null si aucun chemin n'existe.
      * Conservé pour un éventuel futur mode labyrinthe (voir hasPath) — la

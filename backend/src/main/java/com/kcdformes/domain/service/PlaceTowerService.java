@@ -58,7 +58,8 @@ public class PlaceTowerService implements PlaceTowerUseCase {
         // qu'à barrer le passage), jamais en dehors. Il ne remet pas en cause le
         // couloir strict : il ne dévie pas le chemin, les ennemis s'arrêtent
         // devant et le cassent (voir WaveSimulationService.handleWallBlocking).
-        boolean onCorridor = pathfindingService.corridorCells(map).contains(new Position(x, y));
+        Position pos = new Position(x, y);
+        boolean onCorridor = pathfindingService.corridorCells(map).contains(pos);
         if (type == TowerType.WALL) {
             if (!onCorridor) {
                 throw new IllegalStateException(
@@ -78,6 +79,12 @@ public class PlaceTowerService implements PlaceTowerUseCase {
             }
         } else if (onCorridor) {
             throw new CellOnPathException(x, y);
+        } else if (!pathfindingService.buildableCells(map).contains(pos)) {
+            // Hors de la bande constructible (au bord des routes) : zone morte
+            // réservée au décor. Le placement doit rester pertinent (à portée d'une
+            // route), pas éparpillé sur tout le champ (voir BUILD_BAND).
+            throw new IllegalStateException(
+                    "Cell (%d, %d) is a dead zone (build along the roads' edge)".formatted(x, y));
         }
 
         Tower tower = new Tower(type, x, y);

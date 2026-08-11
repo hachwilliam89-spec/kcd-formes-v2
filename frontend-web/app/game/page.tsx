@@ -8,7 +8,7 @@ import { useGame } from '@/hooks/useGame'
 import { useAuth } from '@/hooks/useAuth'
 import type { TowerData } from '@/components/game/GameScene'
 import { TOP_RESERVED_ROWS } from '@/components/game/constants'
-import { getMapDef, mapIsCorridor } from '@/components/game/maps'
+import { getMapDef, mapIsCorridor, mapIsBuildable } from '@/components/game/maps'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
 import MapSelector from '@/components/game/MapSelector'
 import TutorialBubble from '@/components/game/TutorialBubble'
@@ -223,7 +223,8 @@ export default function GamePage() {
         // final) : le mur-barrage se pose uniquement SUR le couloir des ennemis,
         // les tours uniquement en dehors. Filtré ici pour un retour immédiat au
         // lieu d'un aller-retour réseau voué au rejet.
-        const inCorridor = mapIsCorridor(getMapDef(mapId), x, y)
+        const mapDef = getMapDef(mapId)
+        const inCorridor = mapIsCorridor(mapDef, x, y)
         if (selectedTower === 'WALL' && !inCorridor) {
             setMessage('Le mur se pose sur le couloir des ennemis (pour leur barrer la route)')
             return
@@ -238,6 +239,12 @@ export default function GamePage() {
         }
         if (selectedTower !== 'WALL' && inCorridor) {
             setMessage('Impossible de construire une tour sur le couloir des ennemis')
+            return
+        }
+        // Bande constructible : les tours ne se posent qu'au bord des routes. Loin
+        // des routes = zone morte (décor). Le backend reste l'arbitre final.
+        if (selectedTower !== 'WALL' && !inCorridor && !mapIsBuildable(mapDef, x, y)) {
+            setMessage('Trop loin des routes — construis en bordure (le reste est du décor)')
             return
         }
 

@@ -91,6 +91,16 @@ class PlaceTowerServiceTest {
     }
 
     @Test
+    @DisplayName("Zone morte : une tour loin des routes (y=0) est refusée (bande constructible = bord du couloir)")
+    void placeTower_deadZoneFarFromRoads_rejected() {
+        // Couloir y=6..8, bande constructible = y=5 et y=9. y=0 est hors bande → décor.
+        assertThatThrownBy(() -> service.placeTower(
+                new PlaceTowerCommand(gameId, playerId, TowerType.ARCHER, 10, 0)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("dead zone");
+    }
+
+    @Test
     @DisplayName("Le mur-barrage se pose SUR le couloir (règle inverse des tours)")
     void placeWall_onCorridor_accepted() {
         Tower wall = service.placeTower(

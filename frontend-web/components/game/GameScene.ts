@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import type { Cell } from './constants'
 import { TOP_RESERVED_ROWS } from './constants'
-import { GAME_MAPS, DEFAULT_MAP_ID, getMapDef, mapIsCorridor, mapPathDir, mapLaneStarts, mapCastle } from './maps'
+import { GAME_MAPS, DEFAULT_MAP_ID, getMapDef, mapIsCorridor, mapIsBuildable, mapPathDir, mapLaneStarts, mapCastle } from './maps'
 import { audio, Sfx } from '@/lib/audio'
 
 // Association effet visuel d'impact → bruitage, avec un intervalle mini (ms) pour
@@ -574,9 +574,11 @@ export class GameScene extends Phaser.Scene {
         const inGrid = cell.x >= 0 && cell.x < GRID_WIDTH && cell.y >= 0 && cell.y < GRID_HEIGHT
         if (!inGrid) return
         const corridor = mapIsCorridor(this.mapDef, cell.x, cell.y)
+        const buildable = mapIsBuildable(this.mapDef, cell.x, cell.y)
         const occupied = [...this.towersById.values()].some((t) => t.x === cell.x && t.y === cell.y)
-        // Mur : sur le couloir ; tours : hors couloir. Case libre + hors rangée réservée.
-        const ok = !occupied && cell.y >= TOP_RESERVED_ROWS && (type === 'WALL' ? corridor : !corridor)
+        // Mur : sur le couloir ; tours : bande constructible (bord des routes) — pas
+        // les zones mortes. Case libre + hors rangée réservée.
+        const ok = !occupied && cell.y >= TOP_RESERVED_ROWS && (type === 'WALL' ? corridor : buildable)
 
         const px = cell.x * CELL_SIZE, py = cell.y * CELL_SIZE
         const color = ok ? 0x5bbd3a : 0xd64545
@@ -1543,7 +1545,10 @@ export class GameScene extends Phaser.Scene {
         // couloir (route) reste net.
         for (let x = 0; x < GRID_WIDTH; x++) {
             for (let y = 0; y < GRID_HEIGHT; y++) {
-                if (mapIsCorridor(this.mapDef, x, y) || y < TOP_RESERVED_ROWS) continue // rangée du haut réservée
+                // Parcelle affichée UNIQUEMENT sur les cases constructibles (bande au
+                // bord des routes). Les zones mortes (loin des routes) restent nues —
+                // elles accueilleront le décor. Rangée du haut = tampon réservé.
+                if (!mapIsBuildable(this.mapDef, x, y) || y < TOP_RESERVED_ROWS) continue
                 const px = x * CELL_SIZE
                 const py = y * CELL_SIZE
                 this.gridGraphics.fillStyle(0xffffff, 0.06)

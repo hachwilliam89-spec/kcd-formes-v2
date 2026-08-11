@@ -129,7 +129,8 @@ public class MatchService {
         if (!map.isValidPosition(x, y)) {
             throw new IllegalArgumentException("Position hors de la carte");
         }
-        boolean onCorridor = pathfindingService.corridorCells(map).contains(new Position(x, y));
+        Position cell = new Position(x, y);
+        boolean onCorridor = pathfindingService.corridorCells(map).contains(cell);
         if (type == TowerType.WALL) {
             if (!onCorridor) throw new IllegalStateException("Le mur se pose sur le couloir des ennemis");
             long walls = map.getTowers().stream().filter(t -> t.getType() == TowerType.WALL).count();
@@ -138,6 +139,8 @@ public class MatchService {
             }
         } else if (onCorridor) {
             throw new IllegalStateException("Impossible de construire sur le couloir des ennemis");
+        } else if (!pathfindingService.buildableCells(map).contains(cell)) {
+            throw new IllegalStateException("Zone de décor : construis en bordure de route");
         }
         if (map.getTowerAt(x, y).isPresent()) {
             throw new IllegalStateException("Case déjà occupée");

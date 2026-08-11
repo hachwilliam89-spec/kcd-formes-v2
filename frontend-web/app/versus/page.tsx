@@ -18,7 +18,7 @@ import { ChatPanel, type ChatMessage } from '@/components/game/ChatPanel'
 import { MiniBoard, TOWER_COLOR, TOWER_LABEL } from '@/components/game/MiniBoard'
 import { useHasGutter } from '@/components/game/useHasGutter'
 import { TOP_RESERVED_ROWS } from '@/components/game/constants'
-import { getMapDef, mapIsCorridor } from '@/components/game/maps'
+import { getMapDef, mapIsCorridor, mapIsBuildable } from '@/components/game/maps'
 import MapSelector from '@/components/game/MapSelector'
 import { audio } from '@/lib/audio'
 
@@ -142,9 +142,11 @@ export default function VersusPage() {
         if (!running) return
         setNotice(null)
         if (y < TOP_RESERVED_ROWS) { setNotice('Rangée du haut réservée.'); return }
-        const inCorridor = mapIsCorridor(getMapDef(match?.mapId), x, y)
+        const mapDef = getMapDef(match?.mapId)
+        const inCorridor = mapIsCorridor(mapDef, x, y)
         if (selectedTower === 'WALL' && !inCorridor) { setNotice('Le mur se pose sur le couloir.'); return }
         if (selectedTower !== 'WALL' && inCorridor) { setNotice('Pas de tour sur le couloir.'); return }
+        if (selectedTower !== 'WALL' && !inCorridor && !mapIsBuildable(mapDef, x, y)) { setNotice('Trop loin des routes (décor).'); return }
         actions.placeTower(selectedTower, x, y)
     }
 

@@ -2,7 +2,7 @@
 // plusieurs voies), le BIOME (image de terrain + décor) et la largeur de couloir
 // changent d'une map à l'autre. Doit rester synchronisé avec le catalogue backend
 // (MapCatalog) — mêmes id, mêmes voies, même halfWidth.
-import { Cell, PathData, buildLanesData, corridorHas, pathDirectionAtIn } from './constants'
+import { Cell, PathData, buildLanesData, corridorHas, buildableHas, pathDirectionAtIn } from './constants'
 
 export type Biome = 'desert' | 'prairie' | 'snow'
 
@@ -59,6 +59,8 @@ export function getMapDef(id?: string | null): MapDef {
 
 // Helpers par map (équivalents des globaux de constants.ts mais pour une map donnée).
 export const mapIsCorridor = (m: MapDef, x: number, y: number) => corridorHas(m.path, x, y)
+/** Constructible = bande au bord des routes. Hors couloir ET hors bande = décor. */
+export const mapIsBuildable = (m: MapDef, x: number, y: number) => buildableHas(m.path, x, y)
 export const mapPathDir = (m: MapDef, x: number, y: number) => pathDirectionAtIn(m.path, x, y)
 export const mapPathStart = (m: MapDef) => m.waypoints[0]
 export const mapPathEnd = (m: MapDef) => m.waypoints[m.waypoints.length - 1]

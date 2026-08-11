@@ -15,7 +15,7 @@ import { UnitChip } from '@/components/game/UnitChip'
 import { ChatPanel, type ChatMessage } from '@/components/game/ChatPanel'
 import { useHasGutter } from '@/components/game/useHasGutter'
 import { TOP_RESERVED_ROWS } from '@/components/game/constants'
-import { getMapDef, mapIsCorridor } from '@/components/game/maps'
+import { getMapDef, mapIsCorridor, mapIsBuildable } from '@/components/game/maps'
 import MapSelector from '@/components/game/MapSelector'
 import { audio } from '@/lib/audio'
 
@@ -120,9 +120,11 @@ export default function CoopPage() {
         if (!running) return
         setNotice(null)
         if (y < TOP_RESERVED_ROWS) { setNotice('Rangée du haut réservée.'); return }
-        const inCorridor = mapIsCorridor(getMapDef(match?.mapId), x, y)
+        const mapDef = getMapDef(match?.mapId)
+        const inCorridor = mapIsCorridor(mapDef, x, y)
         if (selectedTower === 'WALL' && !inCorridor) { setNotice('Le mur se pose sur le couloir des ennemis.'); return }
         if (selectedTower !== 'WALL' && inCorridor) { setNotice('Impossible de poser une tour sur le couloir.'); return }
+        if (selectedTower !== 'WALL' && !inCorridor && !mapIsBuildable(mapDef, x, y)) { setNotice('Trop loin des routes — construis en bordure (décor).'); return }
         actions.placeTower(selectedTower, x, y)
     }
 
