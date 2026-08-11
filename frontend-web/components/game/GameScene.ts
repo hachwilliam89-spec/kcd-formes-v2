@@ -250,6 +250,9 @@ export class GameScene extends Phaser.Scene {
     private get pathStart(): Cell { return this.mapDef.waypoints[0] }
     private get pathEnd(): Cell { return this.mapDef.waypoints[this.mapDef.waypoints.length - 1] }
     private onCellClick?: (x: number, y: number) => void
+    // Effet d'ambiance neige (biome snow) : flocons mis à jour chaque frame.
+    private snowGfx?: Phaser.GameObjects.Graphics
+    private snowflakes: { x: number; y: number; vy: number; vx: number; r: number; a: number }[] = []
     private waveTimer?: Phaser.Time.TimerEvent
     // Fonction de rendu du tick courant, conservée pour reprendre après une pause
     // de tuto (voir playWave / resumeWave).
@@ -392,6 +395,7 @@ export class GameScene extends Phaser.Scene {
 
     create() {
         this.drawTerrain()
+        this.initWeather()
 
         this.gridGraphics = this.add.graphics()
         this.previewGraphics = this.add.graphics() // sous les tours/ennemis (aperçu de pose)
@@ -534,7 +538,10 @@ export class GameScene extends Phaser.Scene {
         this.onCoopReady?.()
     }
 
-    update() {
+    update(_time: number, delta: number) {
+        // Effet d'ambiance (neige qui tombe) — avant tout return, sinon coupé en solo.
+        this.updateWeather(delta)
+
         // Solo : la boucle de combat est rejouée via playWave(), pas ici.
         // Coop : on interpole les ennemis entre les deux derniers snapshots
         // serveur (15 Hz) pour un mouvement fluide à 60 fps.
@@ -1434,6 +1441,63 @@ export class GameScene extends Phaser.Scene {
     }
 
     // ── Terrain (sol + route serpentine + props) ─────────────────────────
+
+    /** Effet d'ambiance selon le biome : neige qui tombe (snow) ou soleil tapant (desert). */
+    private initWeather() {
+        const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
+        if (this.mapDef.biome === 'snow') {
+            // Flocons : une couche au-dessus du jeu, redessinée chaque frame (updateWeather).
+            this.snowGfx = this.add.graphics().setDepth(60)
+            this.snowflakes = []
+            for (let i = 0; i < 90; i++) {
+                this.snowflakes.push({
+                    x: Math.random() * w, y: Math.random() * h,
+                    vy: 12 + Math.random() * 22, vx: -6 + Math.random() * 12,
+                    r: 1 + Math.random() * 2.2, a: 0.35 + Math.random() * 0.5,
+                })
+            }
+        } else if (this.mapDef.biome === 'desert') {
+            // Soleil tapant : glare radial chaud (coin haut) + voile chaud, dont l'alpha
+            // respire doucement (tweens auto). Sous les unités (depth négatif) → teinte
+            // le sol sans masquer le jeu.
+            const key = 'sun-glare'
+            if (!this.textures.exists(key)) {
+                const tex = this.textures.createCanvas(key, w, h)
+                const ctx = tex?.getContext()
+                if (ctx) {
+                    const g = ctx.createRadialGradient(w * 0.8, -h * 0.05, 0, w * 0.8, -h * 0.05, Math.max(w, h))
+                    g.addColorStop(0, 'rgba(255,226,150,0.55)')
+                    g.addColorStop(0.28, 'rgba(255,198,110,0.20)')
+                    g.addColorStop(1, 'rgba(255,170,80,0)')
+                    ctx.fillStyle = g
+                    ctx.fillRect(0, 0, w, h)
+                    tex?.refresh()
+                }
+            }
+            const sun = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-8).setAlpha(0.5)
+            this.tweens.add({ targets: sun, alpha: { from: 0.4, to: 0.72 }, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+            const warm = this.add.rectangle(0, 0, w, h, 0xffb45a, 0.06).setOrigin(0, 0).setDepth(-9)
+            this.tweens.add({ targets: warm, alpha: { from: 0.03, to: 0.11 }, duration: 6500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+        }
+    }
+
+    /** Anime les flocons (biome snow) — appelé chaque frame par update(). */
+    private updateWeather(delta: number) {
+        if (!this.snowGfx || this.snowflakes.length === 0) return
+        const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
+        const dt = Math.min(delta, 50) / 1000 // borné (onglet en arrière-plan)
+        const g = this.snowGfx
+        g.clear()
+        for (const f of this.snowflakes) {
+            f.y += f.vy * dt
+            f.x += f.vx * dt + Math.sin(f.y * 0.03) * 0.4
+            if (f.y > h + 4) { f.y = -4; f.x = Math.random() * w }
+            if (f.x < -6) f.x = w + 6
+            else if (f.x > w + 6) f.x = -6
+            g.fillStyle(0xffffff, f.a)
+            g.fillCircle(f.x, f.y, f.r)
+        }
+    }
 
     private drawTerrain() {
         // 1+2) Terrain composé UNE fois sur un canvas (herbe partout + chemin de terre
