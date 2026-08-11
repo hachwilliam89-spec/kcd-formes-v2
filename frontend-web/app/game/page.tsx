@@ -58,6 +58,20 @@ const TOWER_ROLE: Record<TowerType, string> = {
     WALL: 'Barrage sur le couloir : bloque les ennemis.',
 }
 
+// Stats de base des tours (miroir de TowerType côté backend : baseDamage, baseRange).
+const TOWER_STATS: Record<TowerType, { damage: number; range: number; kind: string }> = {
+    ARCHER:   { damage: 12,  range: 3.0, kind: 'Monocible' },
+    MAGE:     { damage: 11,  range: 2.5, kind: 'Continu · magique' },
+    CATAPULT: { damage: 40,  range: 4.0, kind: 'Zone (AoE)' },
+    BALLISTA: { damage: 110, range: 5.0, kind: 'Monocible · anti-gros' },
+    WALL:     { damage: 0,   range: 0,   kind: 'Barrage' },
+}
+// Montée en puissance par niveau (miroir de Tower.getDamage/getRange).
+const dmgMult = (lvl: number) => (lvl >= 3 ? 2.6 : 1 + (lvl - 1) * 0.6)   // 1.0 / 1.6 / 2.6
+const rangeBonus = (lvl: number) => (lvl >= 3 ? 0.9 : (lvl - 1) * 0.35)   // +0 / +0.35 / +0.9
+const towerDamage = (type: TowerType, lvl: number) => Math.floor(TOWER_STATS[type].damage * dmgMult(lvl))
+const towerRange = (type: TowerType, lvl: number) => Math.round((TOWER_STATS[type].range + rangeBonus(lvl)) * 10) / 10
+
 // Modes de ciblage (voir backend TargetingMode) : libellés courts + explication.
 const TARGETING_MODES: { mode: 'CLOSEST' | 'FIRST' | 'STRONGEST'; label: string; hint: string }[] = [
     { mode: 'CLOSEST', label: 'Le plus proche', hint: "Vise l'ennemi le plus près de la tour (défaut)" },
@@ -486,6 +500,22 @@ export default function GamePage() {
 
                                 <p className="text-[11px] text-[#8a6a2c]">{TOWER_ROLE[selectedTowerObj.type]}</p>
 
+                                {/* Stats : valeur au niveau courant → au niveau suivant (si pas au max). */}
+                                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px]">
+                                    <span className="text-[#8a6a2c]">Dégâts</span>
+                                    <span className="text-right font-med text-[#43310f]">
+                                        {towerDamage(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
+                                        {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerDamage(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
+                                    </span>
+                                    <span className="text-[#8a6a2c]">Portée</span>
+                                    <span className="text-right font-med text-[#43310f]">
+                                        {towerRange(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
+                                        {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerRange(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
+                                    </span>
+                                    <span className="text-[#8a6a2c]">Type</span>
+                                    <span className="text-right text-[#43310f]">{TOWER_STATS[selectedTowerObj.type].kind}</span>
+                                </div>
+
                                 {(selectedTowerObj.level ?? 1) >= MAX_TOWER_LEVEL ? (
                                     <>
                                         <div className="rounded px-2 py-1.5 text-[11px] text-[#3a6a12] text-center font-semibold" style={{ background: '#dff0c8', border: '1px solid #8bbf5a' }}>
@@ -562,6 +592,9 @@ export default function GamePage() {
                                                                 <span className="text-[11px] text-[#7a5320]">×{towerCounts[type] ?? 0}</span>
                                                             </div>
                                                             <p className="text-[11px] text-[#8a6a2c] leading-tight">{locked ? `Débloquée vague ${TOWER_INFO[type].unlockWave}` : TOWER_ROLE[type]}</p>
+                                                            {!locked && (
+                                                                <p className="text-[10px] text-[#7a5320] leading-tight">Dégâts {TOWER_STATS[type].damage} · Portée {TOWER_STATS[type].range} · {TOWER_STATS[type].kind}</p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 )
