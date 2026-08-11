@@ -219,12 +219,10 @@ export default function GamePage() {
         }
 
         const cost = TOWER_INFO[selectedTower].cost
-        const placedType = selectedTower
         try {
             await placeTower(selectedTower, x, y, cost)
             audio.play('tower_place')
             setMessage(`${TOWER_INFO[selectedTower].label} placé(e) en (${x}, ${y})`)
-            maybeShowTutorial('tower', placedType)
         } catch {
             audio.play('error', { volume: 0.6 })
             setMessage('Impossible de placer ici (or insuffisant ou case invalide)')
@@ -425,7 +423,7 @@ export default function GamePage() {
                                         selected={selectedTower === type}
                                         affordable={gold >= info.cost}
                                         disabled={!canAct || locked}
-                                        onClick={() => { audio.play('ui_click', { volume: 0.5 }); setSelectedTower(type) }}
+                                        onClick={() => { audio.play('ui_click', { volume: 0.5 }); setSelectedTower(type); maybeShowTutorial('tower', type) }}
                                         title={locked ? `${info.label} — débloquée vague ${info.unlockWave}` : `${info.label} — ${info.cost} or`}
                                     />
                                 )
