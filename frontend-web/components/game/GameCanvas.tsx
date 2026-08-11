@@ -7,6 +7,9 @@ import { GameScene, TowerData, TickSnapshot } from './GameScene'
 interface GameCanvasProps {
     towers: TowerData[]
     onCellClick: (x: number, y: number) => void
+    // Type de tour sélectionné → aperçu de pose (case verte/rouge + cercle de
+    // portée) qui suit le curseur. null = aucun aperçu (ex. pendant le combat).
+    selectedTower?: string | null
 }
 
 export interface GameCanvasHandle {
@@ -21,7 +24,7 @@ export interface GameCanvasHandle {
 }
 
 const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCanvas(
-    { towers, onCellClick },
+    { towers, onCellClick, selectedTower = null },
     ref
 ) {
     const gameRef = useRef<Phaser.Game | null>(null)
@@ -71,6 +74,11 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
             sceneRef.current.drawTowers(towers)
         }
     }, [towers])
+
+    // Aperçu de pose : suit le type sélectionné (null pendant le combat → masqué).
+    useEffect(() => {
+        sceneRef.current?.setBuildPreview(selectedTower)
+    }, [selectedTower])
 
     useImperativeHandle(ref, () => ({
         playWave: (ticks, onTick, onComplete, unseenEnemyTypes, onNeedTutorial) => {

@@ -401,7 +401,7 @@ export default function GamePage() {
                 {/* Plateau (prioritaire) + panneau latéral (tour sélectionnée OU stats + évolution) */}
                 <div className="flex-1 lg:min-h-0 flex flex-col lg:flex-row gap-3">
                     <div className="relative w-full aspect-[4/3] lg:aspect-auto lg:flex-1 min-w-0 lg:min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
-                        <GameCanvas ref={canvasRef} towers={towers} onCellClick={handleCellClick} />
+                        <GameCanvas ref={canvasRef} towers={towers} onCellClick={handleCellClick} selectedTower={canAct ? selectedTower : null} />
                     </div>
 
                     <aside className="w-full lg:w-64 shrink-0 lg:min-h-0 lg:overflow-y-auto flex flex-col gap-3">
