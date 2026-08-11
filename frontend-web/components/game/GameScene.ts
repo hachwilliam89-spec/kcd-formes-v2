@@ -253,6 +253,9 @@ export class GameScene extends Phaser.Scene {
     // Effet d'ambiance neige (biome snow) : flocons mis à jour chaque frame.
     private snowGfx?: Phaser.GameObjects.Graphics
     private snowflakes: { x: number; y: number; vy: number; vx: number; r: number; a: number; c: number }[] = []
+    // Mirage / ondes de chaleur (biome desert) : lignes ondulantes animées.
+    private heatGfx?: Phaser.GameObjects.Graphics
+    private heatPhase = 0
     private waveTimer?: Phaser.Time.TimerEvent
     // Fonction de rendu du tick courant, conservée pour reprendre après une pause
     // de tuto (voir playWave / resumeWave).
@@ -1483,14 +1486,17 @@ export class GameScene extends Phaser.Scene {
             // la neige, voir updateWeather). Couche au-dessus du plateau.
             this.snowGfx = this.add.graphics().setDepth(55)
             this.snowflakes = []
-            for (let i = 0; i < 48; i++) {
+            for (let i = 0; i < 70; i++) {
                 this.snowflakes.push({
                     x: Math.random() * w, y: Math.random() * h,
-                    vy: 4 + Math.random() * 10, vx: 34 + Math.random() * 46,
-                    r: 0.8 + Math.random() * 1.4, a: 0.18 + Math.random() * 0.28,
-                    c: Math.random() < 0.5 ? 0xe4d3a6 : 0xd8c188,
+                    vy: 5 + Math.random() * 11, vx: 40 + Math.random() * 52,
+                    r: 0.9 + Math.random() * 1.7, a: 0.24 + Math.random() * 0.32,
+                    c: Math.random() < 0.5 ? 0xe7d7ac : 0xdcc790,
                 })
             }
+            // Mirage : lignes chaudes ondulantes au ras du sol, animées (updateWeather).
+            // Sous les unités (depth -6) → shimmer sur le sable sans masquer le jeu.
+            this.heatGfx = this.add.graphics().setDepth(-6)
         }
     }
 
@@ -1509,6 +1515,27 @@ export class GameScene extends Phaser.Scene {
             else if (f.x > w + 6) f.x = -6
             g.fillStyle(f.c, f.a)
             g.fillCircle(f.x, f.y, f.r)
+        }
+
+        // Mirage / ondes de chaleur (desert) : lignes chaudes ondulantes au ras du sol.
+        if (this.heatGfx) {
+            this.heatPhase += Math.min(delta, 50) * 0.004
+            const hg = this.heatGfx
+            hg.clear()
+            const lines = 10
+            for (let i = 0; i < lines; i++) {
+                const y = h * 0.40 + (h * 0.55) * (i / (lines - 1))
+                const amp = 2 + 1.6 * (i / lines)
+                const a = 0.05 + 0.06 * (0.5 + 0.5 * Math.sin(this.heatPhase * 1.6 + i * 0.7))
+                hg.lineStyle(2, 0xfff2d0, a)
+                hg.beginPath()
+                for (let x = 0; x <= w; x += 10) {
+                    const yy = y + Math.sin(x * 0.035 + this.heatPhase * 3 + i) * amp
+                    if (x === 0) hg.moveTo(x, yy)
+                    else hg.lineTo(x, yy)
+                }
+                hg.strokePath()
+            }
         }
     }
 
