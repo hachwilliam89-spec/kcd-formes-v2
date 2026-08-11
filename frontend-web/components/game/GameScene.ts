@@ -1545,14 +1545,14 @@ export class GameScene extends Phaser.Scene {
             }
         shuffle(tall); shuffle(flat)
 
-        // Grands sujets : espacés (pas collés), parcimonie (max ~14).
-        const tallKeys = ['snow-fir-1', 'snow-fir-2', 'snow-fir-3', 'snow-fir-2', 'snow-bare', 'snow-column', 'snow-statue', 'snow-lantern']
+        // Grands sujets : c'est une TOUNDRA → beaucoup de sapins (forêt dense),
+        // colonne/statue/lanterne restent rares. Trees adjacents autorisés (forêt),
+        // on saute juste la case déjà prise.
+        const tallKeys = ['snow-fir-1', 'snow-fir-2', 'snow-fir-3', 'snow-fir-1', 'snow-fir-2', 'snow-fir-3', 'snow-bare', 'snow-column', 'snow-statue', 'snow-lantern']
         let placedTall = 0
         for (const c of tall) {
-            if (placedTall >= 14) break
-            let near = false
-            for (let dx = -1; dx <= 1 && !near; dx++) for (let dy = -1; dy <= 1; dy++) if (used.has(k(c.x + dx, c.y + dy))) near = true
-            if (near) continue
+            if (placedTall >= 22) break
+            if (used.has(k(c.x, c.y))) continue
             const key = tallKeys[Math.floor(rnd() * tallKeys.length)]
             const isTree = key.startsWith('snow-fir') || key === 'snow-bare'
             const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 6
@@ -1597,20 +1597,22 @@ export class GameScene extends Phaser.Scene {
     }
 
     private drawProceduralRoad() {
-        const g = this.add.graphics().setDepth(-18)
-        // Couleur de route selon le biome : neige = sentier de neige tassée/glacé ;
-        // sinon piste sableuse. Épaule (couloir) puis voie de circulation par-dessus.
-        const snow = this.mapDef.biome === 'snow'
-        const shoulder = snow ? 0x9fb1bf : 0x7c5c34
-        const lane = snow ? 0xd8e6ee : 0xa9895a
+        // Chemin de PIERRE/TERRE texturé (plus naturel qu'un aplat) : on tuile la
+        // texture de route sur chaque case de couloir, sous les unités/tours.
         for (const c of this.mapDef.path.corridorCells) {
-            g.fillStyle(shoulder, 1)
-            g.fillRect(c.x * CELL_SIZE, c.y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+            this.add.image(c.x * CELL_SIZE, c.y * CELL_SIZE, 'road_fill')
+                .setOrigin(0, 0).setDepth(-18).setDisplaySize(CELL_SIZE + 1, CELL_SIZE + 1)
         }
-        for (const c of this.mapDef.path.pathCells) {
+        // Léger liseré sombre sur le bord extérieur du chemin (contours nets) : une
+        // case de couloir dont un voisin n'est PAS couloir borde une case libre.
+        const g = this.add.graphics().setDepth(-17)
+        g.lineStyle(2, 0x3a3f45, 0.35)
+        for (const c of this.mapDef.path.corridorCells) {
             const px = c.x * CELL_SIZE, py = c.y * CELL_SIZE
-            g.fillStyle(lane, 1)
-            g.fillRect(px + CELL_SIZE * 0.12, py + CELL_SIZE * 0.12, CELL_SIZE * 0.76, CELL_SIZE * 0.76)
+            if (!mapIsCorridor(this.mapDef, c.x, c.y - 1)) g.lineBetween(px, py, px + CELL_SIZE, py)
+            if (!mapIsCorridor(this.mapDef, c.x, c.y + 1)) g.lineBetween(px, py + CELL_SIZE, px + CELL_SIZE, py + CELL_SIZE)
+            if (!mapIsCorridor(this.mapDef, c.x - 1, c.y)) g.lineBetween(px, py, px, py + CELL_SIZE)
+            if (!mapIsCorridor(this.mapDef, c.x + 1, c.y)) g.lineBetween(px + CELL_SIZE, py, px + CELL_SIZE, py + CELL_SIZE)
         }
     }
 
