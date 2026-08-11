@@ -119,11 +119,24 @@ public class PathfindingService {
     public static final int BUILD_BAND = 1;
 
     /**
+     * Marge (Chebyshev) autour de CHAQUE entrée ennemie où l'on ne peut pas bâtir :
+     * on ne construit pas à la porte de l'ennemi, et ça dégage le bord de spawn.
+     * DOIT rester synchronisé avec le front (constants.ts SPAWN_NOBUILD).
+     */
+    public static final int SPAWN_NOBUILD = 2;
+
+    /**
      * Cases CONSTRUCTIBLES : la bande de BUILD_BAND cases qui longe le couloir (hors
-     * couloir lui-même). Tout le reste est zone morte (décor), inconstructible.
+     * couloir lui-même), SAUF autour des entrées ennemies (voir SPAWN_NOBUILD). Tout
+     * le reste est zone morte (décor), inconstructible.
      */
     public Set<Position> buildableCells(GameMap map) {
         Set<Position> corridor = corridorCells(map);
+        // Entrées ennemies = départ de chaque voie (première case).
+        List<Position> starts = new ArrayList<>();
+        for (List<Position> lane : map.getLanes()) {
+            starts.add(lane.get(0));
+        }
         Set<Position> buildable = new HashSet<>();
         for (Position c : corridor) {
             for (int dx = -BUILD_BAND; dx <= BUILD_BAND; dx++) {
@@ -131,13 +144,22 @@ public class PathfindingService {
                     int nx = c.x() + dx;
                     int ny = c.y() + dy;
                     Position p = new Position(nx, ny);
-                    if (map.isValidPosition(nx, ny) && !corridor.contains(p)) {
+                    if (map.isValidPosition(nx, ny) && !corridor.contains(p) && !nearAnyStart(p, starts)) {
                         buildable.add(p);
                     }
                 }
             }
         }
         return buildable;
+    }
+
+    private boolean nearAnyStart(Position p, List<Position> starts) {
+        for (Position s : starts) {
+            if (Math.max(Math.abs(p.x() - s.x()), Math.abs(p.y() - s.y())) <= SPAWN_NOBUILD) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -19,6 +19,12 @@ export const TOP_RESERVED_ROWS = 1
  */
 export const BUILD_BAND = 1
 
+/**
+ * Marge (Chebyshev) autour de chaque entrée ennemie où l'on ne peut pas bâtir (on ne
+ * construit pas à la porte de l'ennemi). Synchronisé avec le backend (SPAWN_NOBUILD).
+ */
+export const SPAWN_NOBUILD = 2
+
 const key = (x: number, y: number) => `${x},${y}`
 
 // Données de chemin dérivées d'une liste de waypoints (identiques à l'ancien calcul,
@@ -32,8 +38,13 @@ export type PathData = {
   pathDir: Map<string, { dx: number; dy: number }>
 }
 
-/** Bande constructible = anneau de BUILD_BAND cases autour du couloir, hors couloir. */
-function computeBuildable(corridorSet: Set<string>, gridW: number, gridH: number): Set<string> {
+/**
+ * Bande constructible = anneau de BUILD_BAND cases autour du couloir (hors couloir),
+ * SAUF autour des entrées ennemies `starts` (voir SPAWN_NOBUILD).
+ */
+function computeBuildable(corridorSet: Set<string>, starts: Cell[], gridW: number, gridH: number): Set<string> {
+  const nearStart = (x: number, y: number) =>
+    starts.some((s) => Math.max(Math.abs(x - s.x), Math.abs(y - s.y)) <= SPAWN_NOBUILD)
   const buildable = new Set<string>()
   for (const k of corridorSet) {
     const [cx, cy] = k.split(',').map(Number)
@@ -42,7 +53,9 @@ function computeBuildable(corridorSet: Set<string>, gridW: number, gridH: number
         const nx = cx + dx
         const ny = cy + dy
         const nk = key(nx, ny)
-        if (nx >= 0 && nx < gridW && ny >= 0 && ny < gridH && !corridorSet.has(nk)) buildable.add(nk)
+        if (nx >= 0 && nx < gridW && ny >= 0 && ny < gridH && !corridorSet.has(nk) && !nearStart(nx, ny)) {
+          buildable.add(nk)
+        }
       }
     }
   }
@@ -98,7 +111,7 @@ export function buildPathData(waypoints: Cell[], gridW = GRID_W, gridH = GRID_H)
     pathDir.set(key(a.x, a.y), { dx: Math.sign(b.x - a.x), dy: Math.sign(b.y - a.y) })
   }
 
-  const buildableSet = computeBuildable(corridorSet, gridW, gridH)
+  const buildableSet = computeBuildable(corridorSet, [waypoints[0]], gridW, gridH)
   return { waypoints, pathCells, corridorSet, corridorCells, buildableSet, pathDir }
 }
 
@@ -146,7 +159,7 @@ export function buildLanesData(lanes: Cell[][], halfWidth = 1, gridW = GRID_W, g
     }
   }
 
-  const buildableSet = computeBuildable(corridorSet, gridW, gridH)
+  const buildableSet = computeBuildable(corridorSet, lanes.map((l) => l[0]), gridW, gridH)
   return { waypoints: lanes[0], pathCells, corridorSet, corridorCells, buildableSet, pathDir }
 }
 

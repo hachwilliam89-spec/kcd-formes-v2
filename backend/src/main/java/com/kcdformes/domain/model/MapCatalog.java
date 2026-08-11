@@ -30,14 +30,15 @@ public final class MapCatalog {
                     new Position(0, 3), new Position(17, 3), new Position(17, 8),
                     new Position(2, 8), new Position(2, 13), new Position(19, 13))),
             // La Fourche : UNE entrée (0,8), la route se divise en (3,8) en trois
-            // branches qui rejoignent le château (17,8) par des angles différents —
-            // par le nord (haut), l'ouest (tout droit) et le sud (bas). Voies fines.
+            // branches qui rejoignent le château COLLÉ AU BORD DROIT (19,8) par des
+            // angles différents — nord (descend le bord droit), ouest (tout droit),
+            // sud (remonte le bord droit). Voies fines.
             "fourche", new Def(List.of(
                     List.of(new Position(0, 8), new Position(3, 8), new Position(3, 2),
-                            new Position(17, 2), new Position(17, 8)),                 // nord
-                    List.of(new Position(0, 8), new Position(17, 8)),                  // ouest (direct)
+                            new Position(19, 2), new Position(19, 8)),                 // nord
+                    List.of(new Position(0, 8), new Position(19, 8)),                  // ouest (direct)
                     List.of(new Position(0, 8), new Position(3, 8), new Position(3, 14),
-                            new Position(17, 14), new Position(17, 8))),               // sud
+                            new Position(19, 14), new Position(19, 8))),               // sud
                     0));
 
     private MapCatalog() {}
