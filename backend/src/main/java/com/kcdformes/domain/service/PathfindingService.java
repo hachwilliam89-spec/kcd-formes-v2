@@ -32,11 +32,33 @@ public class PathfindingService {
      * (voir corridorCells / PlaceTowerService).
      */
     public List<Position> findCorridorPath(GameMap map) {
-        // Le chemin passe par tous les waypoints dans l'ordre : on calcule le
-        // segment (A* en ignorant les tours) entre chaque paire consécutive et on
-        // les concatène. Deux waypoints alignés donnent un segment droit ; la
-        // concaténation d'un serpentin de waypoints donne le tracé sinueux.
-        List<Position> waypoints = map.getWaypoints();
+        // Compat / carte mono-voie : le chemin de la voie de référence (voie 0).
+        return corridorPathFor(map, map.getWaypoints());
+    }
+
+    /**
+     * Un chemin rasterisé par voie (carte multi-voies). Une carte classique
+     * renvoie une liste d'un seul chemin. Null si une voie est infranchissable.
+     */
+    public List<List<Position>> findLanePaths(GameMap map) {
+        List<List<Position>> paths = new ArrayList<>();
+        for (List<Position> lane : map.getLanes()) {
+            List<Position> path = corridorPathFor(map, lane);
+            if (path == null) {
+                return null;
+            }
+            paths.add(path);
+        }
+        return paths;
+    }
+
+    /**
+     * Rasterise une voie : le chemin passe par tous ses waypoints dans l'ordre —
+     * segment A* (en ignorant les tours) entre chaque paire consécutive, concaténés.
+     * Deux waypoints alignés donnent un segment droit ; un serpentin donne le tracé
+     * sinueux.
+     */
+    private List<Position> corridorPathFor(GameMap map, List<Position> waypoints) {
         List<Position> path = new ArrayList<>();
         for (int i = 0; i < waypoints.size() - 1; i++) {
             List<Position> segment = findPath(map, waypoints.get(i), waypoints.get(i + 1), true);
@@ -62,18 +84,24 @@ public class PathfindingService {
      * chemin), pas en file indienne sur la case centrale.
      */
     public Set<Position> corridorCells(GameMap map) {
-        List<Position> path = findCorridorPath(map);
         Set<Position> cells = new HashSet<>();
-        if (path == null) {
+        List<List<Position>> lanePaths = findLanePaths(map);
+        if (lanePaths == null) {
             return cells;
         }
-        for (Position p : path) {
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dy = -1; dy <= 1; dy++) {
-                    int nx = p.x() + dx;
-                    int ny = p.y() + dy;
-                    if (map.isValidPosition(nx, ny)) {
-                        cells.add(new Position(nx, ny));
+        // Union des voies, chacune élargie de corridorHalfWidth (Chebyshev). Sur
+        // une carte multi-voies fines (halfWidth 0), le couloir se réduit aux
+        // seules cases de chemin, libérant du terrain constructible entre les voies.
+        int w = map.getCorridorHalfWidth();
+        for (List<Position> path : lanePaths) {
+            for (Position p : path) {
+                for (int dx = -w; dx <= w; dx++) {
+                    for (int dy = -w; dy <= w; dy++) {
+                        int nx = p.x() + dx;
+                        int ny = p.y() + dy;
+                        if (map.isValidPosition(nx, ny)) {
+                            cells.add(new Position(nx, ny));
+                        }
                     }
                 }
             }

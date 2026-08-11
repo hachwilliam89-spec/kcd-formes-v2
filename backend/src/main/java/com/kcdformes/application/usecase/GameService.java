@@ -265,7 +265,10 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         int nextWave = game.getWaveNumber() + 1;
         // Seed de la partie (voir GameEntity.seed) : la composition de la vague varie
         // d'une partie à l'autre mais reste reproductible au sein de cette partie.
-        Wave wave = waveFactory.createWave(nextWave, map.getPathStart(), game.getSeed());
+        // Départs de voie : les ennemis se répartissent entre les tracés (une seule
+        // voie = départ unique, comportement mono-voie historique).
+        List<Position> laneStarts = map.getLanes().stream().map(lane -> lane.get(0)).toList();
+        Wave wave = waveFactory.createWave(nextWave, laneStarts, game.getSeed());
         wave.start();
 
         Castle castle = new Castle(

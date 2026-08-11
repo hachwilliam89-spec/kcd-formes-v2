@@ -167,11 +167,21 @@ public class WaveFactory {
     }
 
     public Wave createWave(int waveNumber, Position spawnPosition, long gameSeed) {
-        List<Enemy> enemies = generateEnemies(waveNumber, spawnPosition, gameSeed);
+        return createWave(waveNumber, List.of(spawnPosition), gameSeed);
+    }
+
+    /**
+     * Vague pour une carte à plusieurs voies : les ennemis sont répartis
+     * cycliquement (round-robin) entre les départs de voie fournis, chacun
+     * démarrant au départ de SA voie. Une liste d'un seul départ = comportement
+     * mono-voie historique (répartition en files décalées sur un couloir large).
+     */
+    public Wave createWave(int waveNumber, List<Position> laneStarts, long gameSeed) {
+        List<Enemy> enemies = generateEnemies(waveNumber, laneStarts, gameSeed);
         return new Wave(waveNumber, enemies);
     }
 
-    private List<Enemy> generateEnemies(int waveNumber, Position spawn, long gameSeed) {
+    private List<Enemy> generateEnemies(int waveNumber, List<Position> laneStarts, long gameSeed) {
         Random waveRng = new Random(mixSeed(gameSeed, waveNumber));
 
         List<EnemyType> order = new ArrayList<>();
@@ -246,25 +256,29 @@ public class WaveFactory {
             order.addAll(0, bossOrder);
         }
 
-        return toEnemies(order, waveNumber, spawn, waveRng);
+        return toEnemies(order, waveNumber, laneStarts, waveRng);
     }
 
     /** Convertit la liste ordonnée de types en ennemis, avec cadence d'apparition jitterée. */
-    private List<Enemy> toEnemies(List<EnemyType> order, int waveNumber, Position spawn, Random waveRng) {
+    private List<Enemy> toEnemies(List<EnemyType> order, int waveNumber, List<Position> laneStarts, Random waveRng) {
         List<Enemy> enemies = new ArrayList<>();
+        boolean multiLane = laneStarts.size() > 1;
         int spawnIndex = 0;
         int delay = 0;
 
         for (EnemyType type : order) {
             int hp = scaledHp(type, waveNumber);
-            // Un Boss avance toujours PILE au centre du couloir (pas de file
-            // décalée) : sa zone de menace (pulse aoeRadius/auraRadius, voir
-            // EnemyType) reste symétrique et prévisible pour le joueur — et son
-            // rayon d'AoE est calibré depuis le centre du chemin (voir le
-            // commentaire de BOSS_WARLORD), un décalage de +/-0.8 fausserait
-            // cette géométrie d'un côté comme de l'autre.
-            double laneOffset = type.isBoss ? 0.0 : LANE_OFFSETS[spawnIndex % LANE_OFFSETS.length];
-            enemies.add(new Enemy(type, spawn.x(), spawn.y(), delay, hp, laneOffset));
+            // Répartition round-robin entre voies sur une carte multi-voies ;
+            // sinon tout le monde sur la voie 0 (comportement historique).
+            int lane = multiLane ? spawnIndex % laneStarts.size() : 0;
+            Position spawn = laneStarts.get(lane);
+            // Files décalées perpendiculairement UNIQUEMENT sur une carte mono-voie
+            // (couloir large). Sur des voies fines multiples, chaque ennemi tient
+            // sa voie sans décalage. Un Boss avance toujours pile au centre : sa
+            // zone de menace (pulse aoeRadius/auraRadius) est calibrée depuis l'axe.
+            double laneOffset = (multiLane || type.isBoss) ? 0.0
+                    : LANE_OFFSETS[spawnIndex % LANE_OFFSETS.length];
+            enemies.add(new Enemy(type, spawn.x(), spawn.y(), delay, hp, laneOffset, lane));
 
             // Cadence jitterée (+-1 tick autour de l'intervalle de base) plutôt
             // qu'un intervalle strictement fixe : les ennemis ne sortent plus à

@@ -26,9 +26,20 @@ public class GameMapMapper {
         json.put("pathEnd", Map.of("x", map.getPathEnd().x(), "y", map.getPathEnd().y()));
         // Tracé complet (waypoints) : nécessaire pour reconstruire un chemin
         // sinueux. pathStart/pathEnd restent écrits pour compat/lecture rapide.
+        // waypoints = voie de référence (voie 0), conservé pour la relecture par
+        // les parties d'avant le multi-voies.
         json.put("waypoints", map.getWaypoints().stream()
                 .map(p -> Map.of("x", p.x(), "y", p.y()))
                 .toList());
+        // Toutes les voies (carte multi-voies) + largeur de couloir : reconstruisent
+        // fidèlement une carte à plusieurs tracés. Une carte mono-voie écrit une
+        // liste d'un élément (identique à waypoints).
+        json.put("lanes", map.getLanes().stream()
+                .map(lane -> lane.stream()
+                        .map(p -> Map.of("x", p.x(), "y", p.y()))
+                        .toList())
+                .toList());
+        json.put("corridorHalfWidth", map.getCorridorHalfWidth());
 
         List<Map<String, Object>> towers = map.getTowers().stream()
                 .map(t -> Map.of(
@@ -56,11 +67,22 @@ public class GameMapMapper {
         int width = (int) json.get("width");
         int height = (int) json.get("height");
 
-        // Tracé sinueux si présent (waypoints) ; sinon fallback couloir droit
-        // (pathStart/pathEnd) pour les parties persistées avant les waypoints.
+        // Priorité au format multi-voies (lanes) ; puis tracé sinueux mono-voie
+        // (waypoints) ; puis fallback couloir droit (pathStart/pathEnd) pour les
+        // parties persistées avant ces formats.
+        List<List<Map<String, Number>>> rawLanes = (List<List<Map<String, Number>>>) json.get("lanes");
         List<Map<String, Number>> rawWaypoints = (List<Map<String, Number>>) json.get("waypoints");
         GameMap map;
-        if (rawWaypoints != null && rawWaypoints.size() >= 2) {
+        if (rawLanes != null && !rawLanes.isEmpty()) {
+            List<List<Position>> lanes = rawLanes.stream()
+                    .map(lane -> lane.stream()
+                            .map(w -> new Position(w.get("x").intValue(), w.get("y").intValue()))
+                            .toList())
+                    .toList();
+            Object rawHw = json.get("corridorHalfWidth");
+            int halfWidth = rawHw != null ? ((Number) rawHw).intValue() : 1;
+            map = GameMap.ofLanes(width, height, lanes, halfWidth);
+        } else if (rawWaypoints != null && rawWaypoints.size() >= 2) {
             List<Position> waypoints = rawWaypoints.stream()
                     .map(w -> new Position(w.get("x").intValue(), w.get("y").intValue()))
                     .toList();

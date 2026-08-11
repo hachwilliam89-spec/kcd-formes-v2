@@ -19,6 +19,13 @@ public class Enemy {
      * en file unique sur un couloir élargi — voir WaveFactory pour l'attribution.
      */
     private final double laneOffset;
+    /**
+     * Voie empruntée par cet ennemi sur une carte à plusieurs tracés (index dans
+     * GameMap.getLanes()). 0 par défaut = carte mono-voie (comportement historique).
+     * Attribué à la génération de la vague (voir WaveFactory) et utilisé par la
+     * simulation pour faire suivre à chaque ennemi SON chemin.
+     */
+    private final int laneIndex;
 
     public Enemy(EnemyType type, double startX, double startY) {
         this(type, startX, startY, 0);
@@ -38,6 +45,11 @@ public class Enemy {
     }
 
     public Enemy(EnemyType type, double startX, double startY, int spawnDelayTicks, int hp, double laneOffset) {
+        this(type, startX, startY, spawnDelayTicks, hp, laneOffset, 0);
+    }
+
+    public Enemy(EnemyType type, double startX, double startY, int spawnDelayTicks, int hp,
+                 double laneOffset, int laneIndex) {
         this.id = UUID.randomUUID();
         this.type = type;
         this.maxHp = hp;
@@ -47,6 +59,7 @@ public class Enemy {
         this.alive = true;
         this.spawnDelayTicks = spawnDelayTicks;
         this.laneOffset = laneOffset;
+        this.laneIndex = laneIndex;
     }
 
     public void takeDamage(int damage) {
@@ -76,4 +89,5 @@ public class Enemy {
     public double getX() { return x; }
     public double getY() { return y; }
     public double getLaneOffset() { return laneOffset; }
+    public int getLaneIndex() { return laneIndex; }
 }

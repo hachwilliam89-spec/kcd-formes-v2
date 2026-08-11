@@ -9,30 +9,63 @@ public class GameMap {
 
     private final int width;
     private final int height;
-    // Points de virage du chemin, dans l'ordre spawn -> château. Deux waypoints
-    // consécutifs sont alignés (même ligne ou même colonne) : le chemin réel est
-    // la concaténation des segments droits qui les relient (voir
-    // PathfindingService.findCorridorPath). Un simple couple [start, end] donne
-    // l'ancien couloir droit ; une liste plus longue donne un tracé sinueux.
-    private final List<Position> waypoints;
+    // Voies du chemin. Chaque voie est une liste de waypoints (spawn -> château) :
+    // deux waypoints consécutifs sont alignés (même ligne/colonne), le chemin réel
+    // est la concaténation des segments droits (voir PathfindingService). Une carte
+    // classique n'a qu'UNE voie ; une carte multi-voies en a plusieurs, toutes
+    // terminant sur la même case château. lanes.get(0) = voie de référence (compat
+    // pathStart/pathEnd/getWaypoints).
+    private final List<List<Position>> lanes;
+    private final List<Position> waypoints;   // = lanes.get(0), pour compat
     private final Position pathStart;
     private final Position pathEnd;
+    // Demi-largeur du couloir inconstructible autour des voies (Chebyshev). 1 =
+    // couloir de 3 cases de large (historique) ; 0 = voie fine d'1 case (pertinent
+    // pour les cartes multi-voies, plus de terrain et de meilleurs angles).
+    private final int corridorHalfWidth;
     private final Map<String, Tower> towers = new HashMap<>();
 
     public GameMap(int width, int height, List<Position> waypoints) {
-        if (waypoints == null || waypoints.size() < 2) {
-            throw new IllegalArgumentException("Le chemin doit avoir au moins 2 waypoints (spawn + château)");
-        }
-        this.width = width;
-        this.height = height;
-        this.waypoints = List.copyOf(waypoints);
-        this.pathStart = this.waypoints.get(0);
-        this.pathEnd = this.waypoints.get(this.waypoints.size() - 1);
+        this(width, height, List.of(copyLane(waypoints)), 1);
     }
 
     /** Compat : couloir droit défini par ses seules extrémités (= 2 waypoints). */
     public GameMap(int width, int height, Position pathStart, Position pathEnd) {
         this(width, height, List.of(pathStart, pathEnd));
+    }
+
+    /**
+     * Carte à plusieurs voies. Toutes les voies doivent partager la même case
+     * d'arrivée (le château). corridorHalfWidth règle la largeur du couloir.
+     * Fabrique nommée (et non un constructeur) car List<Position> et
+     * List<List<Position>> ont le même effacement de type.
+     */
+    public static GameMap ofLanes(int width, int height, List<List<Position>> lanes, int corridorHalfWidth) {
+        return new GameMap(width, height, lanes, corridorHalfWidth);
+    }
+
+    private GameMap(int width, int height, List<List<Position>> lanes, int corridorHalfWidth) {
+        if (lanes == null || lanes.isEmpty()) {
+            throw new IllegalArgumentException("Au moins une voie est requise");
+        }
+        List<List<Position>> copy = new ArrayList<>();
+        for (List<Position> lane : lanes) {
+            copy.add(copyLane(lane));
+        }
+        this.width = width;
+        this.height = height;
+        this.lanes = List.copyOf(copy);
+        this.waypoints = this.lanes.get(0);
+        this.pathStart = this.waypoints.get(0);
+        this.pathEnd = this.waypoints.get(this.waypoints.size() - 1);
+        this.corridorHalfWidth = corridorHalfWidth;
+    }
+
+    private static List<Position> copyLane(List<Position> lane) {
+        if (lane == null || lane.size() < 2) {
+            throw new IllegalArgumentException("Une voie doit avoir au moins 2 waypoints (spawn + château)");
+        }
+        return List.copyOf(lane);
     }
 
     public void placeTower(Tower tower) {
@@ -85,4 +118,8 @@ public class GameMap {
     public Position getPathStart() { return pathStart; }
     public Position getPathEnd() { return pathEnd; }
     public List<Position> getWaypoints() { return waypoints; }
+    /** Toutes les voies (>= 1). Une carte mono-voie renvoie une liste d'un élément. */
+    public List<List<Position>> getLanes() { return lanes; }
+    public int getLaneCount() { return lanes.size(); }
+    public int getCorridorHalfWidth() { return corridorHalfWidth; }
 }

@@ -102,8 +102,10 @@ public class WaveSimulationService {
         // Couloir strict : le chemin ignore les tours (elles ne peuvent de toute
         // façon pas être posées dessus, voir PlaceTowerService) — il est donc
         // stable d'une vague à l'autre, quelles que soient les tours posées.
-        List<Position> path = pathfindingService.findCorridorPath(map);
-        if (path == null || path.isEmpty()) {
+        // Un chemin rasterisé par voie (carte multi-voies ; une seule voie = carte
+        // classique). Chaque ennemi suit le chemin de SA voie (voir plus bas).
+        List<List<Position>> lanePaths = pathfindingService.findLanePaths(map);
+        if (lanePaths == null || lanePaths.isEmpty() || lanePaths.get(0).isEmpty()) {
             throw new IllegalStateException("Aucun chemin disponible sur la map");
         }
 
@@ -143,8 +145,10 @@ public class WaveSimulationService {
         Set<UUID> escaped = new HashSet<>();
         List<TickSnapshot> ticks = new ArrayList<>();
         int castleDamageTaken = 0;
-        int lastPathIndex = path.size() - 1;
-        Position castlePos = path.get(lastPathIndex);
+        // Toutes les voies terminent sur la même case château : la défense du
+        // château (dernière ligne) se réfère à cette arrivée commune.
+        List<Position> referenceLane = lanePaths.get(0);
+        Position castlePos = referenceLane.get(referenceLane.size() - 1);
         int castleCooldown = 0; // ticks restants avant le prochain tir de la défense
 
         int tick = 0;
@@ -166,6 +170,12 @@ public class WaveSimulationService {
                     // Pas encore apparu : reste invisible et immobile au point de spawn.
                     continue;
                 }
+
+                // Chemin de la voie de cet ennemi (carte multi-voies ; voie 0 par
+                // défaut sur une carte classique). Toute la logique de suivi de
+                // chemin ci-dessous opère sur CE chemin.
+                List<Position> path = lanePaths.get(Math.min(enemy.getLaneIndex(), lanePaths.size() - 1));
+                int lastPathIndex = path.size() - 1;
 
                 if (enemy.getType().attacksTowers) {
                     boolean diverted = handleSapperTick(enemy, map, path, progress, siegeTargets,
