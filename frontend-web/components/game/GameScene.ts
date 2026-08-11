@@ -1562,9 +1562,13 @@ export class GameScene extends Phaser.Scene {
         // large), ancrées en bas de leur case, débordant vers le haut.
         const castleW = CELL_SIZE * 2.4
 
-        // Un château ennemi par ENTRÉE (une carte multi-voies en a plusieurs) :
-        // clair, orienté vers la droite = vers le champ.
-        for (const start of mapLaneStarts(this.mapDef)) {
+        // Un château ennemi par ENTRÉE UNIQUE : plusieurs voies peuvent partager le
+        // même départ (une route qui fourche) → un seul château ; deux entrées
+        // distinctes → deux châteaux. Clair, orienté vers la droite = vers le champ.
+        const uniqueStarts = mapLaneStarts(this.mapDef).filter(
+            (s, i, arr) => arr.findIndex((o) => o.x === s.x && o.y === s.y) === i,
+        )
+        for (const start of uniqueStarts) {
             const startX = start.x * CELL_SIZE + CELL_SIZE / 2
             const startGroundY = (start.y + 2) * CELL_SIZE // +2 : descendu d'une case
             const enemyCastle = this.add.image(startX, startGroundY, 'castle').setOrigin(0.35, 1).setDepth(-15)

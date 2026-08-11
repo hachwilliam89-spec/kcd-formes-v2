@@ -42,17 +42,12 @@ export const GAME_MAPS: MapDef[] = [
   def('desert', 'Terres désolées', 'desert', '/sprites/terrain/desert_map.png', [
     { x: 0, y: 3 }, { x: 17, y: 3 }, { x: 17, y: 8 }, { x: 2, y: 8 }, { x: 2, y: 13 }, { x: 19, y: 13 },
   ]),
-  def('prairie', 'Prairie', 'prairie', '/sprites/terrain/prairie_map.png', [
-    { x: 0, y: 2 }, { x: 3, y: 2 }, { x: 3, y: 13 }, { x: 17, y: 13 }, { x: 17, y: 6 }, { x: 19, y: 6 },
-  ]),
-  def('snow', 'Toundra', 'snow', '/sprites/terrain/snow_map.png', [
-    { x: 0, y: 13 }, { x: 17, y: 13 }, { x: 17, y: 3 }, { x: 2, y: 3 }, { x: 2, y: 9 }, { x: 19, y: 9 },
-  ]),
-  // L'Y : deux entrées (haut-gauche / bas-gauche) qui fusionnent en (8,8) puis une
-  // approche finale commune vers le château (19,8). Voies fines (halfWidth 0).
-  defLanes('ygrec', "L'Y", 'desert', '/sprites/terrain/ygrec_map.png', [
-    [{ x: 0, y: 3 }, { x: 8, y: 3 }, { x: 8, y: 8 }, { x: 19, y: 8 }],
-    [{ x: 0, y: 13 }, { x: 8, y: 13 }, { x: 8, y: 8 }, { x: 19, y: 8 }],
+  // La Fourche : UNE entrée (0,8), la route se divise en (3,8) en trois branches qui
+  // rejoignent le château (17,8) par des angles différents — nord, ouest, sud.
+  defLanes('fourche', 'La Fourche', 'desert', '/sprites/terrain/fourche_map.png', [
+    [{ x: 0, y: 8 }, { x: 3, y: 8 }, { x: 3, y: 2 }, { x: 17, y: 2 }, { x: 17, y: 8 }],
+    [{ x: 0, y: 8 }, { x: 17, y: 8 }],
+    [{ x: 0, y: 8 }, { x: 3, y: 8 }, { x: 3, y: 14 }, { x: 17, y: 14 }, { x: 17, y: 8 }],
   ]),
 ]
 
