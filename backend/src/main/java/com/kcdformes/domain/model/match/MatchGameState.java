@@ -20,7 +20,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public class MatchGameState {
 
-    public final List<Position> path;                 // cases du chemin, spawn -> château
+    // Voies du chemin (carte multi-voies) : une liste de cases par voie, toutes
+    // terminant sur le château. Une carte mono-voie n'a qu'un élément.
+    public final List<List<Position>> lanePaths;
+    public final List<Position> path;                 // = lanePaths.get(0) : voie de réf. (château partagé)
+    public int spawnLaneCursor = 0;                    // répartition round-robin des spawns entre voies
     public final GameMap map;                         // porte les tours posées (coop : or partagé)
     public final List<LiveEnemy> enemies = new ArrayList<>();
     public int gold;                                  // or PARTAGÉ entre les deux joueurs (coop)
@@ -70,8 +74,9 @@ public class MatchGameState {
     // d'envoi, vidé par le moteur dans le thread du ticker.
     public final Queue<EnemyType> incomingSends = new ConcurrentLinkedQueue<>();
 
-    public MatchGameState(List<Position> path, GameMap map, int castleMaxHp, int startingGold, int firstWaveSize) {
-        this.path = path;
+    public MatchGameState(List<List<Position>> lanePaths, GameMap map, int castleMaxHp, int startingGold, int firstWaveSize) {
+        this.lanePaths = lanePaths;
+        this.path = lanePaths.get(0);
         this.map = map;
         this.castleMaxHp = castleMaxHp;
         this.castleHp = castleMaxHp;

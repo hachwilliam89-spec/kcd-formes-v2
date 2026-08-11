@@ -19,6 +19,7 @@ public class LiveEnemy {
     public int hp;
     public final int maxHp;
     public int pathIndex = 0;      // segment courant du chemin (vers path[pathIndex+1])
+    public int laneIndex = 0;      // voie suivie sur une carte multi-voies (0 = mono-voie)
     public boolean reachedEnd = false;
 
     public LiveEnemy(EnemyType type, double x, double y) {

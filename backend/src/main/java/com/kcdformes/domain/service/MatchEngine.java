@@ -68,12 +68,23 @@ public class MatchEngine {
         this.pathfindingService = pathfindingService;
     }
 
-    /** Prépare l'état de jeu au démarrage d'un match (chemin + PV château). */
+    /** Prépare l'état de jeu au démarrage d'un match (chemins par voie + PV château). */
     public MatchGameState start(GameMap map) {
-        List<Position> path = pathfindingService.findCorridorPath(map);
-        MatchGameState s = new MatchGameState(path, map, CASTLE_MAX_HP, STARTING_GOLD, FIRST_WAVE_SIZE);
+        List<List<Position>> lanePaths = pathfindingService.findLanePaths(map);
+        MatchGameState s = new MatchGameState(lanePaths, map, CASTLE_MAX_HP, STARTING_GOLD, FIRST_WAVE_SIZE);
         s.spawnQueue.addAll(buildWave(s.wave)); // compose la première vague
         return s;
+    }
+
+    /** Fait apparaître un ennemi, réparti round-robin entre les voies (chacune démarre
+     *  au départ de SA voie). Carte mono-voie = tout sur la voie 0 (comportement historique). */
+    private void spawnEnemy(MatchGameState s, EnemyType type, int hp) {
+        int lane = s.spawnLaneCursor % s.lanePaths.size();
+        s.spawnLaneCursor++;
+        Position start = s.lanePaths.get(lane).get(0);
+        LiveEnemy e = new LiveEnemy(type, start.x(), start.y(), hp);
+        e.laneIndex = lane;
+        s.enemies.add(e);
     }
 
     /** Avance l'état d'un tick (dtMs = durée réelle du tick, calée sur SOLO_TICK_MS). */
@@ -82,13 +93,12 @@ public class MatchEngine {
         s.shots.clear();
         double soloTicks = dtMs / SOLO_TICK_MS; // ≈ 1 (le ticker tourne à SOLO_TICK_MS)
         GameMap map = s.map;
-        Position start = s.path.get(0);
 
         // 0) Ennemis ENVOYÉS par l'adversaire (versus rush) : un par tick, scalés
         // sur la vague courante du board qui les reçoit (menace proportionnée).
         EnemyType sent = s.incomingSends.poll();
         if (sent != null) {
-            s.enemies.add(new LiveEnemy(sent, start.x(), start.y(), scaledHp(sent, s.wave)));
+            spawnEnemy(s, sent, scaledHp(sent, s.wave));
         }
 
         // 1) Spawn cadencé depuis la file de la vague + enchaînement CONTINU : une
@@ -103,7 +113,7 @@ public class MatchEngine {
             // patiente sans se vider tant que le board est saturé.
             if (s.enemies.size() < MAX_LIVE_ENEMIES) {
                 EnemyType next = s.spawnQueue.poll();
-                s.enemies.add(new LiveEnemy(next, start.x(), start.y(), scaledHp(next, s.wave)));
+                spawnEnemy(s, next, scaledHp(next, s.wave));
                 s.ticksToNextSpawn = SPAWN_INTERVAL_TICKS;
             }
         } else {
@@ -287,8 +297,9 @@ public class MatchEngine {
     /** Fait avancer un ennemi de `dist` cases, bloqué par un mur intact sur sa route. */
     private void advance(MatchGameState s, LiveEnemy e, double dist) {
         GameMap map = s.map;
-        while (dist > 0 && e.pathIndex < s.path.size() - 1) {
-            Position next = s.path.get(e.pathIndex + 1);
+        List<Position> path = s.lanePaths.get(e.laneIndex);
+        while (dist > 0 && e.pathIndex < path.size() - 1) {
+            Position next = path.get(e.pathIndex + 1);
             Tower wall = map.getTowerAt(next.x(), next.y())
                     .filter(t -> t.getType() == TowerType.WALL && !t.isDestroyed())
                     .orElse(null);
@@ -306,7 +317,7 @@ public class MatchEngine {
                 e.x += dx / d * dist; e.y += dy / d * dist; dist = 0;
             }
         }
-        if (e.pathIndex >= s.path.size() - 1) e.reachedEnd = true;
+        if (e.pathIndex >= path.size() - 1) e.reachedEnd = true;
     }
 
     /** Fraction (0..1) parcourue dans le segment courant — pour le mode FIRST. */
@@ -337,7 +348,7 @@ public class MatchEngine {
             if (target.isDestroyed()) {
                 map.removeTower(target.getX(), target.getY());
                 s.siegeTargets.remove(e.id);
-                e.pathIndex = nearestPathIndex(e, s.path);
+                e.pathIndex = nearestPathIndex(e, s.lanePaths.get(e.laneIndex));
             }
         } else {
             e.x += dx / dist * e.type.speed;
