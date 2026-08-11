@@ -351,11 +351,10 @@ export class GameScene extends Phaser.Scene {
         // + route en terre claire (texture tuilable) masquée en forme de serpentin
         // arrondi (voir drawTerrain) → virages parfaitement nets.
         this.load.image('terrain-ground', '/sprites/terrain/ground.png')
-        this.load.image('terrain-grass', '/sprites/terrain/grass.png')
         this.load.image('road_fill', '/sprites/terrain/road_fill.png')
-        // Nouveau tileset nature : herbe + terre seamless, arbres/rochers/buissons.
-        this.load.image('field-grass', '/sprites/terrain/grass_field.png')
-        this.load.image('field-dirt', '/sprites/terrain/dirt_path.png')
+        // Map "terres désolées" pré-composée (terre terne + piste sableuse aux bords
+        // naturels) : image unique, rendu garanti (voir buildBakedTerrain).
+        this.load.image('desert-map', '/sprites/terrain/desert_map.png')
         // Thème terres désolées / ruines : PAS d'arbres/herbe verts. Ruines "tall"
         // (colonne, tombes, croix, bannières, palissade, feu) calées en HAUTEUR ;
         // "flat" (ossements, tronc, rocher, souche) en LARGEUR ; rochers + petits cailloux.
@@ -1456,9 +1455,11 @@ export class GameScene extends Phaser.Scene {
             const c = frame[n]
             const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 6
             const cy = c.y * CELL_SIZE + CELL_SIZE + 2
+            // ruinT sans tombes ni feux de camp : 1=colonne, 5/6=bannières, 7=palissade.
+            const ruinTok = [1, 5, 6, 7]
             const r = rnd()
-            if (r < 0.45) placeDecor(`decor-ruinT-${1 + Math.floor(rnd() * 8)}`, cx, cy, 1.15 + rnd() * 0.25, CELL_SIZE * 0.4, true) // colonne/tombe/croix/bannière/feu
-            else if (r < 0.75) placeDecor(`decor-ruinF-${1 + Math.floor(rnd() * 4)}`, cx, cy, 0.95 + rnd() * 0.2, CELL_SIZE * 0.5)   // ossements/rocher/tronc/souche
+            if (r < 0.4) placeDecor(`decor-ruinT-${ruinTok[Math.floor(rnd() * ruinTok.length)]}`, cx, cy, 1.15 + rnd() * 0.25, CELL_SIZE * 0.4, true) // colonne/bannière/palissade
+            else if (r < 0.72) placeDecor(`decor-ruinF-${1 + Math.floor(rnd() * 4)}`, cx, cy, 0.95 + rnd() * 0.2, CELL_SIZE * 0.5)   // ossements/rocher/tronc/souche
             else placeDecor(`decor-rock-${1 + Math.floor(rnd() * 4)}`, cx, cy, 0.7 + rnd() * 0.3, CELL_SIZE * 0.45)                   // rochers
         }
 
@@ -1479,43 +1480,10 @@ export class GameScene extends Phaser.Scene {
      *  incrusté (bordure sombre + terre tuilée clippée à la forme). Une seule image
      *  (depth -20), pas de masque Phaser. */
     private buildBakedTerrain() {
+        // Map pré-composée (terre désolée + piste sableuse naturelle) : une seule image
+        // mise à l'échelle du plateau. Rendu identique garanti, aucun masque runtime.
         const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
-        if (!this.textures.exists('terrain-baked')) {
-            const tex = this.textures.createCanvas('terrain-baked', w, h)
-            const ctx = tex?.getContext()
-            // Terres désolées : sol = terre sombre lisse ; chemin = terre "battue" plus
-            // claire (contraste net pour distinguer la zone de pose de la route ennemie).
-            const earth = this.textures.get('terrain-ground').getSourceImage() as CanvasImageSource
-            const road = this.textures.get('road_fill').getSourceImage() as CanvasImageSource
-            if (ctx) {
-                ctx.imageSmoothingEnabled = true
-                const ew = (earth as HTMLImageElement).width || 64, eh = (earth as HTMLImageElement).height || 64
-                for (let x = 0; x < w; x += ew) for (let y = 0; y < h; y += eh) ctx.drawImage(earth, x, y)
-
-                const ROAD = CELL_SIZE * 2.4
-                const pts = WAYPOINTS.map((wp) => ({ x: wp.x * CELL_SIZE + CELL_SIZE / 2, y: wp.y * CELL_SIZE + CELL_SIZE / 2 }))
-                const tracePath = (width: number) => {
-                    const r = width / 2
-                    ctx.beginPath()
-                    for (let i = 0; i < pts.length - 1; i++) {
-                        const a = pts[i], b = pts[i + 1]
-                        if (a.y === b.y) ctx.rect(Math.min(a.x, b.x), a.y - r, Math.abs(b.x - a.x), width)
-                        else ctx.rect(a.x - r, Math.min(a.y, b.y), width, Math.abs(b.y - a.y))
-                    }
-                    for (const p of pts) { ctx.moveTo(p.x + r, p.y); ctx.arc(p.x, p.y, r, 0, Math.PI * 2) }
-                }
-                // Liseré sombre du chemin (légèrement plus large).
-                tracePath(ROAD + 10); ctx.fillStyle = '#1a0f07'; ctx.fill()
-                // Chemin : terre tuilée + voile sableux clair pour bien le démarquer.
-                ctx.save(); tracePath(ROAD); ctx.clip()
-                const rw = (road as HTMLImageElement).width || 64, rh = (road as HTMLImageElement).height || 64
-                for (let x = 0; x < w; x += rw) for (let y = 0; y < h; y += rh) ctx.drawImage(road, x, y)
-                ctx.fillStyle = 'rgba(206,174,120,0.35)'; ctx.fillRect(0, 0, w, h)  // éclaircit le chemin (sable battu)
-                ctx.restore()
-                tex?.refresh()
-            }
-        }
-        this.add.image(0, 0, 'terrain-baked').setOrigin(0, 0).setDepth(-20)
+        this.add.image(0, 0, 'desert-map').setOrigin(0, 0).setDepth(-20).setDisplaySize(w, h)
     }
 
     /** Vignette : assombrit les bords du champ pour l'ambiance (texture canvas radiale,
