@@ -1457,27 +1457,41 @@ export class GameScene extends Phaser.Scene {
                 })
             }
         } else if (this.mapDef.biome === 'desert') {
-            // Soleil tapant : glare radial chaud (coin haut) + voile chaud, dont l'alpha
-            // respire doucement (tweens auto). Sous les unités (depth négatif) → teinte
-            // le sol sans masquer le jeu.
+            // Soleil TAPANT. 1) Halo chaud vif au coin haut-droit (soleil), alpha qui
+            // respire. 2) Rayons de soleil (god rays) qui balaient et pulsent. Placés
+            // au-dessus du sol mais sous les unités (depth < 0) → ambiance sans gêner.
+            const sunX = w * 0.85, sunY = h * 0.05
             const key = 'sun-glare'
             if (!this.textures.exists(key)) {
                 const tex = this.textures.createCanvas(key, w, h)
                 const ctx = tex?.getContext()
                 if (ctx) {
-                    const g = ctx.createRadialGradient(w * 0.8, -h * 0.05, 0, w * 0.8, -h * 0.05, Math.max(w, h))
-                    g.addColorStop(0, 'rgba(255,226,150,0.55)')
-                    g.addColorStop(0.28, 'rgba(255,198,110,0.20)')
+                    const g = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, Math.max(w, h) * 0.95)
+                    g.addColorStop(0, 'rgba(255,244,190,0.70)')
+                    g.addColorStop(0.18, 'rgba(255,212,120,0.32)')
                     g.addColorStop(1, 'rgba(255,170,80,0)')
                     ctx.fillStyle = g
                     ctx.fillRect(0, 0, w, h)
                     tex?.refresh()
                 }
             }
-            const sun = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-8).setAlpha(0.5)
-            this.tweens.add({ targets: sun, alpha: { from: 0.4, to: 0.72 }, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
-            const warm = this.add.rectangle(0, 0, w, h, 0xffb45a, 0.06).setOrigin(0, 0).setDepth(-9)
-            this.tweens.add({ targets: warm, alpha: { from: 0.03, to: 0.11 }, duration: 6500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+            const sun = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-8).setAlpha(0.6)
+            this.tweens.add({ targets: sun, alpha: { from: 0.5, to: 0.9 }, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+
+            // God rays : éventail de faisceaux depuis le soleil, dessinés depuis (0,0)
+            // et positionnés au soleil → rotation lente autour de lui (balayage) + pulse.
+            const rays = this.add.graphics().setDepth(-7)
+            rays.fillStyle(0xfff3cc, 0.09)
+            const beams = 7, spread = Math.PI * 0.55, base = Math.PI * 0.72, len = Math.max(w, h) * 1.4, hw = 0.028
+            for (let i = 0; i < beams; i++) {
+                const a = base - spread / 2 + (spread * i) / (beams - 1)
+                rays.fillTriangle(0, 0,
+                    Math.cos(a - hw) * len, Math.sin(a - hw) * len,
+                    Math.cos(a + hw) * len, Math.sin(a + hw) * len)
+            }
+            rays.setPosition(sunX, sunY)
+            this.tweens.add({ targets: rays, rotation: { from: -0.05, to: 0.05 }, duration: 9000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+            this.tweens.add({ targets: rays, alpha: { from: 0.5, to: 1 }, duration: 3800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
         }
     }
 
