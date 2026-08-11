@@ -1526,10 +1526,13 @@ export class GameScene extends Phaser.Scene {
         // Hors grille (au-dessus du plateau) = hors écran = OK.
         const blocks = (x: number, y: number) =>
             inGrid(x, y) && y >= TOP_RESERVED_ROWS && mapIsCorridor(this.mapDef, x, y)
-        // Sapin permis si son débordement (2 cases au-dessus + largeur) ne couvre aucune
-        // case bloquante visible. Sur les bords, le haut sort de l'écran → autorisé.
+        // Sapin permis si son débordement ne couvre pas la ROUTE. Le sprite ne monte
+        // que d'~1 case au-dessus de son ancrage → il suffit que la case juste au-dessus
+        // (et les côtés) ne soient pas la route ; atteindre une case constructible est
+        // sans effet (le décor passe derrière les tours). D'où des sapins jusque dans la
+        // première ligne des zones mortes.
         const firSafe = (x: number, y: number) =>
-            !blocks(x, y - 1) && !blocks(x, y - 2) && !blocks(x - 1, y) && !blocks(x + 1, y)
+            !blocks(x, y - 1) && !blocks(x - 1, y) && !blocks(x + 1, y)
 
         const place = (key: string, cx: number, cy: number, span: number, shadowW: number, byHeight = false) => {
             const sh = this.add.graphics().setDepth(-16)
