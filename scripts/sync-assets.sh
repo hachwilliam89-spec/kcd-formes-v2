@@ -17,9 +17,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# 1) Cible : argument "user@host" prioritaire, sinon variables d'env.
+# 1) Cible : 1er argument = "user@host" OU "host" seul (utilisateur pris dans
+#    ~/.ssh/config) OU un alias SSH ; sinon variables d'env.
 if [ "${1:-}" != "" ]; then
-  TARGET="$1"; VPS_USER="${TARGET%@*}"; VPS_HOST="${TARGET#*@}"
+  ARG="$1"
+  if [[ "$ARG" == *"@"* ]]; then VPS_USER="${ARG%@*}"; VPS_HOST="${ARG#*@}"; else VPS_HOST="$ARG"; VPS_USER="${VPS_USER:-}"; fi
   VPS_PORT="${2:-${VPS_PORT:-22}}"
   VPS_APP_DIR="${3:-${VPS_APP_DIR:-~/kcd-formes-v2}}"
 else
@@ -27,20 +29,22 @@ else
   VPS_PORT="${VPS_PORT:-22}"; VPS_APP_DIR="${VPS_APP_DIR:-~/kcd-formes-v2}"
 fi
 
-if [ -z "${VPS_HOST}" ] || [ -z "${VPS_USER}" ]; then
-  echo "Erreur : VPS_HOST et VPS_USER requis (env ou argument user@host)." >&2
-  echo "Ex : ./scripts/sync-assets.sh deploy@mon-vps" >&2
+if [ -z "${VPS_HOST}" ]; then
+  echo "Erreur : host requis (argument user@host, host seul, ou VPS_HOST)." >&2
+  echo "Ex : ./scripts/sync-assets.sh kcd-formes.fr   ou   deploy@kcd-formes.fr" >&2
   exit 1
 fi
 
+# Cible SSH : "user@host" si un utilisateur est fourni, sinon "host" (ssh config).
+DEST="${VPS_HOST}"; [ -n "${VPS_USER}" ] && DEST="${VPS_USER}@${VPS_HOST}"
 ARCHIVE="kcd-assets.tgz"
-SSH="ssh -p ${VPS_PORT} ${VPS_USER}@${VPS_HOST}"
+SSH="ssh -p ${VPS_PORT} ${DEST}"
 
 echo "▶ 1/4 Empaquetage des assets…"
 ./scripts/pack-assets.sh "$ARCHIVE"
 
-echo "▶ 2/4 Transfert vers ${VPS_USER}@${VPS_HOST}:${VPS_APP_DIR}/ …"
-scp -P "${VPS_PORT}" "$ARCHIVE" "${VPS_USER}@${VPS_HOST}:${VPS_APP_DIR}/"
+echo "▶ 2/4 Transfert vers ${DEST}:${VPS_APP_DIR}/ …"
+scp -P "${VPS_PORT}" "$ARCHIVE" "${DEST}:${VPS_APP_DIR}/"
 
 echo "▶ 3/4 Dépaquetage sur le VPS…"
 $SSH "cd ${VPS_APP_DIR} && ./scripts/unpack-assets.sh ${ARCHIVE}"
