@@ -37,4 +37,7 @@ jobs:
             # Assets déjà présents sur le VPS (public/sprites/) ; on vérifie.
             test -d frontend-web/public/sprites || { echo "Assets manquants — lance scripts/unpack-assets.sh"; exit 1; }
             docker compose -f docker-compose.prod.yml --env-file .env up -d --build --remove-orphans
+            # Caddy monte le Caddyfile en volume : `up` ne le recrée pas si seul le
+            # fichier a changé → on force la relecture de la config (routes /ws, etc.).
+            docker compose -f docker-compose.prod.yml --env-file .env restart caddy
             docker image prune -f
