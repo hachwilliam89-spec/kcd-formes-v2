@@ -22,6 +22,11 @@ for m in frontend-web/public/sounds/music_*.mp3; do
   [ -e "$m" ] && PATHS+=("sounds/$(basename "$m")")
 done
 
+# Rend les assets lisibles par tous (fichiers) + dossiers traversables : les PNG
+# générés localement peuvent hériter d'un mode 600/700 → le serveur web (autre
+# utilisateur dans le conteneur) renvoie alors 500. On normalise avant d'empaqueter.
+chmod -R a+rX frontend-web/public/sprites 2>/dev/null || true
+
 tar -czf "$OUT" -C frontend-web/public "${PATHS[@]}"
 echo "OK → $OUT ($(du -h "$OUT" | cut -f1))"
 echo "Contenu : ${PATHS[*]}"

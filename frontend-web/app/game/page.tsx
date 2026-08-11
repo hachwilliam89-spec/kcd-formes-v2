@@ -11,6 +11,7 @@ import { TOP_RESERVED_ROWS } from '@/components/game/constants'
 import { getMapDef, mapIsCorridor, mapIsBuildable } from '@/components/game/maps'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
 import MapSelector from '@/components/game/MapSelector'
+import ConfirmDialog from '@/components/game/ConfirmDialog'
 import TutorialBubble from '@/components/game/TutorialBubble'
 import AudioControls from '@/components/game/AudioControls'
 import { UnitChip } from '@/components/game/UnitChip'
@@ -101,6 +102,8 @@ export default function GamePage() {
     const [selectedTower, setSelectedTower] = useState<TowerType>('ARCHER')
     // Map choisie sur l'écran de départ (avant création de la partie).
     const [pendingMapId, setPendingMapId] = useState<string>('desert')
+    // Modale de confirmation « nouvelle partie » (remplace window.confirm).
+    const [confirmNewGame, setConfirmNewGame] = useState(false)
     const [loading, setLoading] = useState(false)
     const [combatRunning, setCombatRunning] = useState(false)
     const [liveCastleHp, setLiveCastleHp] = useState(castleHp)
@@ -516,7 +519,7 @@ export default function GamePage() {
                             </button>
                             {!isGameOver && (
                                 <button
-                                    onClick={() => { if (window.confirm('Abandonner cette partie et en commencer une nouvelle ?')) { setIsGameOver(false); setMessage(null); newGame() } }}
+                                    onClick={() => setConfirmNewGame(true)}
                                     disabled={combatRunning || loading}
                                     className="kcd-btn kcd-btn--danger text-xs py-1 px-2 disabled:opacity-50"
                                 >
@@ -798,6 +801,17 @@ export default function GamePage() {
                     }}
                 />
             )}
+
+            <ConfirmDialog
+                open={confirmNewGame}
+                title="Nouvelle partie"
+                message="Abandonner cette partie en cours et en commencer une nouvelle ?"
+                confirmLabel="Abandonner"
+                cancelLabel="Continuer"
+                danger
+                onConfirm={() => { setConfirmNewGame(false); setIsGameOver(false); setMessage(null); newGame() }}
+                onCancel={() => setConfirmNewGame(false)}
+            />
         </div>
     )
 }
