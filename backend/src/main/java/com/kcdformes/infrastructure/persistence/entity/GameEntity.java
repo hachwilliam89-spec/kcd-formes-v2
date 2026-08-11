@@ -23,6 +23,10 @@ public class GameEntity {
     @Column(nullable = false, length = 20)
     private String status = "IN_PROGRESS";
 
+    // Carte de la partie (id du catalogue) : sert au classement par carte.
+    @Column(name = "map_id", nullable = false, length = 30)
+    private String mapId = "desert";
+
     @Column(name = "wave_number", nullable = false)
     private int waveNumber = 0;
 
@@ -82,6 +86,8 @@ public class GameEntity {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getMapId() { return mapId; }
+    public void setMapId(String mapId) { this.mapId = mapId; }
 
     public int getWaveNumber() { return waveNumber; }
     public void setWaveNumber(int waveNumber) { this.waveNumber = waveNumber; }

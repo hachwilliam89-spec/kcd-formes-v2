@@ -49,6 +49,7 @@ class GameServiceTest {
     @Mock GameJpaRepository gameJpaRepository;
     @Mock CastleJpaRepository castleJpaRepository;
     @Mock PlayerJpaRepository playerJpaRepository;
+    @Mock com.kcdformes.infrastructure.persistence.repository.PlayerMapScoreJpaRepository playerMapScoreRepository;
     @Mock GameMapMapper gameMapMapper;
     @Mock GameRepositoryAdapter gameRepositoryAdapter;
     @Mock PlayerRepositoryAdapter playerRepositoryAdapter;

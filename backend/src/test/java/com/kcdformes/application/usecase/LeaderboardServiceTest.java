@@ -24,6 +24,7 @@ import static org.mockito.Mockito.when;
 class LeaderboardServiceTest {
 
     @Mock PlayerJpaRepository playerJpaRepository;
+    @Mock com.kcdformes.infrastructure.persistence.repository.PlayerMapScoreJpaRepository playerMapScoreRepository;
 
     @InjectMocks LeaderboardService leaderboardService;
 
@@ -54,7 +55,7 @@ class LeaderboardServiceTest {
         when(playerJpaRepository.findById(alice.getId())).thenReturn(Optional.of(alice));
         when(playerJpaRepository.countByBestWaveGreaterThan(17)).thenReturn(0L);
 
-        LeaderboardResult result = leaderboardService.getLeaderboard(alice.getId(), 10);
+        LeaderboardResult result = leaderboardService.getLeaderboard(alice.getId(), null, 10);
 
         assertThat(result.top()).extracting("rank", "username", "bestWave")
                 .containsExactly(
@@ -73,7 +74,7 @@ class LeaderboardServiceTest {
         // 41 joueurs strictement meilleurs que carol => rang 42.
         when(playerJpaRepository.countByBestWaveGreaterThan(4)).thenReturn(41L);
 
-        LeaderboardResult result = leaderboardService.getLeaderboard(carol.getId(), 2);
+        LeaderboardResult result = leaderboardService.getLeaderboard(carol.getId(), null, 2);
 
         assertThat(result.top()).hasSize(2);
         assertThat(result.me().rank()).isEqualTo(42);
@@ -92,7 +93,7 @@ class LeaderboardServiceTest {
                 });
         when(playerJpaRepository.findById(any(UUID.class))).thenReturn(Optional.empty());
 
-        LeaderboardResult result = leaderboardService.getLeaderboard(UUID.randomUUID(), 9999);
+        LeaderboardResult result = leaderboardService.getLeaderboard(UUID.randomUUID(), null, 9999);
 
         assertThat(result.top()).isEmpty();
         assertThat(result.me()).isNull();

@@ -19,11 +19,13 @@ import com.kcdformes.domain.service.WaveSimulationService;
 import com.kcdformes.infrastructure.persistence.entity.CastleEntity;
 import com.kcdformes.infrastructure.persistence.entity.GameEntity;
 import com.kcdformes.infrastructure.persistence.entity.PlayerEntity;
+import com.kcdformes.infrastructure.persistence.entity.PlayerMapScoreEntity;
 import com.kcdformes.infrastructure.persistence.mapper.GameMapMapper;
 import com.kcdformes.infrastructure.persistence.repository.CastleJpaRepository;
 import com.kcdformes.infrastructure.persistence.repository.GameJpaRepository;
 import com.kcdformes.infrastructure.persistence.repository.GameRepositoryAdapter;
 import com.kcdformes.infrastructure.persistence.repository.PlayerJpaRepository;
+import com.kcdformes.infrastructure.persistence.repository.PlayerMapScoreJpaRepository;
 import com.kcdformes.infrastructure.persistence.repository.PlayerRepositoryAdapter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,6 +61,7 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
     private final GameJpaRepository gameJpaRepository;
     private final CastleJpaRepository castleJpaRepository;
     private final PlayerJpaRepository playerJpaRepository;
+    private final PlayerMapScoreJpaRepository playerMapScoreRepository;
     private final GameMapMapper gameMapMapper;
     private final GameRepositoryAdapter gameRepositoryAdapter;
     private final PlayerRepositoryAdapter playerRepositoryAdapter;
@@ -69,6 +72,7 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
     public GameService(GameJpaRepository gameJpaRepository,
                        CastleJpaRepository castleJpaRepository,
                        PlayerJpaRepository playerJpaRepository,
+                       PlayerMapScoreJpaRepository playerMapScoreRepository,
                        GameMapMapper gameMapMapper,
                        GameRepositoryAdapter gameRepositoryAdapter,
                        PlayerRepositoryAdapter playerRepositoryAdapter,
@@ -78,6 +82,7 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         this.gameJpaRepository = gameJpaRepository;
         this.castleJpaRepository = castleJpaRepository;
         this.playerJpaRepository = playerJpaRepository;
+        this.playerMapScoreRepository = playerMapScoreRepository;
         this.gameMapMapper = gameMapMapper;
         this.gameRepositoryAdapter = gameRepositoryAdapter;
         this.playerRepositoryAdapter = playerRepositoryAdapter;
@@ -116,6 +121,7 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         game.setPlayer(player);
         game.setCastle(castle);
         game.setStatus("IN_PROGRESS");
+        game.setMapId(MapCatalog.normalize(mapId)); // carte de la partie (classement par carte)
         game.setGold(STARTING_GOLD);
         // Seed propre à cette partie : voir GameEntity.seed / WaveFactory pour son usage.
         game.setSeed(ThreadLocalRandom.current().nextLong());
@@ -300,6 +306,17 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         if (nextWave > player.getBestWave()) {
             player.setBestWave(nextWave);
             playerJpaRepository.save(player);
+        }
+
+        // Meilleur score PAR CARTE (classement par carte) : upsert de la ligne
+        // (joueur, carte de la partie), sans toucher au best_wave global ci-dessus.
+        String mapId = game.getMapId();
+        PlayerMapScoreEntity mapScore = playerMapScoreRepository
+                .findByPlayer_IdAndMapId(player.getId(), mapId)
+                .orElseGet(() -> new PlayerMapScoreEntity(UUID.randomUUID(), player, mapId, 0));
+        if (nextWave > mapScore.getBestWave()) {
+            mapScore.setBestWave(nextWave);
+            playerMapScoreRepository.save(mapScore);
         }
 
         if (castle.isDestroyed()) {

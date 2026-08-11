@@ -28,9 +28,10 @@ public class LeaderboardController {
     @GetMapping
     public ResponseEntity<LeaderboardResponse> getLeaderboard(
             @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(required = false) String mapId,
             Authentication auth) {
         UUID playerId = UUID.fromString(auth.getName());
         return ResponseEntity.ok(
-                LeaderboardResponse.from(getLeaderboardUseCase.getLeaderboard(playerId, limit)));
+                LeaderboardResponse.from(getLeaderboardUseCase.getLeaderboard(playerId, mapId, limit)));
     }
 }

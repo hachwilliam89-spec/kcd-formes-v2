@@ -24,5 +24,9 @@ public interface GetLeaderboardUseCase {
      */
     record LeaderboardResult(List<LeaderboardEntry> top, LeaderboardEntry me) {}
 
-    LeaderboardResult getLeaderboard(UUID requestingPlayerId, int limit);
+    /**
+     * @param mapId carte du classement : null / vide / "global" = classement global
+     *              (best_wave toutes cartes) ; sinon classement de la carte donnée.
+     */
+    LeaderboardResult getLeaderboard(UUID requestingPlayerId, String mapId, int limit);
 }

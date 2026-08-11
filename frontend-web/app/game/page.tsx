@@ -8,7 +8,7 @@ import { useGame } from '@/hooks/useGame'
 import { useAuth } from '@/hooks/useAuth'
 import type { TowerData } from '@/components/game/GameScene'
 import { TOP_RESERVED_ROWS } from '@/components/game/constants'
-import { getMapDef, mapIsCorridor, mapIsBuildable } from '@/components/game/maps'
+import { getMapDef, mapIsCorridor, mapIsBuildable, GAME_MAPS } from '@/components/game/maps'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
 import MapSelector from '@/components/game/MapSelector'
 import ConfirmDialog from '@/components/game/ConfirmDialog'
@@ -119,6 +119,8 @@ export default function GamePage() {
     } | null>(null)
     // Classement affiché en modale (info non vitale) plutôt que dans le HUD.
     const [showLeaderboard, setShowLeaderboard] = useState(false)
+    // Onglet de classement affiché : 'global' (toutes cartes) ou un id de carte.
+    const [lbTab, setLbTab] = useState<string>('global')
     // Bulle de tuto en cours (null = aucune). enemy => la vague est en pause.
     const [tutorial, setTutorial] = useState<{ entry: TutorialEntry; kind: 'enemy' | 'tower' } | null>(null)
 
@@ -163,10 +165,23 @@ export default function GamePage() {
         // Classement rafraîchi aux mêmes moments que le bestWave (montage + fin
         // de vague) : c'est précisément quand le rang peut avoir changé.
         try {
-            const { data } = await api.get('/api/v1/leaderboard?limit=5')
+            const q = lbTab === 'global' ? '' : `&mapId=${lbTab}`
+            const { data } = await api.get(`/api/v1/leaderboard?limit=5${q}`)
             setLeaderboard(data)
         } catch {
             // best-effort également : sans réponse, la carte affiche l'état précédent.
+        }
+    }
+
+    // Change d'onglet de classement (Global / carte) et recharge la liste.
+    async function selectLeaderboardTab(tab: string) {
+        setLbTab(tab)
+        try {
+            const q = tab === 'global' ? '' : `&mapId=${tab}`
+            const { data } = await api.get(`/api/v1/leaderboard?limit=5${q}`)
+            setLeaderboard(data)
+        } catch {
+            // best-effort : on garde l'affichage précédent.
         }
     }
 
@@ -693,7 +708,26 @@ export default function GamePage() {
                                 <img src="/sprites/ui/icon_close.png" alt="Fermer" className="kcd-icon" style={{ height: 18 }} />
                             </button>
                         </div>
+
+                        {/* Onglets : Global (toutes cartes) + un par carte. */}
+                        <div className="flex flex-wrap gap-1 mb-2">
+                            {[{ id: 'global', name: 'Global' }, ...GAME_MAPS.map((m) => ({ id: m.id, name: m.name }))].map((t) => (
+                                <button
+                                    key={t.id}
+                                    onClick={() => selectLeaderboardTab(t.id)}
+                                    className={`text-[11px] px-2 py-0.5 rounded transition-colors ${
+                                        lbTab === t.id ? 'bg-[#7a5a2c] text-[#f5e8c6]' : 'bg-[#cdb987] text-[#5a441c] hover:bg-[#d8c79a]'
+                                    }`}
+                                >
+                                    {t.name}
+                                </button>
+                            ))}
+                        </div>
+
                         <div className="flex flex-col gap-1 text-sm text-[#43310f]">
+                            {leaderboard.top.length === 0 && (
+                                <p className="text-center text-[#8a6a2c] py-2">Aucun score sur cette carte pour l&apos;instant.</p>
+                            )}
                             {leaderboard.top.map((entry) => (
                                 <p
                                     key={entry.rank + entry.username}
