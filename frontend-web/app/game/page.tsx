@@ -7,8 +7,10 @@ import { useAuthStore } from '@/store/authStore'
 import { useGame } from '@/hooks/useGame'
 import { useAuth } from '@/hooks/useAuth'
 import type { TowerData } from '@/components/game/GameScene'
-import { isCorridorCell, TOP_RESERVED_ROWS } from '@/components/game/constants'
+import { TOP_RESERVED_ROWS } from '@/components/game/constants'
+import { getMapDef, mapIsCorridor } from '@/components/game/maps'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
+import MapSelector from '@/components/game/MapSelector'
 import TutorialBubble from '@/components/game/TutorialBubble'
 import AudioControls from '@/components/game/AudioControls'
 import { UnitChip } from '@/components/game/UnitChip'
@@ -89,7 +91,7 @@ export default function GamePage() {
     const { player, isAuthenticated, hasHydrated: authHydrated } = useAuthStore()
     const { handleLogout } = useAuth()
     const {
-        gameId, map, waveNumber, gold, castleHp, castleMaxHp, status,
+        gameId, map, mapId, waveNumber, gold, castleHp, castleMaxHp, status,
         awaitingBonusChoice, availableBonuses, hasHydrated: gameHydrated,
         createGame, placeTower, upgradeTower, setTargetingMode, startWave, chooseBonus, refreshGame, resumeGame, newGame,
     } = useGame()
@@ -97,6 +99,8 @@ export default function GamePage() {
     const canvasRef = useRef<GameCanvasHandle>(null)
 
     const [selectedTower, setSelectedTower] = useState<TowerType>('ARCHER')
+    // Map choisie sur l'écran de départ (avant création de la partie).
+    const [pendingMapId, setPendingMapId] = useState<string>('desert')
     const [loading, setLoading] = useState(false)
     const [combatRunning, setCombatRunning] = useState(false)
     const [liveCastleHp, setLiveCastleHp] = useState(castleHp)
@@ -168,14 +172,11 @@ export default function GamePage() {
         refreshBestWave()
     }, [isAuthenticated])
 
-    // gameHydrated : sans cette garde, l'effet partait AVANT la relecture du
-    // gameId persisté (réhydratation asynchrone) et créait une nouvelle partie
-    // à chaque F5, orphelinant silencieusement la partie en cours.
-    useEffect(() => {
-        if (isAuthenticated && gameHydrated && !gameId) {
-            createGame().catch(() => setMessage('Erreur lors de la création de la partie'))
-        }
-    }, [isAuthenticated, gameHydrated, gameId])
+    // Plus d'auto-création : quand il n'y a pas de partie en cours, on affiche
+    // l'écran de choix de map (voir plus bas). La partie démarre au clic sur
+    // « Commencer », avec la map sélectionnée. gameHydrated garde le rendu de
+    // l'écran de choix jusqu'à ce que le gameId persisté soit relu (évite un
+    // flash de sélection à chaque F5 sur une partie en cours).
 
     useEffect(() => {
         setLiveCastleHp(castleHp)
@@ -222,7 +223,7 @@ export default function GamePage() {
         // final) : le mur-barrage se pose uniquement SUR le couloir des ennemis,
         // les tours uniquement en dehors. Filtré ici pour un retour immédiat au
         // lieu d'un aller-retour réseau voué au rejet.
-        const inCorridor = isCorridorCell(x, y)
+        const inCorridor = mapIsCorridor(getMapDef(mapId), x, y)
         if (selectedTower === 'WALL' && !inCorridor) {
             setMessage('Le mur se pose sur le couloir des ennemis (pour leur barrer la route)')
             return
@@ -365,6 +366,49 @@ export default function GamePage() {
     const totalTowers = towers.filter((t) => t.type !== 'WALL').length
     const canAct = !isGameOver && !combatRunning
 
+    // Écran de départ : pas de partie en cours (et rien à reprendre) → choix de la
+    // map avant de lancer. On attend gameHydrated pour ne pas afficher ce menu
+    // par-dessus une partie persistée en cours de relecture.
+    if (!gameId && gameHydrated) {
+        async function startGame() {
+            setLoading(true)
+            try {
+                await createGame(pendingMapId)
+            } catch {
+                setMessage('Erreur lors de la création de la partie')
+            } finally {
+                setLoading(false)
+            }
+        }
+        return (
+            <div
+                className="min-h-screen flex items-center justify-center p-4 text-[#f0e2c4] font-pixel"
+                style={{ backgroundImage: "url('/home-bg-alt.jpg')", backgroundSize: 'cover', backgroundPosition: 'center' }}
+                onPointerDown={() => { audio.resume(); audio.music('menu') }}
+            >
+                <div className="absolute inset-0 bg-[#160f08]/85" />
+                <div className="relative z-10 kcd-panel-wood max-w-2xl w-full p-5 md:p-6 flex flex-col gap-4">
+                    <div className="flex items-center justify-between gap-3">
+                        <h1 className="text-2xl md:text-3xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>
+                            Choisis ta carte
+                        </h1>
+                        <button onClick={() => router.push('/')} className="kcd-btn kcd-btn--nav text-xs py-1 px-2">← Menu</button>
+                    </div>
+                    <p className="text-sm text-[#e9d9b0]">Chaque carte a son propre tracé — adapte ta défense au chemin.</p>
+                    <MapSelector value={pendingMapId} onChange={setPendingMapId} disabled={loading} />
+                    <button
+                        onClick={startGame}
+                        disabled={loading}
+                        className="kcd-btn font-med text-lg py-2 disabled:opacity-50"
+                    >
+                        {loading ? 'Création…' : '⚔ Commencer la partie'}
+                    </button>
+                    {message && <p className="text-red-300 text-sm text-center">{message}</p>}
+                </div>
+            </div>
+        )
+    }
+
     if (loading && !gameId) {
         return (
             <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -426,7 +470,7 @@ export default function GamePage() {
                     Grand écran → panneau stats/évolution à droite. */}
                 <div className="flex-1 min-h-0 flex flex-col gap-1.5 min-w-0">
                     <div className="relative w-full flex-1 min-w-0 min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
-                        <GameCanvas ref={canvasRef} towers={towers} onCellClick={handleCellClick} selectedTower={canAct ? selectedTower : null} />
+                        <GameCanvas key={mapId} mapId={mapId} ref={canvasRef} towers={towers} onCellClick={handleCellClick} selectedTower={canAct ? selectedTower : null} />
                     </div>
 
                     {/* Barre d'action : tours en tuiles + actions (JUSTE sous la grille en étroit) */}

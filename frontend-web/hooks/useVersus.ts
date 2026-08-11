@@ -170,7 +170,7 @@ export function useVersus(myPlayerId: string | undefined) {
 
     const actions = {
         connect,
-        create: () => send('/app/match/create', { mode: 'VERSUS' }),
+        create: (mapId?: string) => send('/app/match/create', { mode: 'VERSUS', mapId: mapId ?? 'desert' }),
         join: (code: string) => send('/app/match/join', { code: code.trim().toUpperCase() }),
         setReady: (ready: boolean) => mid() && send(`/app/match/${mid()}/ready`, { ready }),
         start: () => mid() && send(`/app/match/${mid()}/start`),

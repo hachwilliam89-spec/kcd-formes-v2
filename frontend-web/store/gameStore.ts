@@ -58,6 +58,11 @@ interface GameState {
     map: GameMap | null
     awaitingBonusChoice: boolean
     availableBonuses: BonusOption[]
+    // Map de la partie (id du catalogue). Suivi côté client (le backend reconstruit
+    // le tracé depuis les waypoints persistés) et persisté → bon rendu au reload.
+    mapId: string
+
+    setMapId: (id: string) => void
 
     setGame: (game: {
         gameId: string
@@ -98,6 +103,9 @@ export const useGameStore = create<GameState>()(persist((set) => ({
     map: null,
     awaitingBonusChoice: false,
     availableBonuses: [],
+    mapId: 'desert',
+
+    setMapId: (id) => set({ mapId: id }),
 
     setGame: (game) =>
         set({
@@ -181,7 +189,7 @@ export const useGameStore = create<GameState>()(persist((set) => ({
     // PV, statut...) est refetché depuis le backend au montage (voir
     // useGame.resumeGame) — le serveur est la seule source de vérité, persister
     // des copies locales inviterait à rejouer sur un état périmé.
-    partialize: (state) => ({ gameId: state.gameId, castleId: state.castleId }),
+    partialize: (state) => ({ gameId: state.gameId, castleId: state.castleId, mapId: state.mapId }),
     onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true)
     },

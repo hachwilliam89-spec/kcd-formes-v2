@@ -17,7 +17,9 @@ import { UnitChip } from '@/components/game/UnitChip'
 import { ChatPanel, type ChatMessage } from '@/components/game/ChatPanel'
 import { MiniBoard, TOWER_COLOR, TOWER_LABEL } from '@/components/game/MiniBoard'
 import { useHasGutter } from '@/components/game/useHasGutter'
-import { isCorridorCell, TOP_RESERVED_ROWS } from '@/components/game/constants'
+import { TOP_RESERVED_ROWS } from '@/components/game/constants'
+import { getMapDef, mapIsCorridor } from '@/components/game/maps'
+import MapSelector from '@/components/game/MapSelector'
 import { audio } from '@/lib/audio'
 
 const CoopCanvas = dynamic(() => import('@/components/coop/CoopCanvas'), {
@@ -73,6 +75,7 @@ export default function VersusPage() {
     const { connected, error, match, myHud, oppHud, winnerId, chat, actions } = useVersus(player?.playerId)
 
     const [code, setCode] = useState('')
+    const [pendingMapId, setPendingMapId] = useState<string>('desert')
     const [selectedTower, setSelectedTower] = useState<TowerType>('ARCHER')
     const [notice, setNotice] = useState<string | null>(null)
     const canvasRef = useRef<CoopCanvasHandle>(null)
@@ -139,7 +142,7 @@ export default function VersusPage() {
         if (!running) return
         setNotice(null)
         if (y < TOP_RESERVED_ROWS) { setNotice('Rangée du haut réservée.'); return }
-        const inCorridor = isCorridorCell(x, y)
+        const inCorridor = mapIsCorridor(getMapDef(match?.mapId), x, y)
         if (selectedTower === 'WALL' && !inCorridor) { setNotice('Le mur se pose sur le couloir.'); return }
         if (selectedTower !== 'WALL' && inCorridor) { setNotice('Pas de tour sur le couloir.'); return }
         actions.placeTower(selectedTower, x, y)
@@ -217,7 +220,11 @@ export default function VersusPage() {
                                     l&apos;adversaire (ça augmente ton revenu). Dernier debout gagne.
                                 </p>
                                 {error && <p className="text-xs text-[#8a3d12] text-center">⚠ {error}</p>}
-                                <button onClick={actions.create} disabled={!connected} className="kcd-btn font-med text-lg py-2 disabled:opacity-50">
+                                <div className="flex flex-col gap-1">
+                                    <p className="text-[11px] text-[#8a6a2c] text-center">Carte du duel</p>
+                                    <MapSelector value={pendingMapId} onChange={setPendingMapId} disabled={!connected} />
+                                </div>
+                                <button onClick={() => actions.create(pendingMapId)} disabled={!connected} className="kcd-btn font-med text-lg py-2 disabled:opacity-50">
                                     Créer un duel
                                 </button>
                                 <div className="flex items-center gap-2 text-[#8a6a2c] text-xs">
@@ -337,7 +344,7 @@ export default function VersusPage() {
                         </div>
                     )}
                     <div className={`relative min-h-0 rounded-lg overflow-hidden ${showChat ? 'h-full aspect-[5/4] shrink-0' : 'flex-1'} ${hlTarget === 'board' ? 'ring-4 ring-inset ring-yellow-400' : ''}`} style={{ border: '2px solid #2f1c0d' }}>
-                        <CoopCanvas ref={canvasRef} onCellClick={place} selectedTower={selectedTower} />
+                        <CoopCanvas key={match?.mapId ?? 'desert'} mapId={match?.mapId ?? null} ref={canvasRef} onCellClick={place} selectedTower={selectedTower} />
                         {/* Toast messages, flottant sur le plateau. */}
                         {(notice || error) && (
                             <div className="absolute left-1/2 -translate-x-1/2 bottom-2 z-20 kcd-panel text-xs px-3 py-1 whitespace-nowrap">

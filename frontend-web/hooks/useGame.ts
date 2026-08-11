@@ -7,16 +7,22 @@ export function useGame() {
     const router = useRouter()
     const { player } = useAuthStore()
     const {
-        gameId, map, waveNumber, gold, castleHp, castleMaxHp, status,
+        gameId, map, mapId, waveNumber, gold, castleHp, castleMaxHp, status,
         awaitingBonusChoice, availableBonuses, hasHydrated,
-        setGame, addTower, upgradeTower: upgradeTowerInStore, spendGold, applyWaveResult,
+        setGame, setMapId, addTower, upgradeTower: upgradeTowerInStore, spendGold, applyWaveResult,
         applyBonusChoice, reset,
     } = useGameStore()
 
-    async function createGame() {
+    // La map n'est pas renvoyée par le backend (l'état ne porte que largeur/hauteur/tours) :
+    // on la choisit côté client, on la persiste (gameStore) et le backend reconstruit le
+    // tracé depuis les waypoints. `chosenMapId` par défaut = la map déjà en store.
+    async function createGame(chosenMapId?: string) {
+        const nextMapId = chosenMapId ?? mapId
         const { data } = await api.post('/api/v1/games', {
             castleName: `Château de ${player?.username}`,
+            mapId: nextMapId,
         })
+        setMapId(nextMapId)
         setGame(data)
         return data
     }
@@ -123,6 +129,8 @@ export function useGame() {
     return {
         gameId,
         map,
+        mapId,
+        setMapId,
         waveNumber,
         gold,
         castleHp,

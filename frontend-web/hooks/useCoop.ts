@@ -12,6 +12,7 @@ export type PlayerView = { playerId: string; username: string; ready: boolean; c
 export type MatchState = {
     id: string; code: string; status: string; mode: string
     maxPlayers: number; canStart: boolean; players: PlayerView[]
+    mapId?: string   // map de la partie (catalogue) → rendu client, désert par défaut
 }
 export type EnemyV = { id: string; type: string; x: number; y: number; hp: number; maxHp: number }
 export type TowerV = { id: string; type: string; x: number; y: number; level: number }
@@ -116,7 +117,7 @@ export function useCoop() {
 
     const actions = {
         connect,
-        create: () => send('/app/match/create'),
+        create: (mapId?: string) => send('/app/match/create', { mode: 'COOP', mapId: mapId ?? 'desert' }),
         join: (code: string) => send('/app/match/join', { code: code.trim().toUpperCase() }),
         setReady: (ready: boolean) => mid() && send(`/app/match/${mid()}/ready`, { ready }),
         start: () => mid() && send(`/app/match/${mid()}/start`),
