@@ -28,11 +28,12 @@ function def(id: string, name: string, biome: Biome, image: string, waypoints: C
   }
 }
 
-/** Carte multi-voies (voies fines, route dessinée au runtime). wideSpots = aires larges. */
+/** Carte multi-voies (voies fines). La route est bakée dans l'image (comme le désert),
+ *  donc proceduralRoad = false. wideSpots = aires larges. */
 function defLanes(id: string, name: string, biome: Biome, image: string, lanes: Cell[][], wideSpots: Cell[] = [], halfWidth = 0): MapDef {
   return {
     id, name, biome, image,
-    lanes, waypoints: lanes[0], halfWidth, wideSpots, proceduralRoad: true,
+    lanes, waypoints: lanes[0], halfWidth, wideSpots, proceduralRoad: false,
     path: buildLanesData(lanes, halfWidth, wideSpots),
   }
 }
