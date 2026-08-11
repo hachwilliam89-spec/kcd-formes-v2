@@ -400,12 +400,68 @@ export default function GamePage() {
                 </div>
             </div>
 
-            <div className="relative z-10 flex-1 lg:min-h-0 flex flex-col gap-2">
-                {/* Plateau (prioritaire) + panneau latéral (tour sélectionnée OU stats + évolution) */}
-                <div className="flex-1 lg:min-h-0 flex flex-col lg:flex-row gap-3">
+            <div className="relative z-10 flex-1 lg:min-h-0 flex flex-col lg:flex-row gap-2 lg:gap-3">
+                {/* Colonne principale : plateau prioritaire + barre d'action JUSTE dessous.
+                    Fenêtre étroite (flex-col) → tours sous la grille (jouabilité) puis stats.
+                    Grand écran → panneau stats/évolution à droite. */}
+                <div className="flex-1 lg:min-h-0 flex flex-col gap-2 min-w-0">
                     <div className="relative w-full aspect-[4/3] lg:aspect-auto lg:flex-1 min-w-0 lg:min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
                         <GameCanvas ref={canvasRef} towers={towers} onCellClick={handleCellClick} selectedTower={canAct ? selectedTower : null} />
                     </div>
+
+                    {/* Barre d'action : tours en tuiles + actions (JUSTE sous la grille en étroit) */}
+                    <div className="kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-1.5">
+                        <span className="font-med text-sm text-[#e9d9b0] w-16 shrink-0">Tours</span>
+                        <div className="flex flex-wrap gap-1.5">
+                            {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(([type, info]) => {
+                                const locked = bestWave < info.unlockWave
+                                return (
+                                    <UnitChip
+                                        key={type}
+                                        icon={<TowerIcon type={type} size={32} />}
+                                        label={info.label}
+                                        cost={info.cost}
+                                        badge={locked ? `🔒V${info.unlockWave}` : undefined}
+                                        selected={selectedTower === type}
+                                        affordable={gold >= info.cost}
+                                        disabled={!canAct || locked}
+                                        onClick={() => { audio.play('ui_click', { volume: 0.5 }); setSelectedTower(type) }}
+                                        title={locked ? `${info.label} — débloquée vague ${info.unlockWave}` : `${info.label} — ${info.cost} or`}
+                                    />
+                                )
+                            })}
+                        </div>
+                        <div className="ml-auto flex items-center gap-2">
+                            {leaderboard && leaderboard.top.length > 0 && (
+                                <button onClick={() => setShowLeaderboard(true)} className="kcd-btn kcd-btn--info text-xs py-1 px-2 flex items-center gap-1">
+                                    <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 14 }} /> Classement
+                                </button>
+                            )}
+                            <button
+                                onClick={() => { resetTutorial(player?.username ?? ''); setMessage('Tuto réinitialisé — les conseils réapparaîtront.') }}
+                                className="kcd-btn kcd-btn--info text-xs py-1 px-2"
+                            >
+                                ↻ Tuto
+                            </button>
+                            {!isGameOver && (
+                                <button
+                                    onClick={() => { if (window.confirm('Abandonner cette partie et en commencer une nouvelle ?')) { setIsGameOver(false); setMessage(null); newGame() } }}
+                                    disabled={combatRunning || loading}
+                                    className="kcd-btn kcd-btn--danger text-xs py-1 px-2 disabled:opacity-50"
+                                >
+                                    ↻ Nouvelle partie
+                                </button>
+                            )}
+                            <button
+                                onClick={handleStartWave}
+                                disabled={loading || isGameOver || combatRunning || awaitingBonusChoice}
+                                className="kcd-btn kcd-btn--primary font-med text-base py-2 px-5 disabled:opacity-50"
+                            >
+                                {awaitingBonusChoice ? '★ Choisis un bonus' : '⚔ Lancer la vague'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
                     <aside className="w-full lg:w-64 shrink-0 lg:min-h-0 lg:overflow-y-auto flex flex-col gap-3">
                         {selectedTowerObj && canAct ? (
@@ -514,61 +570,6 @@ export default function GamePage() {
                             </>
                         )}
                     </aside>
-                </div>
-
-                {/* Barre d'action bas : tours en tuiles + actions de partie */}
-                <div className="kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-1.5">
-                    <span className="font-med text-sm text-[#e9d9b0] w-16 shrink-0">Tours</span>
-                    <div className="flex flex-wrap gap-1.5">
-                        {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(([type, info]) => {
-                            const locked = bestWave < info.unlockWave
-                            return (
-                                <UnitChip
-                                    key={type}
-                                    icon={<TowerIcon type={type} size={32} />}
-                                    label={info.label}
-                                    cost={info.cost}
-                                    badge={locked ? `🔒V${info.unlockWave}` : undefined}
-                                    selected={selectedTower === type}
-                                    affordable={gold >= info.cost}
-                                    disabled={!canAct || locked}
-                                    onClick={() => { audio.play('ui_click', { volume: 0.5 }); setSelectedTower(type) }}
-                                    title={locked ? `${info.label} — débloquée vague ${info.unlockWave}` : `${info.label} — ${info.cost} or`}
-                                />
-                            )
-                        })}
-                    </div>
-
-                    <div className="ml-auto flex items-center gap-2">
-                        {leaderboard && leaderboard.top.length > 0 && (
-                            <button onClick={() => setShowLeaderboard(true)} className="kcd-btn kcd-btn--info text-xs py-1 px-2 flex items-center gap-1">
-                                <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 14 }} /> Classement
-                            </button>
-                        )}
-                        <button
-                            onClick={() => { resetTutorial(player?.username ?? ''); setMessage('Tuto réinitialisé — les conseils réapparaîtront.') }}
-                            className="kcd-btn kcd-btn--info text-xs py-1 px-2"
-                        >
-                            ↻ Tuto
-                        </button>
-                        {!isGameOver && (
-                            <button
-                                onClick={() => { if (window.confirm('Abandonner cette partie et en commencer une nouvelle ?')) { setIsGameOver(false); setMessage(null); newGame() } }}
-                                disabled={combatRunning || loading}
-                                className="kcd-btn kcd-btn--danger text-xs py-1 px-2 disabled:opacity-50"
-                            >
-                                ↻ Nouvelle partie
-                            </button>
-                        )}
-                        <button
-                            onClick={handleStartWave}
-                            disabled={loading || isGameOver || combatRunning || awaitingBonusChoice}
-                            className="kcd-btn kcd-btn--primary font-med text-base py-2 px-5 disabled:opacity-50"
-                        >
-                            {awaitingBonusChoice ? '★ Choisis un bonus' : '⚔ Lancer la vague'}
-                        </button>
-                    </div>
-                </div>
             </div>
 
             {/* Modale Classement (voir backend LeaderboardService). La ligne "toi"
