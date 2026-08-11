@@ -45,7 +45,7 @@ export const GAME_MAPS: MapDef[] = [
   // La Fourche : UNE entrée (0,8), la route se divise en (3,8) en trois branches qui
   // rejoignent le château COLLÉ AU BORD DROIT (19,8) par des angles différents —
   // nord (bord droit descendant), ouest (direct), sud (bord droit montant).
-  defLanes('fourche', 'La Fourche', 'desert', '/sprites/terrain/fourche_map.png', [
+  defLanes('fourche', 'La Fourche', 'snow', '/sprites/terrain/fourche_map.png', [
     [{ x: 0, y: 8 }, { x: 3, y: 8 }, { x: 3, y: 2 }, { x: 19, y: 2 }, { x: 19, y: 8 }],
     [{ x: 0, y: 8 }, { x: 19, y: 8 }],
     [{ x: 0, y: 8 }, { x: 3, y: 8 }, { x: 3, y: 14 }, { x: 19, y: 14 }, { x: 19, y: 8 }],

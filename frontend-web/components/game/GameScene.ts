@@ -374,6 +374,17 @@ export class GameScene extends Phaser.Scene {
         for (let i = 1; i <= 3; i++) this.load.image(`decor-small-${i}`, `/sprites/decor/small_${i}.png`)   // cailloux / tas de terre
         // Props décoratifs (rochers) pour habiller le champ.
         for (let i = 1; i <= 5; i++) this.load.image(`prop-stone-${i}`, `/sprites/props/stone_${i}.png`)
+        // Thème NEIGE / toundra (carte Fourche) : sapins enneigés, arbre nu givré,
+        // rochers sous la neige, monticules, + colonne/statue/lanterne/butte/cailloux.
+        for (let i = 1; i <= 3; i++) this.load.image(`snow-fir-${i}`, `/sprites/decor/snow/fir_${i}.png`)
+        this.load.image('snow-bare', '/sprites/decor/snow/bare_tree.png')
+        for (let i = 1; i <= 4; i++) this.load.image(`snow-rock-${i}`, `/sprites/decor/snow/rock_${i}.png`)
+        for (let i = 1; i <= 2; i++) this.load.image(`snow-mound-${i}`, `/sprites/decor/snow/mound_${i}.png`)
+        this.load.image('snow-column', '/sprites/decor/snow/column.png')
+        this.load.image('snow-statue', '/sprites/decor/snow/statue.png')
+        this.load.image('snow-lantern', '/sprites/decor/snow/lantern.png')
+        this.load.image('snow-dirt', '/sprites/decor/snow/dirt.png')
+        this.load.image('snow-pebbles', '/sprites/decor/snow/pebbles.png')
         // Châteaux : le tien (arrivée, à défendre) + celui de l'ennemi (spawn, décoratif).
         this.load.image('castle', '/sprites/castle/castle.png')
         this.load.image('castle-enemy', '/sprites/castle/castle_enemy.png')
@@ -1440,6 +1451,15 @@ export class GameScene extends Phaser.Scene {
         const nearCastle = (x: number, y: number) =>
             Math.max(Math.abs(x - this.pathStart.x), Math.abs(y - this.pathStart.y)) <= 2 ||
             Math.max(Math.abs(x - this.pathEnd.x), Math.abs(y - this.pathEnd.y)) <= 2
+
+        // Thème neige (Fourche) : décor dédié semé dans les ZONES MORTES. Sort tôt —
+        // le décor terres désolées ci-dessous ne s'applique qu'aux autres cartes.
+        if (this.mapDef.biome === 'snow') {
+            this.drawSnowDecor(rnd, nearCastle)
+            this.addVignette()
+            return
+        }
+
         const frame: { x: number; y: number }[] = []   // cadre → gros décor
         const small: { x: number; y: number }[] = []   // partout → petit décor
         for (let x = 0; x < GRID_WIDTH; x++)
@@ -1488,6 +1508,80 @@ export class GameScene extends Phaser.Scene {
         this.addVignette()
     }
 
+    /**
+     * Décor du thème NEIGE (Fourche) : semé dans les ZONES MORTES uniquement
+     * (ni route, ni case constructible). Les GRANDS sujets (sapins, colonne,
+     * statue, lanterne) ne vont que sur des cases dont les 2 cases au-dessus sont
+     * mortes aussi : comme le sprite déborde vers le haut, il ne recouvre alors
+     * jamais la route des unités ni une tour. Le petit décor est semé avec parcimonie.
+     */
+    private drawSnowDecor(rnd: () => number, nearCastle: (x: number, y: number) => boolean) {
+        const isDead = (x: number, y: number) =>
+            y >= TOP_RESERVED_ROWS && x >= 0 && x < GRID_WIDTH && y < GRID_HEIGHT &&
+            !mapIsCorridor(this.mapDef, x, y) && !mapIsBuildable(this.mapDef, x, y)
+
+        const place = (key: string, cx: number, cy: number, span: number, shadowW: number, byHeight = false) => {
+            const sh = this.add.graphics().setDepth(-16)
+            sh.fillStyle(0x14202a, 0.20)
+            sh.fillEllipse(cx, cy, shadowW, shadowW * 0.4)
+            const img = this.add.image(cx, cy, key).setOrigin(0.5, 0.94).setDepth(-15)
+            img.setScale((CELL_SIZE * span) / (byHeight ? img.height : img.width))
+        }
+
+        const used = new Set<string>()
+        const k = (x: number, y: number) => `${x},${y}`
+        const shuffle = (a: { x: number; y: number }[]) => a.sort(() => rnd() - 0.5)
+
+        const tall: { x: number; y: number }[] = []
+        const flat: { x: number; y: number }[] = []
+        for (let x = 0; x < GRID_WIDTH; x++)
+            for (let y = TOP_RESERVED_ROWS; y < GRID_HEIGHT; y++) {
+                if (!isDead(x, y) || nearCastle(x, y)) continue
+                flat.push({ x, y })
+                // Grand sujet : les 2 cases AU-DESSUS (débordement vertical du sprite)
+                // ET les cases gauche/droite (largeur) doivent aussi être mortes → ne
+                // recouvre jamais route ni tour, dans aucune direction.
+                if (isDead(x, y - 1) && isDead(x, y - 2) && isDead(x - 1, y) && isDead(x + 1, y)) tall.push({ x, y })
+            }
+        shuffle(tall); shuffle(flat)
+
+        // Grands sujets : espacés (pas collés), parcimonie (max ~14).
+        const tallKeys = ['snow-fir-1', 'snow-fir-2', 'snow-fir-3', 'snow-fir-2', 'snow-bare', 'snow-column', 'snow-statue', 'snow-lantern']
+        let placedTall = 0
+        for (const c of tall) {
+            if (placedTall >= 14) break
+            let near = false
+            for (let dx = -1; dx <= 1 && !near; dx++) for (let dy = -1; dy <= 1; dy++) if (used.has(k(c.x + dx, c.y + dy))) near = true
+            if (near) continue
+            const key = tallKeys[Math.floor(rnd() * tallKeys.length)]
+            const isTree = key.startsWith('snow-fir') || key === 'snow-bare'
+            const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 6
+            const cy = c.y * CELL_SIZE + CELL_SIZE + 2
+            place(key, cx, cy, isTree ? 1.6 + rnd() * 0.5 : 1.1 + rnd() * 0.2, CELL_SIZE * 0.45, true)
+            used.add(k(c.x, c.y)); placedTall++
+        }
+
+        // Rochers enneigés (larges, pas d'occlusion vers le haut) : sur cases mortes libres.
+        const rockKeys = ['snow-rock-1', 'snow-rock-2', 'snow-rock-3', 'snow-rock-4']
+        let placedRock = 0
+        for (const c of flat) {
+            if (placedRock >= 9) break
+            if (used.has(k(c.x, c.y)) || rnd() > 0.5) continue
+            place(rockKeys[Math.floor(rnd() * rockKeys.length)], c.x * CELL_SIZE + CELL_SIZE / 2, c.y * CELL_SIZE + CELL_SIZE - 2, 0.8 + rnd() * 0.3, CELL_SIZE * 0.5)
+            used.add(k(c.x, c.y)); placedRock++
+        }
+
+        // Petit décor semé avec parcimonie : monticules de neige, cailloux, butte de terre.
+        const smallKeys = ['snow-mound-1', 'snow-mound-2', 'snow-pebbles', 'snow-dirt']
+        let placedSmall = 0
+        for (const c of flat) {
+            if (placedSmall >= 18) break
+            if (used.has(k(c.x, c.y)) || rnd() > 0.5) continue
+            place(smallKeys[Math.floor(rnd() * smallKeys.length)], c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 10, c.y * CELL_SIZE + CELL_SIZE * 0.85, 0.4 + rnd() * 0.2, CELL_SIZE * 0.28)
+            used.add(k(c.x, c.y)); placedSmall++
+        }
+    }
+
     /** Terrain "cuit" sur un canvas : herbe tuilée partout + chemin de terre serpentin
      *  incrusté (bordure sombre + terre tuilée clippée à la forme). Une seule image
      *  (depth -20), pas de masque Phaser. */
@@ -1504,15 +1598,18 @@ export class GameScene extends Phaser.Scene {
 
     private drawProceduralRoad() {
         const g = this.add.graphics().setDepth(-18)
-        // Épaule de route (couloir élargi) puis voie de circulation (chemin) plus
-        // claire par-dessus — lisible même quand halfWidth vaut 0 (route fine).
+        // Couleur de route selon le biome : neige = sentier de neige tassée/glacé ;
+        // sinon piste sableuse. Épaule (couloir) puis voie de circulation par-dessus.
+        const snow = this.mapDef.biome === 'snow'
+        const shoulder = snow ? 0x9fb1bf : 0x7c5c34
+        const lane = snow ? 0xd8e6ee : 0xa9895a
         for (const c of this.mapDef.path.corridorCells) {
-            g.fillStyle(0x7c5c34, 1)
+            g.fillStyle(shoulder, 1)
             g.fillRect(c.x * CELL_SIZE, c.y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
         }
         for (const c of this.mapDef.path.pathCells) {
             const px = c.x * CELL_SIZE, py = c.y * CELL_SIZE
-            g.fillStyle(0xa9895a, 1)
+            g.fillStyle(lane, 1)
             g.fillRect(px + CELL_SIZE * 0.12, py + CELL_SIZE * 0.12, CELL_SIZE * 0.76, CELL_SIZE * 0.76)
         }
     }
