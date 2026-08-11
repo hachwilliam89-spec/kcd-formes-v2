@@ -388,7 +388,7 @@ export default function GamePage() {
             <div className="absolute inset-0 bg-[#160f08]/80" />
 
             {/* HUD : 3 zones (ressources gauche · vague centre · menu droite) */}
-            <div className="relative z-10 kcd-panel-wood flex flex-wrap justify-between items-center gap-x-4 gap-y-1 mb-1.5 shrink-0 py-0.5">
+            <div className="relative z-30 kcd-panel-wood flex flex-wrap justify-between items-center gap-x-4 gap-y-1 mb-1.5 shrink-0 py-0.5">
                 {/* Gauche : titre + ressources */}
                 <div className="flex items-center gap-3">
                     <h1 className="text-lg md:text-2xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>KCD Formes v2</h1>
