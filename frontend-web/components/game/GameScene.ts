@@ -353,6 +353,12 @@ export class GameScene extends Phaser.Scene {
         this.load.image('terrain-ground', '/sprites/terrain/ground.png')
         this.load.image('terrain-grass', '/sprites/terrain/grass.png')
         this.load.image('road_fill', '/sprites/terrain/road_fill.png')
+        // Nouveau tileset nature : herbe + terre seamless, arbres/rochers/buissons.
+        this.load.image('field-grass', '/sprites/terrain/grass_field.png')
+        this.load.image('field-dirt', '/sprites/terrain/dirt_path.png')
+        for (let i = 1; i <= 6; i++) this.load.image(`decor-tree-${i}`, `/sprites/decor/tree_${i}.png`)
+        for (let i = 1; i <= 4; i++) this.load.image(`decor-rock-${i}`, `/sprites/decor/rock_${i}.png`)
+        for (let i = 1; i <= 5; i++) this.load.image(`decor-bush-${i}`, `/sprites/decor/bush_${i}.png`)
         // Props décoratifs (rochers) pour habiller le champ.
         for (let i = 1; i <= 5; i++) this.load.image(`prop-stone-${i}`, `/sprites/props/stone_${i}.png`)
         // Châteaux : le tien (arrivée, à défendre) + celui de l'ennemi (spawn, décoratif).
@@ -1404,23 +1410,13 @@ export class GameScene extends Phaser.Scene {
     // ── Terrain (sol + route serpentine + props) ─────────────────────────
 
     private drawTerrain() {
-        // Ces textures sont de l'art vectoriel lisse (pas du pixel) : on force un
-        // filtrage LINÉAIRE pour un redimensionnement propre, malgré pixelArt:true
-        // (qui reste souhaitable pour les sprites de perso/tours).
-        const smooth = ['terrain-ground', 'terrain-grass', 'road_fill',
-            'prop-stone-1', 'prop-stone-2', 'prop-stone-3', 'prop-stone-4', 'prop-stone-5']
-        for (const k of smooth) this.textures.get(k)?.setFilter(Phaser.Textures.FilterMode.LINEAR)
-
-        // 1) Sol : herbe tuilée sur tout le champ → contraste franc avec le chemin de
-        // terre (avant : tout en terre marron, sans relief). Base de l'ambiance.
-        this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'terrain-grass')
+        // 1) Sol : herbe (texture seamless du tileset nature) tuilée sur tout le champ.
+        this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'field-grass')
             .setOrigin(0, 0).setDepth(-20)
 
-        // 2) Route serpentine générée géométriquement (pas d'assemblage de tuiles →
-        // aucun raccord) : on construit la forme "route" comme l'union de rectangles
-        // (segments entre waypoints) + de disques aux jointures → virages ARRONDIS
-        // parfaitement nets. Cette forme sert (a) de bordure sombre, (b) de masque
-        // pour la texture de terre claire tuilée.
+        // 2) Chemin serpentin : forme géométrique (rectangles + disques aux virages →
+        // courbes arrondies nettes) servant (a) de bordure sombre, (b) de masque pour
+        // la texture de terre tuilée du pack.
         const ROAD = CELL_SIZE * 2.4
         const pts = WAYPOINTS.map((w) => ({ x: w.x * CELL_SIZE + CELL_SIZE / 2, y: w.y * CELL_SIZE + CELL_SIZE / 2 }))
         const drawRoadShape = (g: Phaser.GameObjects.Graphics, width: number, color: number) => {
@@ -1431,60 +1427,54 @@ export class GameScene extends Phaser.Scene {
                 if (a.y === b.y) g.fillRect(Math.min(a.x, b.x), a.y - r, Math.abs(b.x - a.x), width)
                 else g.fillRect(a.x - r, Math.min(a.y, b.y), width, Math.abs(b.y - a.y))
             }
-            for (const p of pts) g.fillCircle(p.x, p.y, r) // jointures arrondies
+            for (const p of pts) g.fillCircle(p.x, p.y, r)
         }
-
-        // Bordure sombre (légèrement plus large), sous la route.
         const border = this.add.graphics().setDepth(-19)
-        drawRoadShape(border, ROAD + 8, 0x1e0f07)
-
-        // Texture de terre claire tuilée, masquée à la forme de la route.
-        const roadTex = this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'road_fill')
+        drawRoadShape(border, ROAD + 10, 0x2a1a0d) // liseré terreux sombre sous le chemin
+        const roadTex = this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'field-dirt')
             .setOrigin(0, 0).setDepth(-18)
         const maskG = this.make.graphics({})
         drawRoadShape(maskG, ROAD, 0xffffff)
         roadTex.setMask(maskG.createGeometryMask())
 
-        // 3) Décor procédural (déterministe, graine fixe → identique à chaque partie).
+        // 3) Décor du tileset nature (arbres, rochers, buissons), placement déterministe.
         let seed = 1337
         const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
         const buildable: { x: number; y: number }[] = []
+        const border2: { x: number; y: number }[] = []
         for (let x = 0; x < GRID_WIDTH; x++)
             for (let y = 0; y < GRID_HEIGHT; y++)
-                if (!isCorridorCell(x, y)) buildable.push({ x, y })
+                if (!isCorridorCell(x, y)) {
+                    buildable.push({ x, y })
+                    if (x <= 1 || x >= GRID_WIDTH - 2 || y <= 1 || y >= GRID_HEIGHT - 2) border2.push({ x, y })
+                }
 
-        // 3a) Touffes d'herbe éparses (graphics léger) pour donner de la vie au champ.
-        const tufts = this.add.graphics().setDepth(-17)
-        for (let n = 0; n < 90 && buildable.length; n++) {
-            const c = buildable[Math.floor(rnd() * buildable.length)]
-            const bx = c.x * CELL_SIZE + rnd() * CELL_SIZE
-            const by = c.y * CELL_SIZE + rnd() * CELL_SIZE
-            const shade = [0x4e7d2c, 0x5f9636, 0x3f6a24][Math.floor(rnd() * 3)]
-            tufts.fillStyle(shade, 0.85)
-            const blades = 3 + Math.floor(rnd() * 3)
-            for (let b = 0; b < blades; b++) {
-                const ox = (b - blades / 2) * 1.6
-                tufts.fillTriangle(bx + ox - 0.8, by, bx + ox + 0.8, by, bx + ox + (rnd() - 0.5) * 2, by - (3 + rnd() * 3))
-            }
-        }
-
-        // 3b) Rochers avec ombre portée, éparpillés sur des cases constructibles
-        // (décor pur, la construction reste possible dessus).
-        const used = new Set<number>()
-        for (let n = 0; n < 14 && buildable.length; n++) {
-            let idx = Math.floor(rnd() * buildable.length)
-            if (used.has(idx)) idx = (idx + 1) % buildable.length
-            used.add(idx)
-            const c = buildable[idx]
-            const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 8
-            const cy = c.y * CELL_SIZE + CELL_SIZE * 0.62 + (rnd() - 0.5) * 6
-            const scale = 0.55 + rnd() * 0.35
+        // Ombre portée douce + sprite, ancré en bas de la case (déborde vers le haut).
+        const placeDecor = (key: string, cx: number, cy: number, cellSpan: number, shadowW: number) => {
             const sh = this.add.graphics().setDepth(-16)
             sh.fillStyle(0x000000, 0.22)
-            sh.fillEllipse(cx, cy + CELL_SIZE * 0.12 * scale, CELL_SIZE * 0.5 * scale, CELL_SIZE * 0.2 * scale)
-            const key = `prop-stone-${1 + Math.floor(rnd() * 5)}`
-            const st = this.add.image(cx, cy, key).setOrigin(0.5, 0.7).setDepth(-16)
-            st.setScale((CELL_SIZE * scale) / st.width)
+            sh.fillEllipse(cx, cy, shadowW, shadowW * 0.4)
+            const img = this.add.image(cx, cy, key).setOrigin(0.5, 0.92).setDepth(-15)
+            img.setScale((CELL_SIZE * cellSpan) / img.width)
+        }
+
+        // 3a) Arbres : surtout sur les bords (n'encombrent pas les cases centrales).
+        const usedT = new Set<string>()
+        for (let n = 0; n < 9 && border2.length; n++) {
+            const c = border2[Math.floor(rnd() * border2.length)]
+            const k = `${c.x},${c.y}`; if (usedT.has(k)) continue; usedT.add(k)
+            const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 6
+            const cy = c.y * CELL_SIZE + CELL_SIZE + 2
+            placeDecor(`decor-tree-${1 + Math.floor(rnd() * 6)}`, cx, cy, 1.7 + rnd() * 0.5, CELL_SIZE * 0.55)
+        }
+        // 3b) Buissons + rochers dispersés sur tout le champ.
+        for (let n = 0; n < 18 && buildable.length; n++) {
+            const c = buildable[Math.floor(rnd() * buildable.length)]
+            const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 10
+            const cy = c.y * CELL_SIZE + CELL_SIZE * 0.9 + (rnd() - 0.5) * 6
+            const isBush = rnd() < 0.6
+            const key = isBush ? `decor-bush-${1 + Math.floor(rnd() * 5)}` : `decor-rock-${1 + Math.floor(rnd() * 4)}`
+            placeDecor(key, cx, cy, (isBush ? 0.55 : 0.5) + rnd() * 0.25, CELL_SIZE * 0.35)
         }
 
         // 4) Vignette d'ambiance : bords assombris (au-dessus du terrain, sous le jeu).
