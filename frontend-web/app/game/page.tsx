@@ -484,7 +484,7 @@ export default function GamePage() {
                         garderait sinon une taille minuscule). La carte d'amélioration, elle,
                         reste visible même en petit car on en a besoin pour améliorer une tour. */}
                     <aside className={`w-full lg:w-64 shrink-0 min-h-0 overflow-y-auto max-h-[38vh] lg:max-h-none flex-col gap-3 ${selectedTowerObj && canAct ? 'flex' : 'hidden lg:flex'}`}>
-                        {selectedTowerObj && canAct ? (
+                        {selectedTowerObj && canAct && (
                             /* Carte d'évolution de la tour cliquée : niveau, amélioration,
                                aperçu du prochain niveau, priorité de tir. */
                             <div className="kcd-panel flex flex-col gap-3">
@@ -529,12 +529,9 @@ export default function GamePage() {
                                 </div>
 
                                 {(selectedTowerObj.level ?? 1) >= MAX_TOWER_LEVEL ? (
-                                    <>
-                                        <div className="rounded px-2 py-1.5 text-[11px] text-[#3a6a12] text-center font-semibold" style={{ background: '#dff0c8', border: '1px solid #8bbf5a' }}>
-                                            ✦ Niveau maximum atteint
-                                        </div>
-                                        <button disabled className="kcd-btn text-sm py-1.5 opacity-50">Niveau max</button>
-                                    </>
+                                    <div className="rounded px-2 py-1.5 text-[11px] text-[#3a6a12] text-center font-semibold" style={{ background: '#dff0c8', border: '1px solid #8bbf5a' }}>
+                                        ✦ Niveau maximum atteint
+                                    </div>
                                 ) : (
                                     <>
                                         <div className="rounded px-2 py-1.5 text-[11px] text-[#5a3d16]" style={{ background: '#e6d6ab', borderLeft: '3px solid #b08a3c' }}>
@@ -574,8 +571,10 @@ export default function GamePage() {
                                     )}
                                 </div>
                             </div>
-                        ) : (
-                            <>
+                        )}
+                        {/* Stats + évolution : sous la carte, uniquement en grand écran
+                            (masqués en fenêtre étroite pour garder le plateau grand). */}
+                        <div className="hidden lg:flex lg:flex-col gap-3">
                                 {/* Statistiques de la partie (complètent le HUD sans le répéter). */}
                                 <div className="kcd-panel-titled">
                                     <h3 className="kcd-title font-med text-center text-base mb-2">Statistiques</h3>
@@ -613,8 +612,7 @@ export default function GamePage() {
                                             })}
                                     </div>
                                 </div>
-                            </>
-                        )}
+                        </div>
                     </aside>
             </div>
 
