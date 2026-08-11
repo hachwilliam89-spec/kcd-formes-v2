@@ -1608,6 +1608,24 @@ export class GameScene extends Phaser.Scene {
             placeDecor(`decor-small-${1 + Math.floor(rnd() * 3)}`, cx, cy, 0.34 + rnd() * 0.18, CELL_SIZE * 0.24)
         }
 
+        // 3c) ZONES MORTES intérieures (ni chemin ni constructible) : un peu de gros
+        // décor (rochers + ruines) pour ne pas laisser de grands vides au milieu.
+        // Sobre (max ~14) et sous les unités (depth) → n'entrave pas le jeu.
+        const dead: { x: number; y: number }[] = []
+        for (let x = 1; x < GRID_WIDTH - 1; x++)
+            for (let y = 1; y < GRID_HEIGHT - 1; y++)
+                if (!mapIsCorridor(this.mapDef, x, y) && !mapIsBuildable(this.mapDef, x, y) && !nearCastle(x, y))
+                    dead.push({ x, y })
+        shuffle(dead)
+        const nDead = Math.min(14, Math.floor(dead.length * 0.5))
+        for (let n = 0; n < nDead; n++) {
+            const c = dead[n]
+            const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 8
+            const cy = c.y * CELL_SIZE + CELL_SIZE + 2
+            if (rnd() < 0.5) placeDecor(`decor-rock-${1 + Math.floor(rnd() * 4)}`, cx, cy, 0.7 + rnd() * 0.35, CELL_SIZE * 0.45)
+            else placeDecor(`decor-ruinF-${1 + Math.floor(rnd() * 4)}`, cx, cy, 0.85 + rnd() * 0.25, CELL_SIZE * 0.5)
+        }
+
         // 4) Vignette d'ambiance : bords assombris (au-dessus du terrain, sous le jeu).
         this.addVignette()
     }
