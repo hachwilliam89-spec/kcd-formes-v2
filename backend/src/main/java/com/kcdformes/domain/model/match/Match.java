@@ -26,6 +26,7 @@ public class Match {
     // château). LinkedHashMap pour garder l'ordre d'arrivée (hôte en premier).
     private final Map<UUID, MatchGameState> playerStates = new LinkedHashMap<>();
     private UUID winnerId;              // désigné à la fin d'un versus (dernier debout)
+    private String mapId = "desert";   // map de la partie (id du catalogue, voir MapCatalog)
 
     public Match(UUID id, String code, MatchMode mode) {
         this.id = id;
@@ -75,6 +76,8 @@ public class Match {
     public UUID getId() { return id; }
     public String getCode() { return code; }
     public MatchMode getMode() { return mode; }
+    public String getMapId() { return mapId; }
+    public void setMapId(String mapId) { this.mapId = mapId; }
     public int getMaxPlayers() { return maxPlayers; }
     public MatchStatus getStatus() { return status; }
     public void setStatus(MatchStatus status) { this.status = status; }

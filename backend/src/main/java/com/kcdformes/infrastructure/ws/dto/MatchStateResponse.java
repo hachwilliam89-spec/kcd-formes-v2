@@ -17,6 +17,7 @@ public record MatchStateResponse(
         int maxPlayers,
         boolean canStart,
         String winnerId,      // null sauf à la fin d'un versus (dernier debout)
+        String mapId,         // map de la partie (catalogue) → rendu client
         List<PlayerView> players
 ) {
     public record PlayerView(String playerId, String username, boolean ready, boolean connected) {}
@@ -33,6 +34,7 @@ public record MatchStateResponse(
                 m.getMaxPlayers(),
                 m.canStart(),
                 m.getWinnerId() != null ? m.getWinnerId().toString() : null,
+                m.getMapId(),
                 players);
     }
 

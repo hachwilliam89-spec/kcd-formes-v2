@@ -87,7 +87,7 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
     }
 
     @Transactional
-    public GameEntity createGame(UUID playerId, String castleName) {
+    public GameEntity createGame(UUID playerId, String castleName, String mapId) {
         PlayerEntity player = playerJpaRepository.findById(playerId)
                 .orElseThrow(() -> new IllegalArgumentException("Player not found: " + playerId));
 
@@ -101,14 +101,10 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         // d'herbe pour le château de spawn et les tours (ancrés en bas, ils
         // débordent vers le HAUT) ; en bas, la ligne 14 sert de marge aux pieds des
         // ennemis de la voie basse.
-        GameMap initialMap = new GameMap(20, 16, List.of(   // 16 lignes : rangée 0 = tampon
-                new Position(0, 3),   // spawn (haut-gauche)
-                new Position(17, 3),  // voie haute -> droite
-                new Position(17, 8),  // descente
-                new Position(2, 8),   // voie médiane -> gauche
-                new Position(2, 13),  // descente
-                new Position(19, 13)  // château (bas-droite)
-        ));
+        // Tracé selon la map choisie (catalogue partagé avec le front). Les waypoints
+        // sont persistés dans la map (voir GameMapMapper) → le bon chemin est restauré
+        // au rechargement, sans colonne dédiée.
+        GameMap initialMap = MapCatalog.buildMap(mapId);
 
         CastleEntity castle = new CastleEntity();
         castle.setPlayer(player);

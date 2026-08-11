@@ -49,7 +49,8 @@ public class MatchStompController {
     public MatchStateResponse create(@Payload(required = false) CreateMatchMessage message, Principal principal) {
         Caller caller = Caller.from(principal);
         MatchMode mode = parseMode(message);
-        Match match = matchService.createMatch(caller.playerId(), caller.username(), mode);
+        String mapId = message != null ? message.mapId() : null;
+        Match match = matchService.createMatch(caller.playerId(), caller.username(), mode, mapId);
         return MatchStateResponse.from(match);
     }
 

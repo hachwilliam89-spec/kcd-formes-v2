@@ -3,6 +3,7 @@ package com.kcdformes.application.usecase;
 import com.kcdformes.domain.model.BonusType;
 import com.kcdformes.domain.model.EnemyType;
 import com.kcdformes.domain.model.GameMap;
+import com.kcdformes.domain.model.MapCatalog;
 import com.kcdformes.domain.model.Position;
 import com.kcdformes.domain.model.Tower;
 import com.kcdformes.domain.model.TowerType;
@@ -50,8 +51,9 @@ public class MatchService {
     }
 
     /** Crée un match en LOBBY avec l'hôte comme premier joueur. */
-    public Match createMatch(UUID hostId, String username, MatchMode mode) {
+    public Match createMatch(UUID hostId, String username, MatchMode mode, String mapId) {
         Match match = new Match(UUID.randomUUID(), generateUniqueCode(), mode);
+        match.setMapId(MapCatalog.normalize(mapId));
         match.addPlayer(new MatchPlayer(hostId, username));
         matchRepository.save(match);
         broadcaster.broadcastState(match);
@@ -89,10 +91,10 @@ public class MatchService {
         if (match.getMode() == MatchMode.VERSUS) {
             // Versus : un board indépendant par joueur (même carte, économies séparées).
             for (MatchPlayer p : match.getPlayers()) {
-                match.setPlayerState(p.getPlayerId(), matchEngine.start(defaultMap()));
+                match.setPlayerState(p.getPlayerId(), matchEngine.start(MapCatalog.buildMap(match.getMapId())));
             }
         } else {
-            match.setGameState(matchEngine.start(defaultMap()));
+            match.setGameState(matchEngine.start(MapCatalog.buildMap(match.getMapId())));
         }
         match.setStatus(MatchStatus.RUNNING);
         matchRepository.save(match);
@@ -231,17 +233,6 @@ public class MatchService {
         else broadcaster.broadcastGame(match);
     }
 
-    /** Carte par défaut du multi — mêmes waypoints que le solo (voir GameService),
-     *  pour que le décor du frontend colle au déplacement des ennemis. */
-    private GameMap defaultMap() {
-        return new GameMap(20, 16, List.of(   // 16 lignes : rangée 0 = tampon
-                new Position(0, 3),
-                new Position(17, 3),
-                new Position(17, 8),
-                new Position(2, 8),
-                new Position(2, 13),
-                new Position(19, 13)));
-    }
 
     /** Un joueur quitte : match supprimé s'il devient vide, sinon diffusé. */
     public void leave(UUID matchId, UUID playerId) {

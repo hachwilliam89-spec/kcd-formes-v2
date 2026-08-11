@@ -35,7 +35,7 @@ public class GameController {
             @Valid @RequestBody CreateGameRequest request,
             Authentication auth) {
         UUID playerId = extractPlayerId(auth);
-        GameEntity game = gameService.createGame(playerId, request.castleName());
+        GameEntity game = gameService.createGame(playerId, request.castleName(), request.mapId());
         GameStateResult state = gameService.getGameState(game.getId(), playerId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(GameResponse.from(game, state.map(), state));
