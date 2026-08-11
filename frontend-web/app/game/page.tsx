@@ -11,6 +11,8 @@ import { isCorridorCell } from '@/components/game/constants'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
 import TutorialBubble from '@/components/game/TutorialBubble'
 import AudioControls from '@/components/game/AudioControls'
+import { UnitChip } from '@/components/game/UnitChip'
+import { TowerIcon } from '@/components/game/UnitIcon'
 import { audio } from '@/lib/audio'
 import {
     ENEMY_TUTORIAL, TOWER_TUTORIAL, getSeenTutorials, markTutorialSeen, resetTutorial,
@@ -38,6 +40,15 @@ const TOWER_INFO: Record<TowerType, { label: string; cost: number; color: string
     // Mur-barrage : seule structure posable SUR le couloir (règle inverse des
     // tours, voir handleCellClick) — bloque les ennemis qui doivent le casser.
     WALL:     { label: 'Mur',       cost: 35,  color: 'bg-stone-500',  unlockWave: 6 },
+}
+
+// Rôle de chaque tour (panneau d'évolution) : phrase courte de présentation.
+const TOWER_ROLE: Record<TowerType, string> = {
+    ARCHER: 'Tir rapide monocible, polyvalent.',
+    MAGE: 'Dégâts magiques, ignore l’armure.',
+    CATAPULT: 'Dégâts de zone sur les groupes.',
+    BALLISTA: 'Longue portée, priorise les grosses cibles.',
+    WALL: 'Barrage sur le couloir : bloque les ennemis.',
 }
 
 // Modes de ciblage (voir backend TargetingMode) : libellés courts + explication.
@@ -317,6 +328,12 @@ export default function GamePage() {
         : null
     const hpRatio = castleMaxHp > 0 ? Math.max(0, Math.min(1, liveCastleHp / castleMaxHp)) : 0
 
+    // Stats de partie (panneau latéral) dérivées de la map.
+    const towerCounts = towers.reduce<Record<string, number>>((a, t) => { a[t.type] = (a[t.type] ?? 0) + 1; return a }, {})
+    const wallCount = towerCounts.WALL ?? 0
+    const totalTowers = towers.filter((t) => t.type !== 'WALL').length
+    const canAct = !isGameOver && !combatRunning
+
     if (loading && !gameId) {
         return (
             <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -339,191 +356,189 @@ export default function GamePage() {
                 la lisibilité du plateau et du HUD. */}
             <div className="absolute inset-0 bg-[#160f08]/80" />
 
-            <div className="relative z-10 kcd-panel-wood flex flex-wrap justify-between items-center gap-y-2 mb-3 md:mb-4 shrink-0">
-                <h1 className="text-2xl md:text-3xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>KCD Formes v2</h1>
-                <div className="flex flex-wrap items-center gap-3 md:gap-4">
-                    <span className="font-med text-yellow-300 text-lg">Vague {waveNumber}</span>
+            {/* HUD : 3 zones (ressources gauche · vague centre · menu droite) */}
+            <div className="relative z-10 kcd-panel-wood flex flex-wrap justify-between items-center gap-x-4 gap-y-1 mb-2 shrink-0 py-1">
+                {/* Gauche : titre + ressources */}
+                <div className="flex items-center gap-3">
+                    <h1 className="text-lg md:text-2xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>KCD Formes v2</h1>
                     <span className="flex items-center gap-1 text-yellow-300 font-med text-xl">
                         <img src="/sprites/ui/icon_gold.png" alt="or" className="kcd-icon" /> {gold}
                     </span>
-                    <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-2">
                         <img src="/sprites/ui/icon_heart.png" alt="PV" className="kcd-icon" style={{ height: 18 }} />
-                        <div
-                            className="w-32 h-4 overflow-hidden"
-                            style={{ background: '#2a1810', border: '2px solid #120a06', boxShadow: 'inset 0 2px 0 rgba(0,0,0,.4)' }}
-                        >
-                            <div
-                                className="h-full transition-all"
-                                style={{
-                                    width: `${hpRatio * 100}%`,
-                                    background: hpRatio > 0.3 ? '#5bbd3a' : '#d64545',
-                                    boxShadow: hpRatio > 0.3 ? 'inset 0 2px 0 #8fe06a' : 'inset 0 2px 0 #e88',
-                                }}
-                            />
-                        </div>
+                        <span className="w-28 h-4 overflow-hidden inline-block align-middle" style={{ background: '#2a1810', border: '2px solid #120a06' }}>
+                            <span className="h-full block transition-all" style={{ width: `${hpRatio * 100}%`, background: hpRatio > 0.3 ? '#5bbd3a' : '#d64545' }} />
+                        </span>
                         <span className="font-med text-sm text-[#f0e2c4]">{liveCastleHp}/{castleMaxHp}</span>
-                    </div>
-                    <span className="text-[#d8c193]">{player?.username}</span>
-                    <button onClick={() => router.push('/coop')} className="kcd-btn text-xs py-1 px-3">
-                        🤝 Coop
-                    </button>
-                    <button onClick={() => router.push('/versus')} className="kcd-btn text-xs py-1 px-3">
-                        ⚔ Versus
-                    </button>
-                    <button onClick={handleLogout} className="kcd-btn text-xs py-1 px-3">
-                        Déconnexion
-                    </button>
+                    </span>
+                </div>
+
+                {/* Centre : vague */}
+                <span className="font-med text-yellow-300 text-2xl">Vague {waveNumber}</span>
+
+                {/* Droite : identité + menu */}
+                <div className="flex items-center gap-2">
+                    <span className="text-[#d8c193] text-sm hidden lg:inline">{player?.username}</span>
+                    <button onClick={() => router.push('/coop')} className="kcd-btn text-xs py-1 px-2">🤝 Coop</button>
+                    <button onClick={() => router.push('/versus')} className="kcd-btn text-xs py-1 px-2">⚔ Versus</button>
+                    <AudioControls />
+                    <button onClick={handleLogout} className="kcd-btn text-xs py-1 px-2">Déconnexion</button>
                 </div>
             </div>
 
-            <div className="relative z-10 flex flex-col lg:flex-row gap-4 lg:flex-1 lg:min-h-0">
-                <div className="w-full aspect-[4/3] lg:aspect-auto lg:flex-1 min-w-0 lg:min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
-                    <GameCanvas ref={canvasRef} towers={towers} onCellClick={handleCellClick} />
-                </div>
-
-                <div className="flex flex-col gap-3 w-full lg:w-56 shrink-0 lg:overflow-y-auto">
-                    {/* Carte de la tour sélectionnée (clic) : remontée en TÊTE du
-                        panneau pour être associée sans ambiguïté à la tour cliquée.
-                        Chaque mode est décrit en toutes lettres (le libellé seul
-                        est muet), avec le mode actif surligné. Cachée en combat et
-                        pour les murs (non sélectionnables). */}
-                    {selectedTowerObj && !combatRunning && !isGameOver && (
-                        <div className="kcd-panel flex flex-col gap-3">
-                            <div className="flex justify-between items-center">
-                                <span className="font-med text-base text-[#43310f]">
-                                    {TOWER_INFO[selectedTowerObj.type].label} · niv. {selectedTowerObj.level ?? 1}
-                                </span>
-                                <button
-                                    onClick={() => setSelectedTowerId(null)}
-                                    aria-label="Fermer"
-                                >
-                                    <img src="/sprites/ui/icon_close.png" alt="Fermer" className="kcd-icon" style={{ height: 16 }} />
-                                </button>
-                            </div>
-
-                            <button
-                                onClick={() => handleUpgradeSelected(selectedTowerObj)}
-                                className="kcd-btn text-sm py-1"
-                            >
-                                ⬆ Améliorer (-{TOWER_INFO[selectedTowerObj.type].cost * (selectedTowerObj.level ?? 1)} or)
-                            </button>
-
-                            <div>
-                                <p className="text-xs font-semibold text-[#5a3d16]">Priorité de tir</p>
-                                <p className="text-[11px] text-[#8a6a2c] mb-2">
-                                    Sur quel ennemi cette tour vise en premier.
-                                </p>
-                                <div className="flex flex-col gap-1">
-                                    {TARGETING_MODES.map((m) => {
-                                        const active = (selectedTowerObj.targetingMode ?? 'CLOSEST') === m.mode
-                                        return (
-                                            <button
-                                                key={m.mode}
-                                                onClick={() => handleSetTargeting(selectedTowerObj.id, m.mode)}
-                                                className={`text-left px-2 py-1 rounded transition-all ${
-                                                    active
-                                                        ? 'bg-[#7a5a2c] text-[#f5e8c6]'
-                                                        : 'bg-[#cdb987] text-[#5a441c] hover:bg-[#d8c79a]'
-                                                }`}
-                                            >
-                                                <span className="block text-xs font-semibold">
-                                                    {active ? '✓ ' : ''}{m.label}
-                                                </span>
-                                                <span className="block text-[11px] opacity-80">{m.hint}</span>
-                                            </button>
-                                        )
-                                    })}
-                                </div>
-                                {selectedTowerObj.type === 'BALLISTA' && (
-                                    <p className="text-[11px] text-[#8a3d12] mt-2">
-                                        ⚔ La Baliste vise toujours les grosses cibles (Troll, Démon de givre, Chevalier, Boss) en priorité — le réglage départage seulement quand plusieurs sont à portée.
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="kcd-panel-titled">
-                        <h3 className="kcd-title font-med text-center text-lg mb-3">Tours</h3>
-                        <div className="flex flex-col gap-2">
-                            {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(
-                                ([type, info]) => {
-                                    const locked = bestWave < info.unlockWave
-                                    return (
-                                        <button
-                                            key={type}
-                                            onClick={() => { if (!locked) { audio.play('ui_click', { volume: 0.5 }); setSelectedTower(type) } }}
-                                            disabled={isGameOver || combatRunning || locked}
-                                            className={`kcd-btn text-sm flex justify-between items-center disabled:opacity-50 ${
-                                                selectedTower === type ? 'ring-2 ring-yellow-400' : ''
-                                            }`}
-                                        >
-                                            <span>{locked ? `🔒 ${info.label}` : info.label}</span>
-                                            <span className="font-med text-base">
-                                                {locked ? `V${info.unlockWave}` : `${info.cost}`}
-                                            </span>
-                                        </button>
-                                    )
-                                }
-                            )}
-                        </div>
+            <div className="relative z-10 flex-1 lg:min-h-0 flex flex-col gap-2">
+                {/* Plateau (prioritaire) + panneau latéral (tour sélectionnée OU stats + évolution) */}
+                <div className="flex-1 lg:min-h-0 flex flex-col lg:flex-row gap-3">
+                    <div className="relative w-full aspect-[4/3] lg:aspect-auto lg:flex-1 min-w-0 lg:min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
+                        <GameCanvas ref={canvasRef} towers={towers} onCellClick={handleCellClick} />
+                        {/* Message flottant sur le plateau (n'occupe plus la colonne). */}
+                        {message && (
+                            <div className="absolute left-1/2 -translate-x-1/2 bottom-2 z-20 kcd-panel text-xs px-3 py-1 text-center max-w-[92%]">{message}</div>
+                        )}
                     </div>
 
-                    <button
-                        onClick={handleStartWave}
-                        disabled={loading || isGameOver || combatRunning || awaitingBonusChoice}
-                        className="kcd-btn font-med text-lg py-2 disabled:opacity-50"
-                    >
-                        {awaitingBonusChoice ? 'Choisissez un bonus' : 'Lancer la vague'}
-                    </button>
+                    <aside className="w-full lg:w-64 shrink-0 lg:min-h-0 lg:overflow-y-auto flex flex-col gap-3">
+                        {selectedTowerObj && canAct ? (
+                            /* Carte d'évolution de la tour cliquée : niveau, amélioration,
+                               aperçu du prochain niveau, priorité de tir. */
+                            <div className="kcd-panel flex flex-col gap-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="flex items-center gap-2 font-med text-base text-[#43310f]">
+                                        <TowerIcon type={selectedTowerObj.type} size={22} />
+                                        {TOWER_INFO[selectedTowerObj.type].label} · niv. {selectedTowerObj.level ?? 1}
+                                    </span>
+                                    <button onClick={() => setSelectedTowerId(null)} aria-label="Fermer">
+                                        <img src="/sprites/ui/icon_close.png" alt="Fermer" className="kcd-icon" style={{ height: 16 }} />
+                                    </button>
+                                </div>
 
-                    {/* Toujours disponible (hors combat) : abandonner et repartir sur
-                        une partie neuve — auparavant possible uniquement après une
-                        défaite, impossible de relancer une partie mal engagée. */}
-                    {!isGameOver && (
+                                <p className="text-[11px] text-[#8a6a2c]">{TOWER_ROLE[selectedTowerObj.type]}</p>
+
+                                <div className="rounded px-2 py-1.5 text-[11px] text-[#5a3d16]" style={{ background: '#e6d6ab', borderLeft: '3px solid #b08a3c' }}>
+                                    Niveau {selectedTowerObj.level ?? 1} → {(selectedTowerObj.level ?? 1) + 1} : dégâts et portée renforcés.
+                                </div>
+
+                                <button onClick={() => handleUpgradeSelected(selectedTowerObj)} className="kcd-btn text-sm py-1.5 flex items-center justify-center gap-1">
+                                    ⬆ Améliorer
+                                    <img src="/sprites/ui/icon_gold.png" alt="" aria-hidden className="kcd-icon" style={{ height: 13 }} />
+                                    -{TOWER_INFO[selectedTowerObj.type].cost * (selectedTowerObj.level ?? 1)}
+                                </button>
+
+                                <div>
+                                    <p className="text-xs font-semibold text-[#5a3d16]">Priorité de tir</p>
+                                    <p className="text-[11px] text-[#8a6a2c] mb-2">Sur quel ennemi cette tour vise en premier.</p>
+                                    <div className="flex flex-col gap-1">
+                                        {TARGETING_MODES.map((m) => {
+                                            const active = (selectedTowerObj.targetingMode ?? 'CLOSEST') === m.mode
+                                            return (
+                                                <button key={m.mode} onClick={() => handleSetTargeting(selectedTowerObj.id, m.mode)}
+                                                        className={`text-left px-2 py-1 rounded transition-all ${active ? 'bg-[#7a5a2c] text-[#f5e8c6]' : 'bg-[#cdb987] text-[#5a441c] hover:bg-[#d8c79a]'}`}>
+                                                    <span className="block text-xs font-semibold">{active ? '✓ ' : ''}{m.label}</span>
+                                                    <span className="block text-[11px] opacity-80">{m.hint}</span>
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                    {selectedTowerObj.type === 'BALLISTA' && (
+                                        <p className="text-[11px] text-[#8a3d12] mt-2">
+                                            ⚔ La Baliste vise toujours les grosses cibles (Troll, Démon de givre, Chevalier, Boss) en priorité — le réglage départage seulement quand plusieurs sont à portée.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                {/* Statistiques de la partie (complètent le HUD sans le répéter). */}
+                                <div className="kcd-panel-titled">
+                                    <h3 className="kcd-title font-med text-center text-base mb-2">Statistiques</h3>
+                                    <div className="flex flex-col gap-1 text-sm text-[#43310f]">
+                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Meilleure vague</span><span className="font-med">{bestWave}</span></div>
+                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Tours posées</span><span className="font-med">{totalTowers}</span></div>
+                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Murs</span><span className="font-med">{wallCount}/6</span></div>
+                                    </div>
+                                </div>
+
+                                {/* Évolution des tours : rôle + nombre posé par type. */}
+                                <div className="kcd-panel-titled">
+                                    <h3 className="kcd-title font-med text-center text-base mb-2">Évolution des tours</h3>
+                                    <p className="text-[11px] text-[#8a6a2c] mb-2 text-center">Clique une tour posée pour l’améliorer (niveau ↑ = dégâts et portée ↑).</p>
+                                    <div className="flex flex-col gap-2">
+                                        {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][])
+                                            .filter(([type]) => type !== 'WALL')
+                                            .map(([type]) => {
+                                                const locked = bestWave < TOWER_INFO[type].unlockWave
+                                                return (
+                                                    <div key={type} className={`flex items-center gap-2 ${locked ? 'opacity-50' : ''}`}>
+                                                        <TowerIcon type={type} size={26} />
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-sm font-med text-[#43310f]">{locked ? `🔒 ${TOWER_INFO[type].label}` : TOWER_INFO[type].label}</span>
+                                                                <span className="text-[11px] text-[#7a5320]">×{towerCounts[type] ?? 0}</span>
+                                                            </div>
+                                                            <p className="text-[11px] text-[#8a6a2c] leading-tight">{locked ? `Débloquée vague ${TOWER_INFO[type].unlockWave}` : TOWER_ROLE[type]}</p>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </aside>
+                </div>
+
+                {/* Barre d'action bas : tours en tuiles + actions de partie */}
+                <div className="kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-1.5">
+                    <span className="font-med text-sm text-[#e9d9b0] w-16 shrink-0">Tours</span>
+                    <div className="flex flex-wrap gap-1.5">
+                        {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(([type, info]) => {
+                            const locked = bestWave < info.unlockWave
+                            return (
+                                <UnitChip
+                                    key={type}
+                                    icon={<TowerIcon type={type} size={32} />}
+                                    label={info.label}
+                                    cost={info.cost}
+                                    badge={locked ? `🔒V${info.unlockWave}` : undefined}
+                                    selected={selectedTower === type}
+                                    affordable={gold >= info.cost}
+                                    disabled={!canAct || locked}
+                                    onClick={() => { audio.play('ui_click', { volume: 0.5 }); setSelectedTower(type) }}
+                                    title={locked ? `${info.label} — débloquée vague ${info.unlockWave}` : `${info.label} — ${info.cost} or`}
+                                />
+                            )
+                        })}
+                    </div>
+
+                    <div className="ml-auto flex items-center gap-2">
+                        {leaderboard && leaderboard.top.length > 0 && (
+                            <button onClick={() => setShowLeaderboard(true)} className="kcd-btn text-xs py-1 px-2 flex items-center gap-1">
+                                <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 14 }} /> Classement
+                            </button>
+                        )}
                         <button
-                            onClick={() => {
-                                if (window.confirm('Abandonner cette partie et en commencer une nouvelle ?')) {
-                                    setIsGameOver(false)
-                                    setMessage(null)
-                                    newGame()
-                                }
-                            }}
-                            disabled={combatRunning || loading}
-                            className="kcd-btn text-sm py-1 disabled:opacity-50"
+                            onClick={() => { resetTutorial(player?.username ?? ''); setMessage('Tuto réinitialisé — les conseils réapparaîtront.') }}
+                            className="kcd-btn text-xs py-1 px-2 opacity-90"
                         >
-                            ↻ Nouvelle partie
+                            ↻ Tuto
                         </button>
-                    )}
-
-                    {message && (
-                        <div className="kcd-panel text-xs text-center">{message}</div>
-                    )}
-
-                    {/* Classement : simple bouton, le détail s'ouvre en modale (info
-                        non vitale, on n'encombre pas le HUD). */}
-                    {leaderboard && leaderboard.top.length > 0 && (
+                        {!isGameOver && (
+                            <button
+                                onClick={() => { if (window.confirm('Abandonner cette partie et en commencer une nouvelle ?')) { setIsGameOver(false); setMessage(null); newGame() } }}
+                                disabled={combatRunning || loading}
+                                className="kcd-btn text-xs py-1 px-2 disabled:opacity-50"
+                            >
+                                ↻ Nouvelle partie
+                            </button>
+                        )}
                         <button
-                            onClick={() => setShowLeaderboard(true)}
-                            className="kcd-btn text-sm py-1 flex items-center justify-center gap-2"
+                            onClick={handleStartWave}
+                            disabled={loading || isGameOver || combatRunning || awaitingBonusChoice}
+                            className="kcd-btn font-med text-base py-2 px-5 disabled:opacity-50"
                         >
-                            <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 16 }} />
-                            Classement
+                            {awaitingBonusChoice ? 'Choisis un bonus' : '⚔ Lancer la vague'}
                         </button>
-                    )}
-
-                    <button
-                        onClick={() => {
-                            resetTutorial(player?.username ?? '')
-                            setMessage('Tuto réinitialisé — les conseils réapparaîtront.')
-                        }}
-                        className="kcd-btn text-xs py-1 opacity-90"
-                    >
-                        ↻ Revoir le tuto
-                    </button>
-
-                    {/* Contrôle du son : mute + volume (persistés). */}
-                    <AudioControls />
+                    </div>
                 </div>
             </div>
 

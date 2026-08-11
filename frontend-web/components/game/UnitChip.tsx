@@ -6,7 +6,7 @@
 import type { ReactNode } from 'react'
 
 export function UnitChip({
-    icon, label, cost, income, affordable = true, selected, disabled, onClick, title,
+    icon, label, cost, income, affordable = true, selected, disabled, onClick, title, badge,
 }: {
     icon: ReactNode
     label: string
@@ -17,6 +17,8 @@ export function UnitChip({
     disabled?: boolean
     onClick: () => void
     title?: string
+    // Badge en haut à gauche (ex. « 🔒V10 » pour une tour verrouillée en solo).
+    badge?: string
 }) {
     return (
         <button
@@ -34,6 +36,14 @@ export function UnitChip({
                 style={{ background: 'radial-gradient(circle at 50% 35%, #3c2d16, #201709)' }}
             >
                 {icon}
+                {badge && (
+                    <span
+                        className="absolute top-0.5 left-0.5 text-[9px] font-med text-yellow-200 leading-none px-1 rounded-sm"
+                        style={{ background: 'rgba(0,0,0,.6)' }}
+                    >
+                        {badge}
+                    </span>
+                )}
                 {income != null && (
                     <span
                         className="absolute top-0.5 right-0.5 text-[10px] font-med text-green-300 leading-none px-1 rounded-sm"
