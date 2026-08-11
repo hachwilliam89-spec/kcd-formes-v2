@@ -101,13 +101,13 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         // d'herbe pour le château de spawn et les tours (ancrés en bas, ils
         // débordent vers le HAUT) ; en bas, la ligne 14 sert de marge aux pieds des
         // ennemis de la voie basse.
-        GameMap initialMap = new GameMap(20, 15, List.of(
-                new Position(0, 2),   // spawn (haut-gauche)
-                new Position(17, 2),  // voie haute -> droite
-                new Position(17, 7),  // descente
-                new Position(2, 7),   // voie médiane -> gauche
-                new Position(2, 12),  // descente
-                new Position(19, 12)  // château (bas-droite) — tracé remonté d'1 ligne : bande de pose en bas
+        GameMap initialMap = new GameMap(20, 16, List.of(   // 16 lignes : rangée 0 = tampon
+                new Position(0, 3),   // spawn (haut-gauche)
+                new Position(17, 3),  // voie haute -> droite
+                new Position(17, 8),  // descente
+                new Position(2, 8),   // voie médiane -> gauche
+                new Position(2, 13),  // descente
+                new Position(19, 13)  // château (bas-droite)
         ));
 
         CastleEntity castle = new CastleEntity();

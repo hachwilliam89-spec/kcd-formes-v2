@@ -17,7 +17,7 @@ import { UnitChip } from '@/components/game/UnitChip'
 import { ChatPanel, type ChatMessage } from '@/components/game/ChatPanel'
 import { MiniBoard, TOWER_COLOR, TOWER_LABEL } from '@/components/game/MiniBoard'
 import { useHasGutter } from '@/components/game/useHasGutter'
-import { isCorridorCell } from '@/components/game/constants'
+import { isCorridorCell, TOP_RESERVED_ROWS } from '@/components/game/constants'
 import { audio } from '@/lib/audio'
 
 const CoopCanvas = dynamic(() => import('@/components/coop/CoopCanvas'), {
@@ -138,6 +138,7 @@ export default function VersusPage() {
     function place(x: number, y: number) {
         if (!running) return
         setNotice(null)
+        if (y < TOP_RESERVED_ROWS) { setNotice('Rangée du haut réservée.'); return }
         const inCorridor = isCorridorCell(x, y)
         if (selectedTower === 'WALL' && !inCorridor) { setNotice('Le mur se pose sur le couloir.'); return }
         if (selectedTower !== 'WALL' && inCorridor) { setNotice('Pas de tour sur le couloir.'); return }
@@ -335,7 +336,7 @@ export default function VersusPage() {
                         )}
                         </div>
                     )}
-                    <div className={`relative min-h-0 rounded-lg overflow-hidden ${showChat ? 'h-full aspect-[4/3] shrink-0' : 'flex-1'} ${hlTarget === 'board' ? 'ring-4 ring-inset ring-yellow-400' : ''}`} style={{ border: '2px solid #2f1c0d' }}>
+                    <div className={`relative min-h-0 rounded-lg overflow-hidden ${showChat ? 'h-full aspect-[5/4] shrink-0' : 'flex-1'} ${hlTarget === 'board' ? 'ring-4 ring-inset ring-yellow-400' : ''}`} style={{ border: '2px solid #2f1c0d' }}>
                         <CoopCanvas ref={canvasRef} onCellClick={place} selectedTower={selectedTower} />
                         {/* Toast messages, flottant sur le plateau. */}
                         {(notice || error) && (

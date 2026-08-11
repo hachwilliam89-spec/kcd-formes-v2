@@ -18,7 +18,7 @@ export function useHasGutter() {
         const check = () => {
             const w = el.clientWidth
             const h = el.clientHeight
-            const boardW = Math.min(w, (h * 4) / 3) // largeur du plateau calé sur la hauteur (4:3)
+            const boardW = Math.min(w, (h * 5) / 4) // largeur du plateau calé sur la hauteur (20:16 = 5:4)
             setGutter(Math.max(0, w - boardW))
         }
         check()

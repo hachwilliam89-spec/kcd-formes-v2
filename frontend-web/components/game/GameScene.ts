@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { PATH_START, PATH_END, WAYPOINTS, pathDirectionAt, isCorridorCell } from './constants'
+import { PATH_START, PATH_END, WAYPOINTS, pathDirectionAt, isCorridorCell, TOP_RESERVED_ROWS } from './constants'
 import { audio, Sfx } from '@/lib/audio'
 
 // Association effet visuel d'impact → bruitage, avec un intervalle mini (ms) pour
@@ -26,7 +26,7 @@ const DEATH_PITCH: Record<string, number> = {
 
 const CELL_SIZE = 40
 const GRID_WIDTH = 20
-const GRID_HEIGHT = 15
+const GRID_HEIGHT = 16   // 15 rangées jouables + 1 rangée tampon en haut (voir TOP_RESERVED_ROWS)
 const TICK_DELAY_MS = 120
 
 export interface TowerData {
@@ -565,8 +565,8 @@ export class GameScene extends Phaser.Scene {
         if (!inGrid) return
         const corridor = isCorridorCell(cell.x, cell.y)
         const occupied = [...this.towersById.values()].some((t) => t.x === cell.x && t.y === cell.y)
-        // Mur : sur le couloir ; tours : hors couloir. Et case libre.
-        const ok = !occupied && (type === 'WALL' ? corridor : !corridor)
+        // Mur : sur le couloir ; tours : hors couloir. Case libre + hors rangée réservée.
+        const ok = !occupied && cell.y >= TOP_RESERVED_ROWS && (type === 'WALL' ? corridor : !corridor)
 
         const px = cell.x * CELL_SIZE, py = cell.y * CELL_SIZE
         const color = ok ? 0x5bbd3a : 0xd64545
@@ -1514,7 +1514,7 @@ export class GameScene extends Phaser.Scene {
         // couloir (route) reste net.
         for (let x = 0; x < GRID_WIDTH; x++) {
             for (let y = 0; y < GRID_HEIGHT; y++) {
-                if (isCorridorCell(x, y)) continue
+                if (isCorridorCell(x, y) || y < TOP_RESERVED_ROWS) continue // rangée du haut réservée
                 const px = x * CELL_SIZE
                 const py = y * CELL_SIZE
                 this.gridGraphics.fillStyle(0xffffff, 0.06)

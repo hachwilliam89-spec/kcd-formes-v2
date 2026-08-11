@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useGame } from '@/hooks/useGame'
 import { useAuth } from '@/hooks/useAuth'
 import type { TowerData } from '@/components/game/GameScene'
-import { isCorridorCell } from '@/components/game/constants'
+import { isCorridorCell, TOP_RESERVED_ROWS } from '@/components/game/constants'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
 import TutorialBubble from '@/components/game/TutorialBubble'
 import AudioControls from '@/components/game/AudioControls'
@@ -214,6 +214,9 @@ export default function GamePage() {
             setSelectedTowerId(existingTower.type === 'WALL' ? null : existingTower.id)
             return
         }
+
+        // Rangée du haut réservée (tampon d'affichage des tours) : non constructible.
+        if (y < TOP_RESERVED_ROWS) { setMessage('Rangée du haut réservée (affichage).'); return }
 
         // Règle du couloir, INVERSÉE selon le type (le backend reste l'arbitre
         // final) : le mur-barrage se pose uniquement SUR le couloir des ennemis,

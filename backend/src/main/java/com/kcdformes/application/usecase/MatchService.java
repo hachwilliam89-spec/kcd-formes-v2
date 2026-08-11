@@ -234,13 +234,13 @@ public class MatchService {
     /** Carte par défaut du multi — mêmes waypoints que le solo (voir GameService),
      *  pour que le décor du frontend colle au déplacement des ennemis. */
     private GameMap defaultMap() {
-        return new GameMap(20, 15, List.of(
-                new Position(0, 2),
-                new Position(17, 2),
-                new Position(17, 7),
-                new Position(2, 7),
-                new Position(2, 12),
-                new Position(19, 12)));
+        return new GameMap(20, 16, List.of(   // 16 lignes : rangée 0 = tampon
+                new Position(0, 3),
+                new Position(17, 3),
+                new Position(17, 8),
+                new Position(2, 8),
+                new Position(2, 13),
+                new Position(19, 13)));
     }
 
     /** Un joueur quitte : match supprimé s'il devient vide, sinon diffusé. */

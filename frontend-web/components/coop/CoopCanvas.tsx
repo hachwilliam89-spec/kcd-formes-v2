@@ -62,7 +62,7 @@ const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCa
                 // retrouve à droite, où vient se loger le chat (sans rogner le plateau).
                 autoCenter: Phaser.Scale.CENTER_VERTICALLY,
                 width: 800,
-                height: 600,
+                height: 640,   // 20×16 cases (grille agrandie d'1 rangée tampon)
             },
         })
 

@@ -6,7 +6,13 @@
 export type Cell = { x: number; y: number }
 
 export const GRID_W = 20
-export const GRID_H = 15
+export const GRID_H = 16
+
+// Rangée(s) du haut réservée(s) (non constructibles) : tampon pour que les tours
+// de la première rangée jouable s'affichent en entier (elles débordent vers le haut).
+// La grille a été agrandie d'une ligne (15 → 16) pour ajouter ce tampon SANS retirer
+// de rangée jouable (le chemin est décalé d'un cran vers le bas).
+export const TOP_RESERVED_ROWS = 1
 
 // CHEMIN SERPENTIN (voir GAME_DESIGN 2.6 + GameService.createGame côté backend,
 // qui reste l'arbitre final). Waypoints alignés deux à deux : le tracé réel est
@@ -14,12 +20,12 @@ export const GRID_H = 15
 // aux waypoints du backend, sinon le décor ne collerait pas au déplacement réel
 // des ennemis (calculé côté serveur).
 export const WAYPOINTS: Cell[] = [
-  { x: 0, y: 2 },   // spawn (haut-gauche)
-  { x: 17, y: 2 },  // voie haute -> droite
-  { x: 17, y: 7 },  // descente
-  { x: 2, y: 7 },   // voie médiane -> gauche
-  { x: 2, y: 12 },  // descente
-  { x: 19, y: 12 }, // château (bas-droite) — tracé remonté d'1 ligne : bande de pose en bas
+  { x: 0, y: 3 },   // spawn (haut-gauche) — y+1 : rangée 0 = tampon non constructible
+  { x: 17, y: 3 },  // voie haute -> droite
+  { x: 17, y: 8 },  // descente
+  { x: 2, y: 8 },   // voie médiane -> gauche
+  { x: 2, y: 13 },  // descente
+  { x: 19, y: 13 }, // château (bas-droite)
 ]
 
 export const PATH_START = WAYPOINTS[0]

@@ -49,7 +49,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
                 mode: Phaser.Scale.FIT,
                 autoCenter: Phaser.Scale.CENTER_BOTH,
                 width: 800,
-                height: 600,
+                height: 640,   // 20×16 cases (grille agrandie d'1 rangée tampon)
             },
         })
 
