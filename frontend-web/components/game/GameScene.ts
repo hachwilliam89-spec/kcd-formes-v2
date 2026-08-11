@@ -1826,5 +1826,15 @@ export class GameScene extends Phaser.Scene {
         const endGroundY = (end.y + 2) * CELL_SIZE // +2 : descendu d'une case
         const castle = this.add.image(endX, endGroundY, 'castle-enemy').setOrigin(0.65, 1).setDepth(-15)
         castle.setScale(castleW / castle.width)
+
+        // Drapeaux rouges de part et d'autre du château (cases rendues non
+        // constructibles car trop fortes) : repère héraldique. Depth -16 → derrière
+        // le château, ils dépassent juste sur les côtés.
+        for (const dy of [-1, 1]) {
+            const fx = (end.x - 1) * CELL_SIZE + CELL_SIZE / 2
+            const fy = (end.y + dy + 1) * CELL_SIZE
+            const flag = this.add.image(fx, fy, 'decor-ruinT-6').setOrigin(0.5, 0.94).setDepth(-16)
+            flag.setScale((CELL_SIZE * 1.15) / flag.height)
+        }
     }
 }

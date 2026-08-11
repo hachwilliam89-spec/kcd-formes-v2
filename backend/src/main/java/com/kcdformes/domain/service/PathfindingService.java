@@ -133,9 +133,17 @@ public class PathfindingService {
     public static final int SPAWN_NOBUILD = 4;
 
     /**
+     * Marge (Chebyshev) autour du CHÂTEAU du joueur où l'on ne peut pas bâtir : les
+     * cases collées au château couvrent toutes les routes qui y convergent (spots
+     * trop forts) et le sprite du château les masque. DOIT rester synchronisé avec
+     * le front (constants.ts CASTLE_NOBUILD).
+     */
+    public static final int CASTLE_NOBUILD = 1;
+
+    /**
      * Cases CONSTRUCTIBLES : la bande de BUILD_BAND cases qui longe le couloir (hors
-     * couloir lui-même), SAUF autour des entrées ennemies (voir SPAWN_NOBUILD). Tout
-     * le reste est zone morte (décor), inconstructible.
+     * couloir lui-même), SAUF autour des entrées ennemies (SPAWN_NOBUILD) et du
+     * château du joueur (CASTLE_NOBUILD). Tout le reste est zone morte (décor).
      */
     public Set<Position> buildableCells(GameMap map) {
         Set<Position> corridor = corridorCells(map);
@@ -144,6 +152,7 @@ public class PathfindingService {
         for (List<Position> lane : map.getLanes()) {
             starts.add(lane.get(0));
         }
+        Position castle = map.getPathEnd();
         Set<Position> buildable = new HashSet<>();
         for (Position c : corridor) {
             for (int dx = -BUILD_BAND; dx <= BUILD_BAND; dx++) {
@@ -151,7 +160,9 @@ public class PathfindingService {
                     int nx = c.x() + dx;
                     int ny = c.y() + dy;
                     Position p = new Position(nx, ny);
-                    if (map.isValidPosition(nx, ny) && !corridor.contains(p) && !nearAnyStart(p, starts)) {
+                    boolean nearCastle = Math.max(Math.abs(nx - castle.x()), Math.abs(ny - castle.y())) <= CASTLE_NOBUILD;
+                    if (map.isValidPosition(nx, ny) && !corridor.contains(p)
+                            && !nearAnyStart(p, starts) && !nearCastle) {
                         buildable.add(p);
                     }
                 }
