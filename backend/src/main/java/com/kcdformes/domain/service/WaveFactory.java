@@ -272,12 +272,12 @@ public class WaveFactory {
             // sinon tout le monde sur la voie 0 (comportement historique).
             int lane = multiLane ? spawnIndex % laneStarts.size() : 0;
             Position spawn = laneStarts.get(lane);
-            // Files décalées perpendiculairement UNIQUEMENT sur une carte mono-voie
-            // (couloir large). Sur des voies fines multiples, chaque ennemi tient
-            // sa voie sans décalage. Un Boss avance toujours pile au centre : sa
-            // zone de menace (pulse aoeRadius/auraRadius) est calibrée depuis l'axe.
-            double laneOffset = (multiLane || type.isBoss) ? 0.0
-                    : LANE_OFFSETS[spawnIndex % LANE_OFFSETS.length];
+            // Décalage perpendiculaire cyclique : appliqué par la simulation UNIQUEMENT
+            // là où la route est assez large (couloir large ou aire de croisement, voir
+            // WaveSimulationService) — sur une route fine il est neutralisé (file
+            // indienne). Un Boss avance toujours pile au centre : sa zone de menace
+            // (pulse aoeRadius/auraRadius) est calibrée depuis l'axe.
+            double laneOffset = type.isBoss ? 0.0 : LANE_OFFSETS[spawnIndex % LANE_OFFSETS.length];
             enemies.add(new Enemy(type, spawn.x(), spawn.y(), delay, hp, laneOffset, lane));
 
             // Cadence jitterée (+-1 tick autour de l'intervalle de base) plutôt

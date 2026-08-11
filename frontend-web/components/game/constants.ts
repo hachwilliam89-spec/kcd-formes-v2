@@ -121,7 +121,7 @@ export function buildPathData(waypoints: Cell[], gridW = GRID_W, gridH = GRID_H)
  * = voies fines d'1 case (plus de terrain constructible entre les voies). Doit rester
  * synchronisé avec le backend (MapCatalog + PathfindingService.corridorCells).
  */
-export function buildLanesData(lanes: Cell[][], halfWidth = 1, gridW = GRID_W, gridH = GRID_H): PathData {
+export function buildLanesData(lanes: Cell[][], halfWidth = 1, wideSpots: Cell[] = [], gridW = GRID_W, gridH = GRID_H): PathData {
   const lanePaths = lanes.map((wp) => buildPathData(wp, gridW, gridH))
 
   // Union des cases de chemin de toutes les voies.
@@ -144,6 +144,11 @@ export function buildLanesData(lanes: Cell[][], halfWidth = 1, gridW = GRID_W, g
         if (nx >= 0 && nx < gridW && ny >= 0 && ny < gridH) corridorSet.add(key(nx, ny))
       }
     }
+  }
+  // Aires d'élargissement local (aires de croisement) : cases de route en plus des
+  // voies (voir backend GameMap.wideSpots) — synchronisé avec le catalogue.
+  for (const w of wideSpots) {
+    if (w.x >= 0 && w.x < gridW && w.y >= 0 && w.y < gridH) corridorSet.add(key(w.x, w.y))
   }
   const corridorCells: Cell[] = Array.from(corridorSet).map((k) => {
     const [x, y] = k.split(',').map(Number)

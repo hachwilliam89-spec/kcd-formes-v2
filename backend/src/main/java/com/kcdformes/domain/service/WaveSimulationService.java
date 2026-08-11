@@ -149,6 +149,10 @@ public class WaveSimulationService {
         // château (dernière ligne) se réfère à cette arrivée commune.
         List<Position> referenceLane = lanePaths.get(0);
         Position castlePos = referenceLane.get(referenceLane.size() - 1);
+        // Couloir complet (voies + aires d'élargissement) : sert à n'autoriser le
+        // décalage latéral d'un ennemi que là où la case voisine est de la route —
+        // file indienne sur une route fine, désalignement dans les aires larges.
+        Set<Position> corridorCells = pathfindingService.corridorCells(map);
         int castleCooldown = 0; // ticks restants avant le prochain tir de la défense
 
         int tick = 0;
@@ -221,15 +225,24 @@ public class WaveSimulationService {
                     double nx = from.x() + (to.x() - from.x()) * frac;
                     double ny = from.y() + (to.y() - from.y()) * frac;
 
-                    // Décale l'ennemi perpendiculairement à la direction du segment de
-                    // chemin courant, pour plusieurs ennemis de front sur un couloir
-                    // élargi plutôt qu'une file unique strictement sur l'axe du chemin.
+                    // Décale l'ennemi perpendiculairement à la direction du segment,
+                    // MAIS seulement si la case voisine de ce côté fait partie de la
+                    // route (couloir large / aire de croisement) : sinon il déborderait
+                    // sur une case constructible. Sur une route fine, le décalage est
+                    // donc neutralisé → file indienne ; dans une aire large → désalignés.
                     double dirX = to.x() - from.x();
                     double dirY = to.y() - from.y();
                     double dirLen = Math.sqrt(dirX * dirX + dirY * dirY);
-                    if (dirLen > 0) {
-                        nx += (-dirY / dirLen) * enemy.getLaneOffset();
-                        ny += (dirX / dirLen) * enemy.getLaneOffset();
+                    double off = enemy.getLaneOffset();
+                    if (dirLen > 0 && off != 0) {
+                        double perpX = -dirY / dirLen;
+                        double perpY = dirX / dirLen;
+                        int nbx = from.x() + (int) Math.round(perpX * Math.signum(off));
+                        int nby = from.y() + (int) Math.round(perpY * Math.signum(off));
+                        if (corridorCells.contains(new Position(nbx, nby))) {
+                            nx += perpX * off;
+                            ny += perpY * off;
+                        }
                     }
 
                     enemy.moveTo(nx, ny);

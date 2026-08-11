@@ -106,6 +106,13 @@ public class PathfindingService {
                 }
             }
         }
+        // Aires d'élargissement local : cases de route en plus des voies (voir
+        // GameMap.wideSpots) — épaississent le couloir à certains endroits.
+        for (Position w : map.getWideSpots()) {
+            if (map.isValidPosition(w.x(), w.y())) {
+                cells.add(w);
+            }
+        }
         return cells;
     }
 

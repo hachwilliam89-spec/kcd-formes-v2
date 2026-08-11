@@ -14,6 +14,7 @@ export type MapDef = {
   lanes: Cell[][]        // une voie = liste de waypoints ; plusieurs voies convergent sur le château
   waypoints: Cell[]      // = lanes[0], pour compat (départ/arrivée de référence)
   halfWidth: number      // demi-largeur du couloir (1 = large, 0 = voies fines)
+  wideSpots: Cell[]      // aires d'élargissement local du couloir (aires de croisement)
   proceduralRoad: boolean // route dessinée au runtime (multi-voies) plutôt que peinte dans l'image
   path: PathData         // dérivé (couloir union, cases de chemin, directions)
 }
@@ -22,17 +23,17 @@ export type MapDef = {
 function def(id: string, name: string, biome: Biome, image: string, waypoints: Cell[]): MapDef {
   return {
     id, name, biome, image,
-    lanes: [waypoints], waypoints, halfWidth: 1, proceduralRoad: false,
+    lanes: [waypoints], waypoints, halfWidth: 1, wideSpots: [], proceduralRoad: false,
     path: buildLanesData([waypoints], 1),
   }
 }
 
-/** Carte multi-voies (voies fines, route dessinée au runtime). */
-function defLanes(id: string, name: string, biome: Biome, image: string, lanes: Cell[][], halfWidth = 0): MapDef {
+/** Carte multi-voies (voies fines, route dessinée au runtime). wideSpots = aires larges. */
+function defLanes(id: string, name: string, biome: Biome, image: string, lanes: Cell[][], wideSpots: Cell[] = [], halfWidth = 0): MapDef {
   return {
     id, name, biome, image,
-    lanes, waypoints: lanes[0], halfWidth, proceduralRoad: true,
-    path: buildLanesData(lanes, halfWidth),
+    lanes, waypoints: lanes[0], halfWidth, wideSpots, proceduralRoad: true,
+    path: buildLanesData(lanes, halfWidth, wideSpots),
   }
 }
 
@@ -49,6 +50,10 @@ export const GAME_MAPS: MapDef[] = [
     [{ x: 0, y: 8 }, { x: 3, y: 8 }, { x: 3, y: 2 }, { x: 19, y: 2 }, { x: 19, y: 8 }],
     [{ x: 0, y: 8 }, { x: 19, y: 8 }],
     [{ x: 0, y: 8 }, { x: 3, y: 8 }, { x: 3, y: 14 }, { x: 19, y: 14 }, { x: 19, y: 8 }],
+  ], [
+    // Aires de croisement (route élargie vers les bords haut/bas) — IDENTIQUE au backend.
+    { x: 9, y: 1 }, { x: 10, y: 1 }, { x: 11, y: 1 }, { x: 12, y: 1 },
+    { x: 9, y: 15 }, { x: 10, y: 15 }, { x: 11, y: 15 }, { x: 12, y: 15 },
   ]),
 ]
 

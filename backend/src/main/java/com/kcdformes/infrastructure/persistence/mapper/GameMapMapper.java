@@ -40,6 +40,10 @@ public class GameMapMapper {
                         .toList())
                 .toList());
         json.put("corridorHalfWidth", map.getCorridorHalfWidth());
+        // Aires d'élargissement local du couloir (voir GameMap.wideSpots).
+        json.put("wideSpots", map.getWideSpots().stream()
+                .map(p -> Map.of("x", p.x(), "y", p.y()))
+                .toList());
 
         List<Map<String, Object>> towers = map.getTowers().stream()
                 .map(t -> Map.of(
@@ -81,7 +85,11 @@ public class GameMapMapper {
                     .toList();
             Object rawHw = json.get("corridorHalfWidth");
             int halfWidth = rawHw != null ? ((Number) rawHw).intValue() : 1;
-            map = GameMap.ofLanes(width, height, lanes, halfWidth);
+            List<Map<String, Number>> rawWide = (List<Map<String, Number>>) json.get("wideSpots");
+            List<Position> wideSpots = rawWide == null ? List.of() : rawWide.stream()
+                    .map(w -> new Position(w.get("x").intValue(), w.get("y").intValue()))
+                    .toList();
+            map = GameMap.ofLanes(width, height, lanes, halfWidth, wideSpots);
         } else if (rawWaypoints != null && rawWaypoints.size() >= 2) {
             List<Position> waypoints = rawWaypoints.stream()
                     .map(w -> new Position(w.get("x").intValue(), w.get("y").intValue()))

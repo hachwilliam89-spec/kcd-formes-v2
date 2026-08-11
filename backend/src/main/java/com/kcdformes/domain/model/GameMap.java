@@ -23,10 +23,15 @@ public class GameMap {
     // couloir de 3 cases de large (historique) ; 0 = voie fine d'1 case (pertinent
     // pour les cartes multi-voies, plus de terrain et de meilleurs angles).
     private final int corridorHalfWidth;
+    // Cases d'élargissement local du couloir (« aires de croisement ») : ajoutées au
+    // couloir en plus des voies, elles épaississent la route à certains endroits pour
+    // que les ennemis s'y désalignent (voir WaveSimulationService) au lieu d'une file
+    // indienne permanente. Vide = aucune (comportement historique).
+    private final List<Position> wideSpots;
     private final Map<String, Tower> towers = new HashMap<>();
 
     public GameMap(int width, int height, List<Position> waypoints) {
-        this(width, height, List.of(copyLane(waypoints)), 1);
+        this(width, height, List.of(copyLane(waypoints)), 1, List.of());
     }
 
     /** Compat : couloir droit défini par ses seules extrémités (= 2 waypoints). */
@@ -41,10 +46,17 @@ public class GameMap {
      * List<List<Position>> ont le même effacement de type.
      */
     public static GameMap ofLanes(int width, int height, List<List<Position>> lanes, int corridorHalfWidth) {
-        return new GameMap(width, height, lanes, corridorHalfWidth);
+        return new GameMap(width, height, lanes, corridorHalfWidth, List.of());
     }
 
-    private GameMap(int width, int height, List<List<Position>> lanes, int corridorHalfWidth) {
+    /** Comme ofLanes, avec des aires d'élargissement local du couloir (voir wideSpots). */
+    public static GameMap ofLanes(int width, int height, List<List<Position>> lanes,
+                                  int corridorHalfWidth, List<Position> wideSpots) {
+        return new GameMap(width, height, lanes, corridorHalfWidth, wideSpots);
+    }
+
+    private GameMap(int width, int height, List<List<Position>> lanes, int corridorHalfWidth,
+                    List<Position> wideSpots) {
         if (lanes == null || lanes.isEmpty()) {
             throw new IllegalArgumentException("Au moins une voie est requise");
         }
@@ -59,6 +71,7 @@ public class GameMap {
         this.pathStart = this.waypoints.get(0);
         this.pathEnd = this.waypoints.get(this.waypoints.size() - 1);
         this.corridorHalfWidth = corridorHalfWidth;
+        this.wideSpots = wideSpots == null ? List.of() : List.copyOf(wideSpots);
     }
 
     private static List<Position> copyLane(List<Position> lane) {
@@ -122,4 +135,5 @@ public class GameMap {
     public List<List<Position>> getLanes() { return lanes; }
     public int getLaneCount() { return lanes.size(); }
     public int getCorridorHalfWidth() { return corridorHalfWidth; }
+    public List<Position> getWideSpots() { return wideSpots; }
 }

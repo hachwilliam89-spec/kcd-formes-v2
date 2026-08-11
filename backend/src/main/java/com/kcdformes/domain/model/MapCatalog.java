@@ -19,10 +19,10 @@ public final class MapCatalog {
      * Définition d'une carte : une ou plusieurs voies (toutes terminant sur le
      * château) + demi-largeur du couloir (1 = large historique, 0 = voies fines).
      */
-    private record Def(List<List<Position>> lanes, int corridorHalfWidth) {}
+    private record Def(List<List<Position>> lanes, int corridorHalfWidth, List<Position> wideSpots) {}
 
     private static Def single(List<Position> waypoints) {
-        return new Def(List.of(waypoints), 1);
+        return new Def(List.of(waypoints), 1, List.of());
     }
 
     private static final Map<String, Def> MAPS = Map.of(
@@ -39,7 +39,13 @@ public final class MapCatalog {
                     List.of(new Position(0, 8), new Position(19, 8)),                  // ouest (direct)
                     List.of(new Position(0, 8), new Position(3, 8), new Position(3, 14),
                             new Position(19, 14), new Position(19, 8))),               // sud
-                    0));
+                    0,
+                    // Aires de croisement : élargissement de la route vers les BORDS
+                    // extérieurs (haut/bas) des branches nord et sud — les ennemis s'y
+                    // désalignent, sans empiéter sur la forêt des bandes mortes centrales.
+                    List.of(
+                            new Position(9, 1), new Position(10, 1), new Position(11, 1), new Position(12, 1),
+                            new Position(9, 15), new Position(10, 15), new Position(11, 15), new Position(12, 15))));
 
     private MapCatalog() {}
 
@@ -51,6 +57,6 @@ public final class MapCatalog {
     /** Construit une GameMap neuve pour la map demandée (désert par défaut). */
     public static GameMap buildMap(String mapId) {
         Def def = MAPS.get(normalize(mapId));
-        return GameMap.ofLanes(WIDTH, HEIGHT, def.lanes(), def.corridorHalfWidth());
+        return GameMap.ofLanes(WIDTH, HEIGHT, def.lanes(), def.corridorHalfWidth(), def.wideSpots());
     }
 }
