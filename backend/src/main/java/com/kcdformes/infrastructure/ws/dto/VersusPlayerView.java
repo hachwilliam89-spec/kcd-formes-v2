@@ -29,7 +29,7 @@ public record VersusPlayerView(
             // Aperçu léger de SA grille : positions des ennemis + tours (sans hp/tirs).
             List<EnemyBlip> enemies, List<TowerBlip> towers) {}
 
-    public record EnemyBlip(double x, double y) {}
+    public record EnemyBlip(double x, double y, String type) {}
     public record TowerBlip(int x, int y, String type) {}
 
     public static VersusPlayerView from(Match match, MatchPlayer me) {
@@ -41,7 +41,7 @@ public record VersusPlayerView(
                 .map(opp -> {
                     MatchGameState os = match.getPlayerState(opp.getPlayerId());
                     List<EnemyBlip> oppEnemies = os != null
-                            ? os.enemies.stream().map(e -> new EnemyBlip(e.x, e.y)).toList()
+                            ? os.enemies.stream().map(e -> new EnemyBlip(e.x, e.y, e.type.name())).toList()
                             : List.of();
                     List<TowerBlip> oppTowers = os != null
                             ? os.map.getTowers().stream().map(t -> new TowerBlip(t.getX(), t.getY(), t.getType().name())).toList()

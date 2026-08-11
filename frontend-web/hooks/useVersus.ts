@@ -15,7 +15,7 @@ export type VersusMatchState = MatchState & { winnerId?: string | null }
 
 // Vue versus adressée à CE joueur (canal /user/queue/game) : mon board complet
 // + un résumé de l'adversaire (voir VersusPlayerView côté backend).
-export type Blip = { x: number; y: number }
+export type Blip = { x: number; y: number; type: string }
 export type TowerBlip = { x: number; y: number; type: string }
 type OpponentView = {
     playerId: string; username: string

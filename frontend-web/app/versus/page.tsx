@@ -15,7 +15,7 @@ import type { CoopCanvasHandle } from '@/components/coop/CoopCanvas'
 import { TowerIcon, EnemyIcon } from '@/components/game/UnitIcon'
 import { UnitChip } from '@/components/game/UnitChip'
 import { ChatPanel, type ChatMessage } from '@/components/game/ChatPanel'
-import { MiniBoard } from '@/components/game/MiniBoard'
+import { MiniBoard, TOWER_COLOR, TOWER_LABEL } from '@/components/game/MiniBoard'
 import { useHasGutter } from '@/components/game/useHasGutter'
 import { isCorridorCell } from '@/components/game/constants'
 import { audio } from '@/lib/audio'
@@ -310,10 +310,27 @@ export default function VersusPage() {
                                 </div>
                             </div>
                             <div className="text-center text-xs text-[#8a6a2c]">Vague {oppHud.wave} · {oppHud.score} tués</div>
-                            {/* Aperçu live de sa grille (mini-map). */}
+                            {/* Aperçu live de sa grille (mini-map) : château coloré selon PV,
+                                ennemis par type, tours par type. */}
                             <div className="flex-1 min-h-0 flex items-center justify-center">
-                                <MiniBoard enemies={oppHud.enemies} towers={oppHud.towers} className="w-full h-full" />
+                                <MiniBoard enemies={oppHud.enemies} towers={oppHud.towers} castleRatio={oppRatio} className="w-full h-full" />
                             </div>
+                            {/* Légende des tours présentes chez l'adversaire → savoir quoi lui envoyer. */}
+                            {(() => {
+                                const types = [...new Set((oppHud.towers ?? []).map((t) => t.type))]
+                                return (
+                                    <div className="flex flex-wrap gap-x-2 gap-y-0.5 justify-center">
+                                        {types.length === 0 ? (
+                                            <span className="text-[10px] text-[#8a6a2c] italic">Aucune tour posée</span>
+                                        ) : types.map((t) => (
+                                            <span key={t} className="inline-flex items-center gap-1 text-[10px] text-[#8a6a2c]">
+                                                <span style={{ width: 8, height: 8, background: TOWER_COLOR[t] ?? '#ccc', display: 'inline-block', borderRadius: 2, border: '1px solid #1a1109' }} />
+                                                {TOWER_LABEL[t] ?? t}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )
+                            })()}
                         </aside>
                         )}
                         </div>
