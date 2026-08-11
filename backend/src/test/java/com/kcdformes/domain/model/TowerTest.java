@@ -38,24 +38,27 @@ class TowerTest {
     }
 
     @Test
-    @DisplayName("Coût d'amélioration niveau 1 == coût d'une tour neuve du même type")
-    void getUpgradeCost_atLevel1_equalsBaseCost() {
+    @DisplayName("Coût d'amélioration niveau 1 == baseCost x 2 (amélioration coûteuse et décisive)")
+    void getUpgradeCost_atLevel1_isDoubleBaseCost() {
         Tower tower = new Tower(TowerType.ARCHER, 2, 3);
-        assertThat(tower.getUpgradeCost()).isEqualTo(TowerType.ARCHER.baseCost);
+        assertThat(tower.getUpgradeCost()).isEqualTo(TowerType.ARCHER.baseCost * 2);
     }
 
     @Test
-    @DisplayName("Coût d'amélioration grimpe avec le niveau (x2 au niveau 2, x3 au niveau 3...)")
-    void getUpgradeCost_growsWithLevel() {
+    @DisplayName("Coût d'amélioration grimpe avec le niveau (baseCost x level x 2) et cap au niveau 3")
+    void getUpgradeCost_growsWithLevel_andCaps() {
         Tower tower = new Tower(TowerType.CATAPULT, 2, 3);
 
-        assertThat(tower.getUpgradeCost()).isEqualTo(TowerType.CATAPULT.baseCost); // niveau 1
+        assertThat(tower.getUpgradeCost()).isEqualTo(TowerType.CATAPULT.baseCost * 2); // niveau 1 → 2
 
         tower.upgrade(); // niveau 2
-        assertThat(tower.getUpgradeCost()).isEqualTo(TowerType.CATAPULT.baseCost * 2);
+        assertThat(tower.getUpgradeCost()).isEqualTo(TowerType.CATAPULT.baseCost * 4); // niveau 2 → 3
 
-        tower.upgrade(); // niveau 3
-        assertThat(tower.getUpgradeCost()).isEqualTo(TowerType.CATAPULT.baseCost * 3);
+        tower.upgrade(); // niveau 3 = maximum
+        assertThat(tower.isMaxLevel()).isTrue();
+
+        tower.upgrade(); // au-delà du max : sans effet
+        assertThat(tower.getLevel()).isEqualTo(Tower.MAX_LEVEL);
     }
 
     @Test

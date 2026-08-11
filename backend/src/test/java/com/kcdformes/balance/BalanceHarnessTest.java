@@ -347,7 +347,7 @@ class BalanceHarnessTest {
 
         while (true) {
             Tower cheapest = map.getTowers().stream()
-                    .filter(t -> t.getLevel() < setup.targetLevel())
+                    .filter(t -> t.getLevel() < setup.targetLevel() && !t.isMaxLevel())
                     .min(Comparator.comparingInt(Tower::getUpgradeCost))
                     .orElse(null);
             if (cheapest == null || gold < cheapest.getUpgradeCost()) {
