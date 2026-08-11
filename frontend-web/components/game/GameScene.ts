@@ -252,7 +252,7 @@ export class GameScene extends Phaser.Scene {
     private onCellClick?: (x: number, y: number) => void
     // Effet d'ambiance neige (biome snow) : flocons mis à jour chaque frame.
     private snowGfx?: Phaser.GameObjects.Graphics
-    private snowflakes: { x: number; y: number; vy: number; vx: number; r: number; a: number }[] = []
+    private snowflakes: { x: number; y: number; vy: number; vx: number; r: number; a: number; c: number }[] = []
     private waveTimer?: Phaser.Time.TimerEvent
     // Fonction de rendu du tick courant, conservée pour reprendre après une pause
     // de tuto (voir playWave / resumeWave).
@@ -1453,7 +1453,7 @@ export class GameScene extends Phaser.Scene {
                 this.snowflakes.push({
                     x: Math.random() * w, y: Math.random() * h,
                     vy: 12 + Math.random() * 22, vx: -6 + Math.random() * 12,
-                    r: 1 + Math.random() * 2.2, a: 0.35 + Math.random() * 0.5,
+                    r: 1 + Math.random() * 2.2, a: 0.35 + Math.random() * 0.5, c: 0xffffff,
                 })
             }
         } else if (this.mapDef.biome === 'desert') {
@@ -1475,23 +1475,22 @@ export class GameScene extends Phaser.Scene {
                     tex?.refresh()
                 }
             }
-            const sun = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-8).setAlpha(0.6)
-            this.tweens.add({ targets: sun, alpha: { from: 0.5, to: 0.9 }, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+            const sun = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-8).setAlpha(0.55)
+            this.tweens.add({ targets: sun, alpha: { from: 0.45, to: 0.8 }, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
 
-            // God rays : éventail de faisceaux depuis le soleil, dessinés depuis (0,0)
-            // et positionnés au soleil → rotation lente autour de lui (balayage) + pulse.
-            const rays = this.add.graphics().setDepth(-7)
-            rays.fillStyle(0xfff3cc, 0.09)
-            const beams = 7, spread = Math.PI * 0.55, base = Math.PI * 0.72, len = Math.max(w, h) * 1.4, hw = 0.028
-            for (let i = 0; i < beams; i++) {
-                const a = base - spread / 2 + (spread * i) / (beams - 1)
-                rays.fillTriangle(0, 0,
-                    Math.cos(a - hw) * len, Math.sin(a - hw) * len,
-                    Math.cos(a + hw) * len, Math.sin(a + hw) * len)
+            // Sable soufflé : grains sable qui dérivent en biais (surtout latéral), épars
+            // et translucides → vivant et lisible, sans masquer le jeu (même système que
+            // la neige, voir updateWeather). Couche au-dessus du plateau.
+            this.snowGfx = this.add.graphics().setDepth(55)
+            this.snowflakes = []
+            for (let i = 0; i < 48; i++) {
+                this.snowflakes.push({
+                    x: Math.random() * w, y: Math.random() * h,
+                    vy: 4 + Math.random() * 10, vx: 34 + Math.random() * 46,
+                    r: 0.8 + Math.random() * 1.4, a: 0.18 + Math.random() * 0.28,
+                    c: Math.random() < 0.5 ? 0xe4d3a6 : 0xd8c188,
+                })
             }
-            rays.setPosition(sunX, sunY)
-            this.tweens.add({ targets: rays, rotation: { from: -0.05, to: 0.05 }, duration: 9000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
-            this.tweens.add({ targets: rays, alpha: { from: 0.5, to: 1 }, duration: 3800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
         }
     }
 
@@ -1508,7 +1507,7 @@ export class GameScene extends Phaser.Scene {
             if (f.y > h + 4) { f.y = -4; f.x = Math.random() * w }
             if (f.x < -6) f.x = w + 6
             else if (f.x > w + 6) f.x = -6
-            g.fillStyle(0xffffff, f.a)
+            g.fillStyle(f.c, f.a)
             g.fillCircle(f.x, f.y, f.r)
         }
     }
