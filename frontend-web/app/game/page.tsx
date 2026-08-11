@@ -461,7 +461,10 @@ export default function GamePage() {
                     </div>
                 </div>
 
-                    <aside className="w-full lg:w-64 shrink-0 min-h-0 overflow-y-auto max-h-[38vh] lg:max-h-none flex flex-col gap-3">
+                    {/* En fenêtre étroite : le panneau stats/évolution est masqué (le plateau
+                        garderait sinon une taille minuscule). La carte d'amélioration, elle,
+                        reste visible même en petit car on en a besoin pour améliorer une tour. */}
+                    <aside className={`w-full lg:w-64 shrink-0 min-h-0 overflow-y-auto max-h-[38vh] lg:max-h-none flex-col gap-3 ${selectedTowerObj && canAct ? 'flex' : 'hidden lg:flex'}`}>
                         {selectedTowerObj && canAct ? (
                             /* Carte d'évolution de la tour cliquée : niveau, amélioration,
                                aperçu du prochain niveau, priorité de tir. */
