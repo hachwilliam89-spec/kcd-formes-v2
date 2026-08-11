@@ -517,9 +517,9 @@ export default function GamePage() {
                                         {towerRange(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
                                         {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerRange(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
                                     </span>
-                                    <span className="text-[#8a6a2c]">Solidité</span>
+                                    <span className="text-[#8a6a2c]">PV (solidité)</span>
                                     <span className="text-right font-med text-[#43310f]">
-                                        {towerHp(selectedTowerObj.type, selectedTowerObj.level ?? 1)} PV
+                                        {selectedTowerObj.hp ?? towerHp(selectedTowerObj.type, selectedTowerObj.level ?? 1)}/{selectedTowerObj.maxHp ?? towerHp(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
                                         {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerHp(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
                                     </span>
                                     <span className="text-[#8a6a2c]">Cadence</span>
