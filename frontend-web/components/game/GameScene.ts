@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import type { Cell } from './constants'
 import { TOP_RESERVED_ROWS } from './constants'
-import { GAME_MAPS, DEFAULT_MAP_ID, getMapDef, mapIsCorridor, mapPathDir } from './maps'
+import { GAME_MAPS, DEFAULT_MAP_ID, getMapDef, mapIsCorridor, mapPathDir, mapLaneStarts, mapCastle } from './maps'
 import { audio, Sfx } from '@/lib/audio'
 
 // Association effet visuel d'impact → bruitage, avec un intervalle mini (ms) pour
@@ -1494,6 +1494,25 @@ export class GameScene extends Phaser.Scene {
         // mise à l'échelle du plateau. Rendu identique garanti, aucun masque runtime.
         const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
         this.add.image(0, 0, `map-${this.mapDef.id}`).setOrigin(0, 0).setDepth(-20).setDisplaySize(w, h)
+        // Cartes multi-voies : le sol est uni (pas de route peinte) → on trace la
+        // route au runtime, exactement sur les cases des voies (union du couloir),
+        // pour qu'elle colle au déplacement réel des ennemis (calculé serveur).
+        if (this.mapDef.proceduralRoad) this.drawProceduralRoad()
+    }
+
+    private drawProceduralRoad() {
+        const g = this.add.graphics().setDepth(-18)
+        // Épaule de route (couloir élargi) puis voie de circulation (chemin) plus
+        // claire par-dessus — lisible même quand halfWidth vaut 0 (route fine).
+        for (const c of this.mapDef.path.corridorCells) {
+            g.fillStyle(0x7c5c34, 1)
+            g.fillRect(c.x * CELL_SIZE, c.y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+        }
+        for (const c of this.mapDef.path.pathCells) {
+            const px = c.x * CELL_SIZE, py = c.y * CELL_SIZE
+            g.fillStyle(0xa9895a, 1)
+            g.fillRect(px + CELL_SIZE * 0.12, py + CELL_SIZE * 0.12, CELL_SIZE * 0.76, CELL_SIZE * 0.76)
+        }
     }
 
     /** Vignette : assombrit les bords du champ pour l'ambiance (texture canvas radiale,
@@ -1543,16 +1562,20 @@ export class GameScene extends Phaser.Scene {
         // large), ancrées en bas de leur case, débordant vers le haut.
         const castleW = CELL_SIZE * 2.4
 
-        // Château ennemi au spawn (clair, orienté vers la droite = vers le champ).
-        const startX = this.pathStart.x * CELL_SIZE + CELL_SIZE / 2
-        const startGroundY = (this.pathStart.y + 2) * CELL_SIZE // +2 : descendu d'une case
-        const enemyCastle = this.add.image(startX, startGroundY, 'castle').setOrigin(0.35, 1).setDepth(-15)
-        enemyCastle.setScale(castleW / enemyCastle.width)
-        enemyCastle.setFlipX(true)
+        // Un château ennemi par ENTRÉE (une carte multi-voies en a plusieurs) :
+        // clair, orienté vers la droite = vers le champ.
+        for (const start of mapLaneStarts(this.mapDef)) {
+            const startX = start.x * CELL_SIZE + CELL_SIZE / 2
+            const startGroundY = (start.y + 2) * CELL_SIZE // +2 : descendu d'une case
+            const enemyCastle = this.add.image(startX, startGroundY, 'castle').setOrigin(0.35, 1).setDepth(-15)
+            enemyCastle.setScale(castleW / enemyCastle.width)
+            enemyCastle.setFlipX(true)
+        }
 
-        // Ton château à l'arrivée (sombre, orienté vers la gauche = vers le champ).
-        const endX = this.pathEnd.x * CELL_SIZE + CELL_SIZE / 2
-        const endGroundY = (this.pathEnd.y + 2) * CELL_SIZE // +2 : descendu d'une case
+        // Ton château à l'arrivée commune (sombre, orienté vers la gauche = vers le champ).
+        const end = mapCastle(this.mapDef)
+        const endX = end.x * CELL_SIZE + CELL_SIZE / 2
+        const endGroundY = (end.y + 2) * CELL_SIZE // +2 : descendu d'une case
         const castle = this.add.image(endX, endGroundY, 'castle-enemy').setOrigin(0.65, 1).setDepth(-15)
         castle.setScale(castleW / castle.width)
     }

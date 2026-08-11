@@ -76,6 +76,53 @@ export function buildPathData(waypoints: Cell[], gridW = GRID_W, gridH = GRID_H)
   return { waypoints, pathCells, corridorSet, corridorCells, pathDir }
 }
 
+/**
+ * Données de chemin d'une carte à PLUSIEURS voies (toutes terminant sur le château).
+ * Le couloir est l'union des voies, élargie de `halfWidth` (Chebyshev) : halfWidth 0
+ * = voies fines d'1 case (plus de terrain constructible entre les voies). Doit rester
+ * synchronisé avec le backend (MapCatalog + PathfindingService.corridorCells).
+ */
+export function buildLanesData(lanes: Cell[][], halfWidth = 1, gridW = GRID_W, gridH = GRID_H): PathData {
+  const lanePaths = lanes.map((wp) => buildPathData(wp, gridW, gridH))
+
+  // Union des cases de chemin de toutes les voies.
+  const pathCells: Cell[] = []
+  const seen = new Set<string>()
+  for (const lp of lanePaths) {
+    for (const c of lp.pathCells) {
+      const k = key(c.x, c.y)
+      if (!seen.has(k)) { seen.add(k); pathCells.push(c) }
+    }
+  }
+
+  // Couloir = union élargie de halfWidth.
+  const corridorSet = new Set<string>()
+  for (const p of pathCells) {
+    for (let dx = -halfWidth; dx <= halfWidth; dx++) {
+      for (let dy = -halfWidth; dy <= halfWidth; dy++) {
+        const nx = p.x + dx
+        const ny = p.y + dy
+        if (nx >= 0 && nx < gridW && ny >= 0 && ny < gridH) corridorSet.add(key(nx, ny))
+      }
+    }
+  }
+  const corridorCells: Cell[] = Array.from(corridorSet).map((k) => {
+    const [x, y] = k.split(',').map(Number)
+    return { x, y }
+  })
+
+  // Direction : la première voie qui définit une case gagne (les cellules partagées
+  // près du château ont une direction cohérente vers l'arrivée).
+  const pathDir = new Map<string, { dx: number; dy: number }>()
+  for (const lp of lanePaths) {
+    for (const [k, v] of lp.pathDir) {
+      if (!pathDir.has(k)) pathDir.set(k, v)
+    }
+  }
+
+  return { waypoints: lanes[0], pathCells, corridorSet, corridorCells, pathDir }
+}
+
 /** Une case est-elle sur le couloir (donc inconstructible pour une tour) ? */
 export const corridorHas = (data: PathData, x: number, y: number) => data.corridorSet.has(key(x, y))
 

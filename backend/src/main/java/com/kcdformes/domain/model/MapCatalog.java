@@ -15,26 +15,43 @@ public final class MapCatalog {
     public static final int HEIGHT = 16;
     public static final String DEFAULT_MAP_ID = "desert";
 
-    private static final Map<String, List<Position>> WAYPOINTS = Map.of(
-            "desert", List.of(
+    /**
+     * Définition d'une carte : une ou plusieurs voies (toutes terminant sur le
+     * château) + demi-largeur du couloir (1 = large historique, 0 = voies fines).
+     */
+    private record Def(List<List<Position>> lanes, int corridorHalfWidth) {}
+
+    private static Def single(List<Position> waypoints) {
+        return new Def(List.of(waypoints), 1);
+    }
+
+    private static final Map<String, Def> MAPS = Map.of(
+            "desert", single(List.of(
                     new Position(0, 3), new Position(17, 3), new Position(17, 8),
-                    new Position(2, 8), new Position(2, 13), new Position(19, 13)),
-            "prairie", List.of(
+                    new Position(2, 8), new Position(2, 13), new Position(19, 13))),
+            "prairie", single(List.of(
                     new Position(0, 2), new Position(3, 2), new Position(3, 13),
-                    new Position(17, 13), new Position(17, 6), new Position(19, 6)),
-            "snow", List.of(
+                    new Position(17, 13), new Position(17, 6), new Position(19, 6))),
+            "snow", single(List.of(
                     new Position(0, 13), new Position(17, 13), new Position(17, 3),
-                    new Position(2, 3), new Position(2, 9), new Position(19, 9)));
+                    new Position(2, 3), new Position(2, 9), new Position(19, 9))),
+            // L'Y : deux entrées (haut-gauche / bas-gauche) qui fusionnent au centre
+            // en une approche finale unique vers le château (19,8). Voies fines.
+            "ygrec", new Def(List.of(
+                    List.of(new Position(0, 3), new Position(8, 3), new Position(8, 8), new Position(19, 8)),
+                    List.of(new Position(0, 13), new Position(8, 13), new Position(8, 8), new Position(19, 8))),
+                    0));
 
     private MapCatalog() {}
 
     /** Id de map valide ? (sinon on retombe sur le désert). */
     public static String normalize(String mapId) {
-        return (mapId != null && WAYPOINTS.containsKey(mapId)) ? mapId : DEFAULT_MAP_ID;
+        return (mapId != null && MAPS.containsKey(mapId)) ? mapId : DEFAULT_MAP_ID;
     }
 
     /** Construit une GameMap neuve pour la map demandée (désert par défaut). */
     public static GameMap buildMap(String mapId) {
-        return new GameMap(WIDTH, HEIGHT, WAYPOINTS.get(normalize(mapId)));
+        Def def = MAPS.get(normalize(mapId));
+        return GameMap.ofLanes(WIDTH, HEIGHT, def.lanes(), def.corridorHalfWidth());
     }
 }

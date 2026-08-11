@@ -8,28 +8,26 @@ import { GAME_MAPS, type MapDef } from './maps'
 import { GRID_W, GRID_H } from './constants'
 
 function PathPreview({ map }: { map: MapDef }) {
-    const pts = map.waypoints
-        .map((w) => `${w.x + 0.5},${w.y + 0.5}`)
-        .join(' ')
+    const castle = map.lanes[0][map.lanes[0].length - 1]
     return (
         <svg viewBox={`0 0 ${GRID_W} ${GRID_H}`} className="w-full h-auto block" preserveAspectRatio="none">
             <rect x={0} y={0} width={GRID_W} height={GRID_H} fill="#3a2a17" />
-            {/* Départ (vert) et château (or) aux extrémités du tracé. */}
-            <polyline
-                points={pts}
-                fill="none"
-                stroke="#c9a05a"
-                strokeWidth={1.2}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-            />
-            <circle cx={map.waypoints[0].x + 0.5} cy={map.waypoints[0].y + 0.5} r={0.9} fill="#5bbd3a" />
-            <circle
-                cx={map.waypoints[map.waypoints.length - 1].x + 0.5}
-                cy={map.waypoints[map.waypoints.length - 1].y + 0.5}
-                r={0.9}
-                fill="#e8c24a"
-            />
+            {/* Chaque voie tracée + son entrée (vert). Château commun (or). */}
+            {map.lanes.map((lane, i) => (
+                <polyline
+                    key={i}
+                    points={lane.map((w) => `${w.x + 0.5},${w.y + 0.5}`).join(' ')}
+                    fill="none"
+                    stroke="#c9a05a"
+                    strokeWidth={1.2}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                />
+            ))}
+            {map.lanes.map((lane, i) => (
+                <circle key={i} cx={lane[0].x + 0.5} cy={lane[0].y + 0.5} r={0.9} fill="#5bbd3a" />
+            ))}
+            <circle cx={castle.x + 0.5} cy={castle.y + 0.5} r={0.9} fill="#e8c24a" />
         </svg>
     )
 }
@@ -44,7 +42,7 @@ export default function MapSelector({
     disabled?: boolean
 }) {
     return (
-        <div className="grid grid-cols-3 gap-2 md:gap-3">
+        <div className="grid grid-cols-2 gap-2 md:gap-3">
             {GAME_MAPS.map((m) => {
                 const selected = m.id === value
                 return (
