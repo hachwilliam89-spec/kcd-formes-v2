@@ -351,6 +351,7 @@ export class GameScene extends Phaser.Scene {
         // + route en terre claire (texture tuilable) masquée en forme de serpentin
         // arrondi (voir drawTerrain) → virages parfaitement nets.
         this.load.image('terrain-ground', '/sprites/terrain/ground.png')
+        this.load.image('terrain-grass', '/sprites/terrain/grass.png')
         this.load.image('road_fill', '/sprites/terrain/road_fill.png')
         // Props décoratifs (rochers) pour habiller le champ.
         for (let i = 1; i <= 5; i++) this.load.image(`prop-stone-${i}`, `/sprites/props/stone_${i}.png`)
@@ -1406,12 +1407,13 @@ export class GameScene extends Phaser.Scene {
         // Ces textures sont de l'art vectoriel lisse (pas du pixel) : on force un
         // filtrage LINÉAIRE pour un redimensionnement propre, malgré pixelArt:true
         // (qui reste souhaitable pour les sprites de perso/tours).
-        const smooth = ['terrain-ground', 'road_fill',
+        const smooth = ['terrain-ground', 'terrain-grass', 'road_fill',
             'prop-stone-1', 'prop-stone-2', 'prop-stone-3', 'prop-stone-4', 'prop-stone-5']
         for (const k of smooth) this.textures.get(k)?.setFilter(Phaser.Textures.FilterMode.LINEAR)
 
-        // 1) Sol : terre foncée tuilée sur tout le champ (sous tout le reste).
-        this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'terrain-ground')
+        // 1) Sol : herbe tuilée sur tout le champ → contraste franc avec le chemin de
+        // terre (avant : tout en terre marron, sans relief). Base de l'ambiance.
+        this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'terrain-grass')
             .setOrigin(0, 0).setDepth(-20)
 
         // 2) Route serpentine générée géométriquement (pas d'assemblage de tuiles →
@@ -1443,29 +1445,69 @@ export class GameScene extends Phaser.Scene {
         drawRoadShape(maskG, ROAD, 0xffffff)
         roadTex.setMask(maskG.createGeometryMask())
 
-        // 3) Props : quelques rochers éparpillés sur des cases constructibles
-        // (décor pur, la construction reste possible dessus). Placement
-        // déterministe (LCG à graine fixe) → identique à chaque partie.
+        // 3) Décor procédural (déterministe, graine fixe → identique à chaque partie).
         let seed = 1337
         const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
         const buildable: { x: number; y: number }[] = []
         for (let x = 0; x < GRID_WIDTH; x++)
             for (let y = 0; y < GRID_HEIGHT; y++)
                 if (!isCorridorCell(x, y)) buildable.push({ x, y })
+
+        // 3a) Touffes d'herbe éparses (graphics léger) pour donner de la vie au champ.
+        const tufts = this.add.graphics().setDepth(-17)
+        for (let n = 0; n < 90 && buildable.length; n++) {
+            const c = buildable[Math.floor(rnd() * buildable.length)]
+            const bx = c.x * CELL_SIZE + rnd() * CELL_SIZE
+            const by = c.y * CELL_SIZE + rnd() * CELL_SIZE
+            const shade = [0x4e7d2c, 0x5f9636, 0x3f6a24][Math.floor(rnd() * 3)]
+            tufts.fillStyle(shade, 0.85)
+            const blades = 3 + Math.floor(rnd() * 3)
+            for (let b = 0; b < blades; b++) {
+                const ox = (b - blades / 2) * 1.6
+                tufts.fillTriangle(bx + ox - 0.8, by, bx + ox + 0.8, by, bx + ox + (rnd() - 0.5) * 2, by - (3 + rnd() * 3))
+            }
+        }
+
+        // 3b) Rochers avec ombre portée, éparpillés sur des cases constructibles
+        // (décor pur, la construction reste possible dessus).
         const used = new Set<number>()
-        for (let n = 0; n < 9 && buildable.length; n++) {
+        for (let n = 0; n < 14 && buildable.length; n++) {
             let idx = Math.floor(rnd() * buildable.length)
-            if (used.has(idx)) { idx = (idx + 1) % buildable.length }
+            if (used.has(idx)) idx = (idx + 1) % buildable.length
             used.add(idx)
             const c = buildable[idx]
+            const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 8
+            const cy = c.y * CELL_SIZE + CELL_SIZE * 0.62 + (rnd() - 0.5) * 6
+            const scale = 0.55 + rnd() * 0.35
+            const sh = this.add.graphics().setDepth(-16)
+            sh.fillStyle(0x000000, 0.22)
+            sh.fillEllipse(cx, cy + CELL_SIZE * 0.12 * scale, CELL_SIZE * 0.5 * scale, CELL_SIZE * 0.2 * scale)
             const key = `prop-stone-${1 + Math.floor(rnd() * 5)}`
-            const st = this.add.image(
-                c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 8,
-                c.y * CELL_SIZE + CELL_SIZE * 0.62 + (rnd() - 0.5) * 6,
-                key,
-            ).setOrigin(0.5, 0.7).setDepth(-16)
-            st.setScale((CELL_SIZE * 0.7) / st.width)
+            const st = this.add.image(cx, cy, key).setOrigin(0.5, 0.7).setDepth(-16)
+            st.setScale((CELL_SIZE * scale) / st.width)
         }
+
+        // 4) Vignette d'ambiance : bords assombris (au-dessus du terrain, sous le jeu).
+        this.addVignette()
+    }
+
+    /** Vignette : assombrit les bords du champ pour l'ambiance (texture canvas radiale,
+     *  générée une seule fois). Depth -10 : au-dessus du décor, sous les tours/ennemis. */
+    private addVignette() {
+        const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
+        if (!this.textures.exists('vignette')) {
+            const tex = this.textures.createCanvas('vignette', w, h)
+            const ctx = tex?.getContext()
+            if (ctx) {
+                const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.62)
+                g.addColorStop(0, 'rgba(0,0,0,0)')
+                g.addColorStop(1, 'rgba(10,6,2,0.5)')
+                ctx.fillStyle = g
+                ctx.fillRect(0, 0, w, h)
+                tex?.refresh()
+            }
+        }
+        this.add.image(0, 0, 'vignette').setOrigin(0, 0).setDepth(-10)
     }
 
     // ── Dessin de la grille ──────────────────────────────────────────────
