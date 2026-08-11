@@ -59,12 +59,14 @@ const TOWER_ROLE: Record<TowerType, string> = {
 }
 
 // Stats de base des tours (miroir de TowerType côté backend : baseDamage, baseRange).
-const TOWER_STATS: Record<TowerType, { damage: number; range: number; kind: string }> = {
-    ARCHER:   { damage: 12,  range: 3.0, kind: 'Monocible' },
-    MAGE:     { damage: 11,  range: 2.5, kind: 'Continu · magique' },
-    CATAPULT: { damage: 40,  range: 4.0, kind: 'Zone (AoE)' },
-    BALLISTA: { damage: 110, range: 5.0, kind: 'Monocible · anti-gros' },
-    WALL:     { damage: 0,   range: 0,   kind: 'Barrage' },
+// cadence = descripteur de vitesse de tir (miroir qualitatif de attackSpeed :
+// ARCHER 0.6, CATAPULT 0.1, BALLISTA 0.12 ; MAGE applique ses dégâts en continu).
+const TOWER_STATS: Record<TowerType, { damage: number; range: number; kind: string; cadence: string }> = {
+    ARCHER:   { damage: 12,  range: 3.0, kind: 'Monocible',            cadence: 'Rapide' },
+    MAGE:     { damage: 11,  range: 2.5, kind: 'Continu · magique',    cadence: 'Continue' },
+    CATAPULT: { damage: 40,  range: 4.0, kind: 'Zone (AoE)',           cadence: 'Lente' },
+    BALLISTA: { damage: 110, range: 5.0, kind: 'Monocible · anti-gros', cadence: 'Lente' },
+    WALL:     { damage: 0,   range: 0,   kind: 'Barrage',              cadence: '—' },
 }
 // Montée en puissance par niveau (miroir de Tower.getDamage/getRange).
 const dmgMult = (lvl: number) => (lvl >= 3 ? 2.6 : 1 + (lvl - 1) * 0.6)   // 1.0 / 1.6 / 2.6
@@ -512,6 +514,8 @@ export default function GamePage() {
                                         {towerRange(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
                                         {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerRange(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
                                     </span>
+                                    <span className="text-[#8a6a2c]">Cadence</span>
+                                    <span className="text-right text-[#43310f]">{TOWER_STATS[selectedTowerObj.type].cadence}</span>
                                     <span className="text-[#8a6a2c]">Type</span>
                                     <span className="text-right text-[#43310f]">{TOWER_STATS[selectedTowerObj.type].kind}</span>
                                 </div>
@@ -593,7 +597,7 @@ export default function GamePage() {
                                                             </div>
                                                             <p className="text-[11px] text-[#8a6a2c] leading-tight">{locked ? `Débloquée vague ${TOWER_INFO[type].unlockWave}` : TOWER_ROLE[type]}</p>
                                                             {!locked && (
-                                                                <p className="text-[10px] text-[#7a5320] leading-tight">Dégâts {TOWER_STATS[type].damage} · Portée {TOWER_STATS[type].range} · {TOWER_STATS[type].kind}</p>
+                                                                <p className="text-[10px] text-[#7a5320] leading-tight">Dégâts {TOWER_STATS[type].damage} · Portée {TOWER_STATS[type].range} · Cadence {TOWER_STATS[type].cadence}</p>
                                                             )}
                                                         </div>
                                                     </div>
