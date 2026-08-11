@@ -357,8 +357,11 @@ export class GameScene extends Phaser.Scene {
         this.load.image('field-grass', '/sprites/terrain/grass_field.png')
         this.load.image('field-dirt', '/sprites/terrain/dirt_path.png')
         for (let i = 1; i <= 6; i++) this.load.image(`decor-tree-${i}`, `/sprites/decor/tree_${i}.png`)
-        for (let i = 1; i <= 16; i++) this.load.image(`decor-ruin-${i}`, `/sprites/decor/ruin_${i}.png`)   // gros décor bataille/ruines (bords)
-        for (let i = 1; i <= 6; i++) this.load.image(`decor-small-${i}`, `/sprites/decor/small_${i}.png`)   // petit décor (cases de pose)
+        // Ruines/guerre : "tall" (colonne, tombes, croix, bannières, palissade, feu) mis à
+        // l'échelle en HAUTEUR ; "flat" (ossements, tronc, rocher, souche) en LARGEUR.
+        for (let i = 1; i <= 8; i++) this.load.image(`decor-ruinT-${i}`, `/sprites/decor/ruinT_${i}.png`)
+        for (let i = 1; i <= 4; i++) this.load.image(`decor-ruinF-${i}`, `/sprites/decor/ruinF_${i}.png`)
+        for (let i = 1; i <= 6; i++) this.load.image(`decor-small-${i}`, `/sprites/decor/small_${i}.png`)   // petit décor (partout, sous les unités)
         // Props décoratifs (rochers) pour habiller le champ.
         for (let i = 1; i <= 5; i++) this.load.image(`prop-stone-${i}`, `/sprites/props/stone_${i}.png`)
         // Châteaux : le tien (arrivée, à défendre) + celui de l'ennemi (spawn, décoratif).
@@ -1410,89 +1413,105 @@ export class GameScene extends Phaser.Scene {
     // ── Terrain (sol + route serpentine + props) ─────────────────────────
 
     private drawTerrain() {
-        // 1) Sol : herbe (texture seamless du tileset nature) tuilée sur tout le champ.
-        this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'field-grass')
-            .setOrigin(0, 0).setDepth(-20)
+        // 1+2) Terrain composé UNE fois sur un canvas (herbe partout + chemin de terre
+        // incrusté) : plus fiable qu'un masque géométrique Phaser (qui laissait la terre
+        // recouvrir toute l'herbe), et plus léger (une seule image au lieu de tileSprite+mask).
+        this.buildBakedTerrain()
 
-        // 2) Chemin serpentin : forme géométrique (rectangles + disques aux virages →
-        // courbes arrondies nettes) servant (a) de bordure sombre, (b) de masque pour
-        // la texture de terre tuilée du pack.
-        const ROAD = CELL_SIZE * 2.4
-        const pts = WAYPOINTS.map((w) => ({ x: w.x * CELL_SIZE + CELL_SIZE / 2, y: w.y * CELL_SIZE + CELL_SIZE / 2 }))
-        const drawRoadShape = (g: Phaser.GameObjects.Graphics, width: number, color: number) => {
-            const r = width / 2
-            g.fillStyle(color, 1)
-            for (let i = 0; i < pts.length - 1; i++) {
-                const a = pts[i], b = pts[i + 1]
-                if (a.y === b.y) g.fillRect(Math.min(a.x, b.x), a.y - r, Math.abs(b.x - a.x), width)
-                else g.fillRect(a.x - r, Math.min(a.y, b.y), width, Math.abs(b.y - a.y))
-            }
-            for (const p of pts) g.fillCircle(p.x, p.y, r)
-        }
-        const border = this.add.graphics().setDepth(-19)
-        drawRoadShape(border, ROAD + 10, 0x2a1a0d) // liseré terreux sombre sous le chemin
-        const roadTex = this.add.tileSprite(0, 0, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE, 'field-dirt')
-            .setOrigin(0, 0).setDepth(-18)
-        const maskG = this.make.graphics({})
-        drawRoadShape(maskG, ROAD, 0xffffff)
-        roadTex.setMask(maskG.createGeometryMask())
-
-        // 3) Décor déterministe. Convention TD : la zone de pose reste LISIBLE.
-        //    → GROS décor (arbres + ruines) seulement sur le CADRE (bords + rangée du
-        //      haut sacrifiée), loin des deux châteaux ; PETIT décor (herbe, cailloux)
-        //      dispersé sur les cases de pose (n'entrave pas la visibilité).
+        // 3) Décor déterministe, façon TD (Kingdom Rush & co.) : GROS décor thème
+        //    guerre/ruines regroupé sur le CADRE (bords + rangée du haut sacrifiée),
+        //    loin des châteaux ; PETIT décor (ossements, cailloux, herbe) semé partout
+        //    — y compris sur le chemin — car il passe SOUS les unités (depth), donc
+        //    ne gêne pas la lecture.
         let seed = 1337
         const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
         const nearCastle = (x: number, y: number) =>
             Math.max(Math.abs(x - PATH_START.x), Math.abs(y - PATH_START.y)) <= 2 ||
             Math.max(Math.abs(x - PATH_END.x), Math.abs(y - PATH_END.y)) <= 2
-        const frame: { x: number; y: number }[] = []      // cadre → gros décor
-        const inner: { x: number; y: number }[] = []       // cases de pose → petit décor
+        const frame: { x: number; y: number }[] = []   // cadre → gros décor
+        const small: { x: number; y: number }[] = []   // partout → petit décor
         for (let x = 0; x < GRID_WIDTH; x++)
             for (let y = 0; y < GRID_HEIGHT; y++) {
-                if (isCorridorCell(x, y)) continue
-                const isEdge = x === 0 || x === GRID_WIDTH - 1 || y === 0 || y === GRID_HEIGHT - 1
-                if (isEdge) { if (!nearCastle(x, y)) frame.push({ x, y }) }
-                else inner.push({ x, y })
+                const edge = x === 0 || x === GRID_WIDTH - 1 || y === 0 || y === GRID_HEIGHT - 1
+                if (edge && !isCorridorCell(x, y) && !nearCastle(x, y)) frame.push({ x, y })
+                else if (!nearCastle(x, y)) small.push({ x, y })
             }
 
-        // Ombre portée douce + sprite, ancré en bas de la case (déborde vers le haut).
-        const placeDecor = (key: string, cx: number, cy: number, cellSpan: number, shadowW: number) => {
+        // Sprite ancré en bas de case (déborde vers le haut) + ombre portée douce.
+        // byHeight : cale la hauteur (éléments verticaux) ; sinon la largeur (éléments plats).
+        const placeDecor = (key: string, cx: number, cy: number, span: number, shadowW: number, byHeight = false) => {
             const sh = this.add.graphics().setDepth(-16)
             sh.fillStyle(0x000000, 0.22)
             sh.fillEllipse(cx, cy, shadowW, shadowW * 0.4)
             const img = this.add.image(cx, cy, key).setOrigin(0.5, 0.92).setDepth(-15)
-            img.setScale((CELL_SIZE * cellSpan) / img.width)
+            img.setScale((CELL_SIZE * span) / (byHeight ? img.height : img.width))
         }
 
-        // 3a) GROS décor sur le cadre : mélange d'arbres et de ruines (bataille).
-        const bigKeys = [
-            ...Array.from({ length: 6 }, (_, i) => `decor-tree-${i + 1}`),
-            ...Array.from({ length: 16 }, (_, i) => `decor-ruin-${i + 1}`),
-        ]
-        const usedF = new Set<string>()
-        for (let n = 0; n < 26 && frame.length; n++) {
-            const c = frame[Math.floor(rnd() * frame.length)]
-            const k = `${c.x},${c.y}`; if (usedF.has(k)) continue; usedF.add(k)
-            const key = bigKeys[Math.floor(rnd() * bigKeys.length)]
-            const isTree = key.startsWith('decor-tree')
+        // 3a) GROS décor : bordure "lisière + champ de bataille" dense (~65 % du cadre).
+        const shuffle = (arr: { x: number; y: number }[]) => arr.sort(() => rnd() - 0.5)
+        shuffle(frame)
+        const nFrame = Math.floor(frame.length * 0.65)
+        for (let n = 0; n < nFrame; n++) {
+            const c = frame[n]
             const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 6
             const cy = c.y * CELL_SIZE + CELL_SIZE + 2
-            placeDecor(key, cx, cy, (isTree ? 1.6 : 1.05) + rnd() * (isTree ? 0.5 : 0.35), CELL_SIZE * (isTree ? 0.55 : 0.45))
+            const r = rnd()
+            if (r < 0.55) placeDecor(`decor-tree-${1 + Math.floor(rnd() * 6)}`, cx, cy, 1.5 + rnd() * 0.4, CELL_SIZE * 0.55)         // arbre (lisière)
+            else if (r < 0.85) placeDecor(`decor-ruinT-${1 + Math.floor(rnd() * 8)}`, cx, cy, 1.2 + rnd() * 0.25, CELL_SIZE * 0.4, true) // tombe/croix/bannière/feu
+            else placeDecor(`decor-ruinF-${1 + Math.floor(rnd() * 4)}`, cx, cy, 0.95 + rnd() * 0.2, CELL_SIZE * 0.5)                    // ossements/rocher/tronc
         }
 
-        // 3b) PETIT décor sur les cases de pose (subtil, ne gêne pas la lecture).
-        const usedI = new Set<string>()
-        for (let n = 0; n < 22 && inner.length; n++) {
-            const c = inner[Math.floor(rnd() * inner.length)]
-            const k = `${c.x},${c.y}`; if (usedI.has(k)) continue; usedI.add(k)
+        // 3b) PETIT décor semé partout (subtil, sous les unités) — cases + chemin.
+        shuffle(small)
+        for (let n = 0; n < 30 && n < small.length; n++) {
+            const c = small[n]
             const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 12
             const cy = c.y * CELL_SIZE + CELL_SIZE * 0.85 + (rnd() - 0.5) * 8
-            placeDecor(`decor-small-${1 + Math.floor(rnd() * 6)}`, cx, cy, 0.38 + rnd() * 0.22, CELL_SIZE * 0.28)
+            placeDecor(`decor-small-${1 + Math.floor(rnd() * 6)}`, cx, cy, 0.36 + rnd() * 0.2, CELL_SIZE * 0.26)
         }
 
         // 4) Vignette d'ambiance : bords assombris (au-dessus du terrain, sous le jeu).
         this.addVignette()
+    }
+
+    /** Terrain "cuit" sur un canvas : herbe tuilée partout + chemin de terre serpentin
+     *  incrusté (bordure sombre + terre tuilée clippée à la forme). Une seule image
+     *  (depth -20), pas de masque Phaser. */
+    private buildBakedTerrain() {
+        const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
+        if (!this.textures.exists('terrain-baked')) {
+            const tex = this.textures.createCanvas('terrain-baked', w, h)
+            const ctx = tex?.getContext()
+            const grass = this.textures.get('field-grass').getSourceImage() as CanvasImageSource
+            const dirt = this.textures.get('field-dirt').getSourceImage() as CanvasImageSource
+            if (ctx) {
+                ctx.imageSmoothingEnabled = false
+                const gw = (grass as HTMLImageElement).width || 64, gh = (grass as HTMLImageElement).height || 64
+                for (let x = 0; x < w; x += gw) for (let y = 0; y < h; y += gh) ctx.drawImage(grass, x, y)
+
+                const ROAD = CELL_SIZE * 2.4
+                const pts = WAYPOINTS.map((wp) => ({ x: wp.x * CELL_SIZE + CELL_SIZE / 2, y: wp.y * CELL_SIZE + CELL_SIZE / 2 }))
+                const tracePath = (width: number) => {
+                    const r = width / 2
+                    ctx.beginPath()
+                    for (let i = 0; i < pts.length - 1; i++) {
+                        const a = pts[i], b = pts[i + 1]
+                        if (a.y === b.y) ctx.rect(Math.min(a.x, b.x), a.y - r, Math.abs(b.x - a.x), width)
+                        else ctx.rect(a.x - r, Math.min(a.y, b.y), width, Math.abs(b.y - a.y))
+                    }
+                    for (const p of pts) { ctx.moveTo(p.x + r, p.y); ctx.arc(p.x, p.y, r, 0, Math.PI * 2) }
+                }
+                // Bordure terreuse sombre, légèrement plus large.
+                tracePath(ROAD + 10); ctx.fillStyle = '#2a1a0d'; ctx.fill()
+                // Terre tuilée, clippée à la forme du chemin.
+                ctx.save(); tracePath(ROAD); ctx.clip()
+                const dw = (dirt as HTMLImageElement).width || 64, dh = (dirt as HTMLImageElement).height || 64
+                for (let x = 0; x < w; x += dw) for (let y = 0; y < h; y += dh) ctx.drawImage(dirt, x, y)
+                ctx.restore()
+                tex?.refresh()
+            }
+        }
+        this.add.image(0, 0, 'terrain-baked').setOrigin(0, 0).setDepth(-20)
     }
 
     /** Vignette : assombrit les bords du champ pour l'ambiance (texture canvas radiale,
