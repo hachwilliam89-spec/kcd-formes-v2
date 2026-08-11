@@ -1449,8 +1449,8 @@ export class GameScene extends Phaser.Scene {
         let seed = 1337
         const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
         const nearCastle = (x: number, y: number) =>
-            Math.max(Math.abs(x - this.pathStart.x), Math.abs(y - this.pathStart.y)) <= 2 ||
-            Math.max(Math.abs(x - this.pathEnd.x), Math.abs(y - this.pathEnd.y)) <= 2
+            Math.max(Math.abs(x - this.pathStart.x), Math.abs(y - this.pathStart.y)) <= 1 ||
+            Math.max(Math.abs(x - this.pathEnd.x), Math.abs(y - this.pathEnd.y)) <= 1
 
         // Thème neige (Fourche) : décor dédié semé dans les ZONES MORTES. Sort tôt —
         // le décor terres désolées ci-dessous ne s'applique qu'aux autres cartes.

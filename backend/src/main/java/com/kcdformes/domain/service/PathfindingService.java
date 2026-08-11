@@ -130,7 +130,7 @@ public class PathfindingService {
      * on ne construit pas à la porte de l'ennemi, et ça dégage le bord de spawn.
      * DOIT rester synchronisé avec le front (constants.ts SPAWN_NOBUILD).
      */
-    public static final int SPAWN_NOBUILD = 2;
+    public static final int SPAWN_NOBUILD = 4;
 
     /**
      * Cases CONSTRUCTIBLES : la bande de BUILD_BAND cases qui longe le couloir (hors

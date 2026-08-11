@@ -23,7 +23,7 @@ export const BUILD_BAND = 1
  * Marge (Chebyshev) autour de chaque entrée ennemie où l'on ne peut pas bâtir (on ne
  * construit pas à la porte de l'ennemi). Synchronisé avec le backend (SPAWN_NOBUILD).
  */
-export const SPAWN_NOBUILD = 2
+export const SPAWN_NOBUILD = 4
 
 const key = (x: number, y: number) => `${x},${y}`
 
