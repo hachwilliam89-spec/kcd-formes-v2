@@ -1509,16 +1509,25 @@ export class GameScene extends Phaser.Scene {
     }
 
     /**
-     * Décor du thème NEIGE (Fourche) : semé dans les ZONES MORTES uniquement
-     * (ni route, ni case constructible). Les GRANDS sujets (sapins, colonne,
-     * statue, lanterne) ne vont que sur des cases dont les 2 cases au-dessus sont
-     * mortes aussi : comme le sprite déborde vers le haut, il ne recouvre alors
-     * jamais la route des unités ni une tour. Le petit décor est semé avec parcimonie.
+     * Décor du thème NEIGE (Fourche) : REMPLIT toutes les cases des zones mortes
+     * (ni route, ni case constructible). Chaque case reçoit un SAPIN quand il a la
+     * place de déborder vers le haut sans recouvrir route/tour VISIBLE (un débordement
+     * hors écran — au-dessus du plateau — est permis, d'où des sapins sur les bords
+     * dont on ne voit pas la cime), sinon un BUISSON bas (monticule/rocher/caillou).
      */
     private drawSnowDecor(rnd: () => number, nearCastle: (x: number, y: number) => boolean) {
+        const inGrid = (x: number, y: number) => x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT
         const isDead = (x: number, y: number) =>
-            y >= TOP_RESERVED_ROWS && x >= 0 && x < GRID_WIDTH && y < GRID_HEIGHT &&
+            y >= TOP_RESERVED_ROWS && inGrid(x, y) &&
             !mapIsCorridor(this.mapDef, x, y) && !mapIsBuildable(this.mapDef, x, y)
+        // Une case "bloque" un sapin si elle est route/constructible ET visible (sur la
+        // grille, hors rangée tampon). Hors grille (au-dessus du plateau) = hors écran = OK.
+        const blocks = (x: number, y: number) =>
+            inGrid(x, y) && y >= TOP_RESERVED_ROWS && (mapIsCorridor(this.mapDef, x, y) || mapIsBuildable(this.mapDef, x, y))
+        // Sapin permis si son débordement (2 cases au-dessus + largeur) ne couvre aucune
+        // case bloquante visible. Sur les bords, le haut sort de l'écran → autorisé.
+        const firSafe = (x: number, y: number) =>
+            !blocks(x, y - 1) && !blocks(x, y - 2) && !blocks(x - 1, y) && !blocks(x + 1, y)
 
         const place = (key: string, cx: number, cy: number, span: number, shadowW: number, byHeight = false) => {
             const sh = this.add.graphics().setDepth(-16)
@@ -1528,58 +1537,30 @@ export class GameScene extends Phaser.Scene {
             img.setScale((CELL_SIZE * span) / (byHeight ? img.height : img.width))
         }
 
-        const used = new Set<string>()
-        const k = (x: number, y: number) => `${x},${y}`
-        const shuffle = (a: { x: number; y: number }[]) => a.sort(() => rnd() - 0.5)
+        const firKeys = ['snow-fir-1', 'snow-fir-2', 'snow-fir-3']
+        const bushKeys = ['snow-mound-1', 'snow-mound-2', 'snow-rock-1', 'snow-pebbles']
+        // Sujets « spéciaux » disséminés parmi les sapins (rares, budget limité).
+        const specials = [{ k: 'snow-column', n: 1 }, { k: 'snow-statue', n: 1 }, { k: 'snow-lantern', n: 2 }, { k: 'snow-bare', n: 4 }]
 
-        const tall: { x: number; y: number }[] = []
-        const flat: { x: number; y: number }[] = []
         for (let x = 0; x < GRID_WIDTH; x++)
             for (let y = TOP_RESERVED_ROWS; y < GRID_HEIGHT; y++) {
                 if (!isDead(x, y) || nearCastle(x, y)) continue
-                flat.push({ x, y })
-                // Grand sujet : les 2 cases AU-DESSUS (débordement vertical du sprite)
-                // ET les cases gauche/droite (largeur) doivent aussi être mortes → ne
-                // recouvre jamais route ni tour, dans aucune direction.
-                if (isDead(x, y - 1) && isDead(x, y - 2) && isDead(x - 1, y) && isDead(x + 1, y)) tall.push({ x, y })
+                const cx = x * CELL_SIZE + CELL_SIZE / 2
+                const cyBase = y * CELL_SIZE + CELL_SIZE + 2
+                if (firSafe(x, y)) {
+                    const sp = specials.find((s) => s.n > 0 && rnd() < 0.06)
+                    if (sp) {
+                        sp.n--
+                        const bare = sp.k === 'snow-bare'
+                        place(sp.k, cx + (rnd() - 0.5) * 4, cyBase, bare ? 1.5 + rnd() * 0.4 : 1.1 + rnd() * 0.2, CELL_SIZE * 0.45, true)
+                    } else {
+                        place(firKeys[Math.floor(rnd() * firKeys.length)], cx + (rnd() - 0.5) * 6, cyBase, 1.5 + rnd() * 0.55, CELL_SIZE * 0.45, true)
+                    }
+                } else {
+                    // Un sapin déborderait sur route/tour ici → buisson bas à la place.
+                    place(bushKeys[Math.floor(rnd() * bushKeys.length)], cx + (rnd() - 0.5) * 8, y * CELL_SIZE + CELL_SIZE * 0.92, 0.5 + rnd() * 0.28, CELL_SIZE * 0.32)
+                }
             }
-        shuffle(tall); shuffle(flat)
-
-        // Grands sujets : c'est une TOUNDRA → beaucoup de sapins (forêt dense),
-        // colonne/statue/lanterne restent rares. Trees adjacents autorisés (forêt),
-        // on saute juste la case déjà prise.
-        const tallKeys = ['snow-fir-1', 'snow-fir-2', 'snow-fir-3', 'snow-fir-1', 'snow-fir-2', 'snow-fir-3', 'snow-bare', 'snow-column', 'snow-statue', 'snow-lantern']
-        let placedTall = 0
-        for (const c of tall) {
-            if (placedTall >= 22) break
-            if (used.has(k(c.x, c.y))) continue
-            const key = tallKeys[Math.floor(rnd() * tallKeys.length)]
-            const isTree = key.startsWith('snow-fir') || key === 'snow-bare'
-            const cx = c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 6
-            const cy = c.y * CELL_SIZE + CELL_SIZE + 2
-            place(key, cx, cy, isTree ? 1.6 + rnd() * 0.5 : 1.1 + rnd() * 0.2, CELL_SIZE * 0.45, true)
-            used.add(k(c.x, c.y)); placedTall++
-        }
-
-        // Rochers enneigés (larges, pas d'occlusion vers le haut) : sur cases mortes libres.
-        const rockKeys = ['snow-rock-1', 'snow-rock-2', 'snow-rock-3', 'snow-rock-4']
-        let placedRock = 0
-        for (const c of flat) {
-            if (placedRock >= 9) break
-            if (used.has(k(c.x, c.y)) || rnd() > 0.5) continue
-            place(rockKeys[Math.floor(rnd() * rockKeys.length)], c.x * CELL_SIZE + CELL_SIZE / 2, c.y * CELL_SIZE + CELL_SIZE - 2, 0.8 + rnd() * 0.3, CELL_SIZE * 0.5)
-            used.add(k(c.x, c.y)); placedRock++
-        }
-
-        // Petit décor semé avec parcimonie : monticules de neige, cailloux, butte de terre.
-        const smallKeys = ['snow-mound-1', 'snow-mound-2', 'snow-pebbles', 'snow-dirt']
-        let placedSmall = 0
-        for (const c of flat) {
-            if (placedSmall >= 18) break
-            if (used.has(k(c.x, c.y)) || rnd() > 0.5) continue
-            place(smallKeys[Math.floor(rnd() * smallKeys.length)], c.x * CELL_SIZE + CELL_SIZE / 2 + (rnd() - 0.5) * 10, c.y * CELL_SIZE + CELL_SIZE * 0.85, 0.4 + rnd() * 0.2, CELL_SIZE * 0.28)
-            used.add(k(c.x, c.y)); placedSmall++
-        }
     }
 
     /** Terrain "cuit" sur un canvas : herbe tuilée partout + chemin de terre serpentin
