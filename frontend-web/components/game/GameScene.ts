@@ -1564,6 +1564,10 @@ export class GameScene extends Phaser.Scene {
                 }
             }
 
+        // Lanterne repère près du château ennemi (à l'entrée, à gauche).
+        const es = this.mapDef.waypoints[0]
+        place('snow-lantern', (es.x + 2.5) * CELL_SIZE, (es.y + 3) * CELL_SIZE, 1.25, CELL_SIZE * 0.45, true)
+
         // LIGNE LIBRE DU HAUT (rangée tampon, y=0) : lisière de sapins dont la cime
         // sort de l'écran (base ancrée au bas de la rangée tampon → seul le pied est
         // visible en haut). Remplit la bande vide tout en haut du plateau.
@@ -1589,33 +1593,41 @@ export class GameScene extends Phaser.Scene {
 
     private drawProceduralRoad() {
         const cc = CELL_SIZE
-        const cells = this.mapDef.path.corridorCells
         const g = this.add.graphics().setDepth(-18)
         let seed = 4242
         const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+        const ctr = (p: { x: number; y: number }) => ({ x: (p.x + 0.5) * cc, y: (p.y + 0.5) * cc })
 
-        // Route ORGANIQUE (esprit du chemin sableux du désert) : des disques qui se
-        // chevauchent le long du couloir → bords ondulés, coins arrondis, AUCUN angle
-        // droit. Rayon un peu jitté pour un tracé irrégulier, pas lisse.
-        for (const c of cells) {
-            g.fillStyle(0x6f5636, 1)
-            g.fillCircle((c.x + 0.5) * cc, (c.y + 0.5) * cc, cc * (0.62 + rnd() * 0.12))
+        // Vraie route : chaque TRONÇON droit = un rectangle épais (bords droits sur les
+        // lignes), et un DISQUE à chaque virage = coin arrondi (aucun angle droit). Les
+        // tronçons partagés entre voies se recouvrent (même couleur) sans jointure visible.
+        const band = (color: number, width: number) => {
+            g.fillStyle(color, 1)
+            for (const lane of this.mapDef.lanes) {
+                for (let i = 0; i < lane.length - 1; i++) {
+                    const a = ctr(lane[i]), b = ctr(lane[i + 1])
+                    const x0 = Math.min(a.x, b.x) - width / 2, x1 = Math.max(a.x, b.x) + width / 2
+                    const y0 = Math.min(a.y, b.y) - width / 2, y1 = Math.max(a.y, b.y) + width / 2
+                    g.fillRect(x0, y0, x1 - x0, y1 - y0)
+                }
+                for (const w of lane) { const c = ctr(w); g.fillCircle(c.x, c.y, width / 2) }
+            }
+            // Aires de croisement : un disque qui élargit la route à ces endroits.
+            for (const wc of this.mapDef.wideSpots) { const c = ctr(wc); g.fillCircle(c.x, c.y, width * 0.62) }
         }
-        // Voie de circulation (centre usé), plus claire, décentrée aléatoirement.
-        for (const c of cells) {
-            g.fillStyle(0x8c6f47, 1)
-            g.fillCircle((c.x + 0.5) * cc + (rnd() - 0.5) * cc * 0.2, (c.y + 0.5) * cc + (rnd() - 0.5) * cc * 0.2, cc * (0.4 + rnd() * 0.1))
-        }
+        band(0x7a5c39, cc * 1.08)   // épaule (terre tassée)
+        band(0x93744c, cc * 0.72)   // voie de circulation, plus claire
+
         // Cailloux / petits éléments semés SUR la route (réalisme, pas lisse) — sous
         // les unités (depth -17). Déterministe.
         const pebbles = ['decor-small-1', 'decor-small-2', 'decor-small-3', 'snow-pebbles']
-        for (const c of cells) {
-            if (rnd() > 0.22) continue
+        for (const c of this.mapDef.path.corridorCells) {
+            if (rnd() > 0.2) continue
             const key = pebbles[Math.floor(rnd() * pebbles.length)]
             const px = (c.x + 0.5) * cc + (rnd() - 0.5) * cc * 0.5
             const py = (c.y + 0.55) * cc + (rnd() - 0.5) * cc * 0.4
             this.add.image(px, py, key).setOrigin(0.5, 0.85).setDepth(-17)
-                .setDisplaySize(cc * (0.24 + rnd() * 0.12), cc * (0.18 + rnd() * 0.1))
+                .setDisplaySize(cc * (0.22 + rnd() * 0.12), cc * (0.17 + rnd() * 0.1))
         }
     }
 
