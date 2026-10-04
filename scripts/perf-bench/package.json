@@ -1,0 +1,13 @@
+{
+  "name": "kcd-perf-bench",
+  "private": true,
+  "type": "module",
+  "description": "Banc de charge de la GameScene (voir README.md)",
+  "scripts": {
+    "bench": "node run.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "playwright-core": "^1.55.0"
+  }
+}
