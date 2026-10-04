@@ -32,9 +32,7 @@ export default function ConfirmDialog({
                 onClick={(e) => e.stopPropagation()}
             >
                 {title && (
-                    <h3 className="text-2xl font-med text-[#ebce8b] mb-2" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>
-                        {title}
-                    </h3>
+                    <h3 className="kcd-title font-med text-2xl mb-3">{title}</h3>
                 )}
                 <p className="text-[#f0e2c4] text-sm leading-relaxed mb-5">{message}</p>
                 <div className="flex gap-3 justify-center">

@@ -623,14 +623,14 @@ export default function GamePage() {
             className="relative h-screen flex flex-col overflow-hidden text-[#f0e2c4] font-pixel p-1.5 md:p-2"
             onPointerDown={() => { audio.resume(); audio.music('game') }} // débloque l'audio + musique de fond au 1er geste
             style={{
-                backgroundImage: "url('/home-bg-alt.jpg')",
+                backgroundImage: "url('/home/war-map.webp')",
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
             }}
         >
             {/* Voile sombre : le décor reste visible en fond mais ne concurrence pas
                 la lisibilité du plateau et du HUD. */}
-            <div className="absolute inset-0 bg-[#160f08]/80" />
+            <div className="absolute inset-0 bg-[#160f08]/70" />
 
             {/* HUD : 3 zones (ressources gauche · vague centre · menu droite) */}
             <div className="relative z-30 kcd-panel-wood ws-game-header flex flex-wrap justify-between items-center gap-x-4 gap-y-1 mb-1.5 shrink-0 py-0.5">
@@ -816,7 +816,7 @@ export default function GamePage() {
                                 </div>
 
                                 {combatRunning && (
-                                    <p className="font-read text-xs text-[#5a3d16] rounded px-2 py-1" style={{ background: '#e6d6ab', borderLeft: '3px solid #8a6a2c' }}>
+                                    <p className="font-read text-xs text-[#5a3d16] rounded px-2 py-1" style={{ background: 'rgba(255, 236, 200, .08)', borderLeft: '3px solid #8a6a2c' }}>
                                         Vague en cours : consultation seulement. Amélioration et ciblage reviennent après le combat.
                                     </p>
                                 )}
@@ -847,12 +847,12 @@ export default function GamePage() {
                                 </div>
 
                                 {(selectedTowerObj.level ?? 1) >= MAX_TOWER_LEVEL ? (
-                                    <div className="rounded px-2 py-1.5 font-read text-xs text-[#3a6a12] text-center font-semibold" style={{ background: '#dff0c8', border: '1px solid #8bbf5a' }}>
+                                    <div className="rounded px-2 py-1.5 font-read text-xs text-[#3a6a12] text-center font-semibold" style={{ background: 'rgba(120, 190, 80, .14)', border: '1px solid #6f9e46' }}>
                                         ✦ Niveau maximum atteint
                                     </div>
                                 ) : (
                                     <>
-                                        <div className="rounded px-2 py-1.5 font-read text-xs text-[#5a3d16]" style={{ background: '#e6d6ab', borderLeft: '3px solid #b08a3c' }}>
+                                        <div className="rounded px-2 py-1.5 font-read text-xs text-[#5a3d16]" style={{ background: 'rgba(255, 236, 200, .08)', borderLeft: '3px solid #b08a3c' }}>
                                             {(selectedTowerObj.level ?? 1) + 1 >= MAX_TOWER_LEVEL
                                                 ? `Niveau ${selectedTowerObj.level ?? 1} → ${MAX_TOWER_LEVEL} : bond décisif de dégâts, portée et solidité.`
                                                 : `Niveau ${selectedTowerObj.level ?? 1} → ${(selectedTowerObj.level ?? 1) + 1} : dégâts, portée et solidité renforcés.`}
@@ -946,12 +946,12 @@ export default function GamePage() {
                         className="kcd-panel-titled font-pixel w-80 max-w-[90vw]"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="kcd-title flex items-center justify-between mb-3">
-                            <h2 className="font-med text-lg flex items-center gap-2">
+                        <div className="relative mb-3">
+                            <h2 className="kcd-title font-med text-lg flex items-center gap-2">
                                 <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 20 }} />
                                 Classement
                             </h2>
-                            <button onClick={() => setShowLeaderboard(false)} aria-label="Fermer">
+                            <button onClick={() => setShowLeaderboard(false)} aria-label="Fermer" className="absolute right-0 top-1/2 -translate-y-1/2">
                                 <img src="/sprites/ui/icon_close.png" alt="Fermer" className="kcd-icon" style={{ height: 18 }} />
                             </button>
                         </div>
@@ -1040,7 +1040,7 @@ export default function GamePage() {
                 <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center font-pixel p-4">
                     <div className="kcd-panel w-[360px] max-w-[92vw] text-center flex flex-col items-center gap-3">
                         <img src="/sprites/ui/icon_defeat.png" alt="" className="kcd-icon" style={{ height: 64 }} />
-                        <h2 className="font-med text-2xl text-[#8a3d12]">Château tombé</h2>
+                        <h2 className="kcd-title font-med text-2xl">Château tombé</h2>
                         <p className="text-sm text-[#4a361a]">
                             Tu as tenu jusqu&apos;à la <b>vague {waveNumber}</b>.
                         </p>

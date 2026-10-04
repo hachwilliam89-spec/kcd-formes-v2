@@ -156,32 +156,37 @@
   --ws-text: #43310f;
   --ws-cream: #f6ead0;
 }
-/* Les cadres ne touchent pas au padding : celui des utilitaires Tailwind (p-5,
-   px-3…) s'applique, et l'épaisseur reste proche des anciens cadres (14-16 px)
-   pour ne pas rogner la place du plateau. */
-.kcd-panel, .kcd-panel-titled {
-  border: 12px solid var(--ws-wood);
-  border-image: url('/ui/panel-parchment.png') 6 fill / 12px / 0 stretch;
-  background-color: var(--ws-parch);
-  background-clip: padding-box;
-  image-rendering: pixelated;
-  color: var(--ws-text);
-}
-/* Variante des grandes occasions (fenêtres) : coins en acier. */
-.ws-panel-ornate { border-width: 22px; border-image: url('/ui/panel-parchment-ornate.png') 11 fill / 22px / 0 stretch; }
-.kcd-panel-wood {
+/* ── Surfaces : trois, pas plus ─────────────────────────────────────────────
+   1. Verre fumé : tout ce qui flotte sur le jeu ou le décor (barres, panneaux,
+      fenêtres) : cadre bois pixel, fond brun translucide et flouté, le champ de
+      bataille reste visible derrière. Opacité ≥ 74 % : le texte reste lisible.
+   2. Parchemin opaque : ce qui doit sauter aux yeux (bulles de conseil, .ws-parchment).
+   3. Étoffe cramoisie : bannières de titre (.ws-banner, .kcd-title) et étendard.
+   Les cadres ne touchent pas au padding : celui des utilitaires Tailwind s'applique. */
+:root { --ws-glass: rgb(30 20 14 / .74); --ws-glass-solid: rgb(30 20 14 / .94); }
+.kcd-panel, .kcd-panel-titled, .kcd-panel-wood {
   border: 12px solid var(--ws-wood);
   border-image: url('/ui/panel-wood.png') 6 / 12px / 0 stretch;
-  background: linear-gradient(135deg, #493126, #30221d);
+  background: var(--ws-glass);
   background-clip: padding-box;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
   image-rendering: pixelated;
   color: var(--ws-cream);
+  box-shadow: 0 4px 0 #24160f40;
 }
-.kcd-title {
-  color: var(--ws-crimson-dark);
-  border-bottom: 2px solid var(--ws-trim);
-  padding-bottom: 6px;
-}
+/* Salons et formulaires : même cadre, fond quasi plein (la lecture d'abord). */
+.ws-panel-ornate, .ws-solid { background: var(--ws-glass-solid); }
+/* Ces panneaux étaient dessinés pour du parchemin clair : leurs bruns de texte et
+   leurs pastilles claires passent en crème et or pâle sur le verre fumé. */
+:where(.kcd-panel, .kcd-panel-titled, .kcd-panel-wood) :is(.text-\[\#43310f\], .text-\[\#4a361a\], .text-\[\#5a3d16\], .text-\[\#5a441c\]) { color: #f1e3c4; }
+:where(.kcd-panel, .kcd-panel-titled, .kcd-panel-wood) :is(.text-\[\#8a6a2c\], .text-\[\#7a5320\]) { color: #cdb27a; }
+:where(.kcd-panel, .kcd-panel-titled, .kcd-panel-wood) :is(.text-\[\#3a7a12\], .text-\[\#3a6a12\]) { color: #9fd86a; }
+:where(.kcd-panel, .kcd-panel-titled, .kcd-panel-wood) .text-\[\#8a3d12\] { color: #f2a37c; }
+:where(.kcd-panel, .kcd-panel-titled, .kcd-panel-wood) .text-yellow-700 { color: var(--ws-gold); }
+:where(.kcd-panel, .kcd-panel-titled, .kcd-panel-wood) :is(.bg-\[\#cdb987\], .bg-\[\#e8d9b0\], .bg-\[\#f5e8c6\]) { background-color: rgb(255 236 200 / .1); }
+:where(.kcd-panel, .kcd-panel-titled, .kcd-panel-wood) :is(.hover\:bg-\[\#d8c79a\]:hover, .bg-\[\#d8c79a\]) { background-color: rgb(255 236 200 / .18); }
+:where(.kcd-panel, .kcd-panel-titled, .kcd-panel-wood) .border-\[\#c9ae76\] { border-color: #6d5434; }
 /* Bannière rouge (titres) : extrémités repliées fixes, milieu étiré. */
 .ws-banner {
   display: inline-flex; align-items: center; justify-content: center;
@@ -214,7 +219,8 @@
 .kcd-btn:disabled { filter: grayscale(.7) brightness(.85); cursor: not-allowed; }
 /* Hiérarchie : doré = action principale, acier = navigation, rouge = destructif, parchemin = secondaire. */
 .kcd-btn--primary { border-image-source: url('/ui/btn-gold.png'); color: #3b2a10; text-shadow: 0 1px 0 #fff3c4; }
-.kcd-btn--nav     { border-width: 8px; padding: 2px 10px; border-image: url('/ui/btn-steel.png') 4 fill / 8px / 0 stretch; color: #f0f4f8; text-shadow: 0 2px 0 #515f6b; }
+/* Navigation : bois, comme le bouton de base (plus de bleu acier, seule teinte froide). */
+.kcd-btn--nav     { border-image-source: url('/ui/btn-wood.png'); color: var(--ws-parch); text-shadow: 0 2px 0 var(--ws-wood); }
 .kcd-btn--danger  { border-width: 8px; padding: 2px 10px; border-image: url('/ui/btn-red.png') 4 fill / 8px / 0 stretch; color: var(--ws-parch); text-shadow: 0 2px 0 #8e3f38; }
 .kcd-btn--info    { border-width: 8px; padding: 2px 10px; border-image: url('/ui/btn-parchment.png') 4 fill / 8px / 0 stretch; color: var(--ws-text); text-shadow: none; }
 :where(button, a, input, select, textarea):focus-visible { outline: 3px solid var(--ws-gold); outline-offset: 2px; }
@@ -359,12 +365,40 @@
 /* Signature commune aux salons, dialogues et barres de jeu. */
 .kcd-btn { font-weight: 600; line-height: 1.3; }
 .kcd-btn.font-med { font-family: var(--font-geist-sans), sans-serif; font-weight: 600; }
-.kcd-panel, .kcd-panel-titled, .kcd-panel-wood { box-shadow: 0 4px 0 #24160f40; }
-.kcd-title { letter-spacing: .01em; }
+/* Parchemin : feuille opaque roulée en haut et en bas (bulles de conseil). */
+.ws-parchment {
+  position: relative; padding: 20px 18px 18px;
+  background: linear-gradient(90deg, #ead3a0 0 6px, #f7e8c4 6px calc(100% - 6px), #ead3a0 calc(100% - 6px));
+  border-inline: 3px solid var(--ws-ink);
+  color: var(--ws-text);
+  filter: drop-shadow(0 6px 0 #00000059);
+}
+.ws-parchment::before, .ws-parchment::after {
+  content: ''; position: absolute; left: -12px; right: -12px; height: 18px;
+  border: 3px solid var(--ws-ink);
+  background: linear-gradient(#fff4d8 0 3px, #edd4a2 3px 9px, #c99a5a 9px);
+}
+.ws-parchment::before { top: -12px; }
+.ws-parchment::after { bottom: -12px; }
+.ws-parchment-kind { display: inline-block; margin-bottom: 6px; padding: 1px 8px; font-size: 12px; font-weight: 700; color: var(--ws-parch); background: var(--ws-crimson); border: 2px solid var(--ws-ink); }
+.ws-parchment-tip { position: absolute; left: 40px; bottom: -26px; width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 14px solid var(--ws-ink); }
+
+/* Titres de fenêtre : sur la bannière cramoisie, centrés. */
+.kcd-title {
+  width: fit-content; max-width: 100%; margin-inline: auto;
+  border-style: solid;
+  border-width: 14px 36px 12px;
+  border-image: url('/ui/banner-crimson.svg') 10 32 8 32 fill / 14px 36px 12px / 0 stretch;
+  image-rendering: pixelated;
+  padding: 0 4px;
+  font-family: var(--font-hero), serif; font-weight: 800; line-height: 1.15; text-align: center;
+  color: var(--ws-parch);
+  text-shadow: 0 2px 0 var(--ws-crimson-dark);
+}
 .ws-page-heading { display: flex; align-items: center; gap: 12px; }
 .ws-page-heading::before { content: '◆'; font-family: serif; font-size: 12px; color: var(--ws-trim); }
 .ws-lobby { padding: 16px; }
-.ws-lobby .kcd-title { padding-bottom: 12px; margin-bottom: 18px; }
+.ws-lobby .kcd-title { margin-bottom: 18px; }
 .ws-lobby input { min-width: 0; }
 .ws-lobby .war-map-desc { font-size: 12px; }
 .ws-lobby .war-map-name { font-size: 21px; }

@@ -148,9 +148,9 @@ export default function CoopPage() {
         <div
             className="relative h-screen flex flex-col overflow-hidden text-[#f0e2c4] font-pixel p-2 md:p-3"
             onPointerDown={() => audio.resume()}
-            style={{ backgroundImage: "url('/home-bg-alt.jpg')", backgroundSize: 'cover', backgroundPosition: 'center' }}
+            style={{ backgroundImage: "url('/home/war-map.webp')", backgroundSize: 'cover', backgroundPosition: 'center' }}
         >
-            <div className="absolute inset-0 bg-[#160f08]/85" />
+            <div className="absolute inset-0 bg-[#160f08]/70" />
 
             {/* ---- HUD : 3 zones (ressources · vague · équipe + menu) ---- */}
             <div className="relative z-10 kcd-panel-wood ws-game-header flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-2 shrink-0 py-1">
