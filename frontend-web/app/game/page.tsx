@@ -18,7 +18,7 @@ import { UnitChip } from '@/components/game/UnitChip'
 import { TowerIcon, EnemyIcon } from '@/components/game/UnitIcon'
 import { audio } from '@/lib/audio'
 import {
-    ENEMY_TUTORIAL, TOWER_TUTORIAL, FEATURE_TUTORIAL, getSeenTutorials, markTutorialSeen, resetTutorial,
+    ENEMY_TUTORIAL, TOWER_TUTORIAL, FEATURE_TUTORIAL, getSeenTutorials, markTutorialSeen,
     isTutorialEnabled, setTutorialEnabled,
     type TutorialEntry, type TutorialKind,
 } from '@/components/game/tutorial'
@@ -267,7 +267,7 @@ export default function GamePage() {
             setTutorialEnabled(player?.username ?? '', false)
             setTutorialOn(false)
             setTutorialQueue([])
-            setMessage('Conseils désactivés — réactivables avec le bouton « Conseils ».')
+            setMessage('Conseils désactivés — réactivables avec le bouton « Tuto ».')
         } else {
             setTutorialQueue((queue) => queue.slice(1))
         }
@@ -279,7 +279,7 @@ export default function GamePage() {
         setTutorialEnabled(player?.username ?? '', next)
         setTutorialOn(next)
         if (!next) setTutorialQueue([])
-        setMessage(next ? 'Conseils réactivés.' : 'Conseils désactivés — réactivables avec le bouton « Conseils ».')
+        setMessage(next ? 'Conseils réactivés.' : 'Conseils désactivés — réactivables avec le bouton « Tuto ».')
     }
 
     // Réglage relu une fois le pseudo connu (localStorage, côté client uniquement).
@@ -347,10 +347,10 @@ export default function GamePage() {
         if (type !== 'WALL' && inCorridor) {
             return fail('Pas sur le couloir', 'Impossible de construire une tour sur le couloir des ennemis')
         }
-        // Bande constructible : les tours ne se posent qu'au bord des routes. Loin
-        // des routes = zone morte (décor).
+        // Bande constructible : les tours ne se posent qu'au bord des routes. Le reste
+        // (décor, arbres, eau…) : « Impossible », qui couvre tous les cas.
         if (type !== 'WALL' && !mapIsBuildable(mapDef, x, y)) {
-            return fail('Trop loin des routes', 'Trop loin des routes — construis en bordure (le reste est du décor)')
+            return fail('Impossible', 'Impossible de construire ici')
         }
         if (gold < cost) return fail(`Or insuffisant (${cost})`, `Or insuffisant : il faut ${cost} or (tu en as ${gold}).`)
         return { ok: true, cost }
@@ -585,24 +585,21 @@ export default function GamePage() {
         }
         return (
             <div
-                className="min-h-screen flex items-center justify-center p-4 text-[#f0e2c4] font-pixel"
-                style={{ backgroundImage: "url('/home-bg-alt.jpg')", backgroundSize: 'cover', backgroundPosition: 'center' }}
+                className="relative min-h-screen flex items-center justify-center p-4 text-[#f0e2c4] font-pixel"
+                style={{ backgroundImage: "url('/home/war-map.webp')", backgroundSize: 'cover', backgroundPosition: 'center', imageRendering: 'pixelated' }}
                 onPointerDown={() => { audio.resume(); audio.music('menu') }}
             >
-                <div className="absolute inset-0 bg-[#160f08]/85" />
-                <div className="relative z-10 kcd-panel-wood max-w-2xl w-full p-5 md:p-6 flex flex-col gap-4">
-                    <div className="flex items-center justify-between gap-3">
-                        <h1 className="text-2xl md:text-3xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>
-                            Choisis ta carte
-                        </h1>
+                <div className="absolute inset-0 bg-[#160f08]/75" />
+                <div className="relative z-10 kcd-panel-wood w-full max-w-2xl lg:max-w-6xl p-4 md:p-6 flex flex-col gap-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <h1 className="ws-banner ws-title-banner">Choisis ton royaume</h1>
                         <button onClick={() => router.push('/')} className="kcd-btn kcd-btn--nav text-xs py-1 px-2">← Menu</button>
                     </div>
-                    <p className="text-sm text-[#e9d9b0]">Chaque carte a son propre tracé — adapte ta défense au chemin.</p>
                     <MapSelector value={pendingMapId} onChange={setPendingMapId} disabled={loading} />
                     <button
                         onClick={startGame}
                         disabled={loading}
-                        className="kcd-btn font-med text-lg py-2 disabled:opacity-50"
+                        className="kcd-btn kcd-btn--primary font-med text-lg py-2 px-10 self-center min-w-[280px] disabled:opacity-50"
                     >
                         {loading ? 'Création…' : '⚔ Commencer la partie'}
                     </button>
@@ -638,7 +635,7 @@ export default function GamePage() {
             <div className="relative z-30 kcd-panel-wood flex flex-wrap justify-between items-center gap-x-4 gap-y-1 mb-1.5 shrink-0 py-0.5">
                 {/* Gauche : titre + ressources */}
                 <div className="flex items-center gap-3">
-                    <h1 className="text-lg md:text-2xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>KCD Formes v2</h1>
+                    <h1 className="text-lg md:text-2xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>4 War Seasons</h1>
                     <span className="flex items-center gap-1 text-yellow-300 font-med text-xl">
                         <img src="/sprites/ui/icon_gold.png" alt="or" className="kcd-icon" /> {gold}
                     </span>
@@ -660,10 +657,10 @@ export default function GamePage() {
                         <img src="/sprites/ui/icon_star_gold.png" alt="" aria-hidden className="kcd-icon" style={{ height: 14 }} />
                         {player?.username}
                     </span>
-                    <button onClick={() => router.push('/coop')} className="kcd-btn kcd-btn--nav text-xs py-1 px-2">🤝 Coop</button>
-                    <button onClick={() => router.push('/versus')} className="kcd-btn kcd-btn--nav text-xs py-1 px-2">⚔ Versus</button>
+                    <button onClick={() => router.push('/coop')} className="kcd-btn kcd-btn--nav text-xs py-1 px-2" title="Coop" aria-label="Coop">🤝<span className="hidden xl:inline"> Coop</span></button>
+                    <button onClick={() => router.push('/versus')} className="kcd-btn kcd-btn--nav text-xs py-1 px-2" title="Versus" aria-label="Versus">⚔<span className="hidden xl:inline"> Versus</span></button>
                     <AudioControls />
-                    <button onClick={handleLogout} className="kcd-btn kcd-btn--danger text-xs py-1 px-2">⏻ Déconnexion</button>
+                    <button onClick={handleLogout} className="kcd-btn kcd-btn--danger text-xs py-1 px-2" title="Déconnexion" aria-label="Déconnexion">⏻<span className="hidden xl:inline"> Déconnexion</span></button>
                 </div>
             </div>
 
@@ -686,10 +683,13 @@ export default function GamePage() {
                     </div>
 
 
-                    {/* Barre d'action : tours en tuiles + actions (JUSTE sous la grille en étroit) */}
-                    <div className="kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-1">
-                        <span className="font-med text-sm text-[#e9d9b0] w-16 shrink-0">Tours</span>
-                        <div className="flex flex-wrap gap-1.5">
+                    {/* Barre d'action : tours en tuiles + actions (JUSTE sous la grille en étroit).
+                        Sur une seule ligne dès que possible : chaque ligne en plus est prise
+                        sur la hauteur du plateau. Les actions secondaires sont en icônes
+                        (libellé affiché sur très grand écran, infobulle sinon). */}
+                    <div className="kcd-panel-wood shrink-0 flex items-center gap-x-3 gap-y-1.5 flex-wrap py-1">
+                        <span className="font-med text-sm text-[#e9d9b0] shrink-0 hidden 2xl:inline">Tours</span>
+                        <div className="flex flex-wrap gap-1">
                             {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(([type, info], i) => {
                                 const locked = bestWave < info.unlockWave
                                 return (
@@ -709,33 +709,22 @@ export default function GamePage() {
                                 )
                             })}
                         </div>
-                        <div className="ml-auto flex items-center gap-2">
+                        <div className="ml-auto flex items-center gap-1.5">
                             {leaderboard && leaderboard.top.length > 0 && (
-                                <button onClick={() => setShowLeaderboard(true)} className="kcd-btn kcd-btn--info text-xs py-1 px-2 flex items-center gap-1">
-                                    <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 14 }} /> Classement
+                                <button onClick={() => setShowLeaderboard(true)} className="kcd-btn kcd-btn--info text-xs py-1 px-2 flex items-center gap-1" title="Classement" aria-label="Classement">
+                                    <img src="/sprites/ui/icon_trophy.png" alt="" className="kcd-icon" style={{ height: 14 }} />
+                                    <span className="hidden 2xl:inline">Classement</span>
                                 </button>
                             )}
+                            {/* Tuto : active / coupe les bulles de conseils (grisé quand coupé). */}
                             <button
                                 onClick={toggleTutorial}
                                 className="kcd-btn kcd-btn--info text-xs py-1 px-2"
                                 title={tutorialOn ? 'Couper les bulles de conseils' : 'Réactiver les bulles de conseils'}
                                 aria-pressed={tutorialOn}
+                                style={tutorialOn ? undefined : { filter: 'grayscale(1)', opacity: 0.75 }}
                             >
-                                💡 Conseils : {tutorialOn ? 'oui' : 'non'}
-                            </button>
-                            <button
-                                onClick={() => {
-                                    const username = player?.username ?? ''
-                                    resetTutorial(username)
-                                    setTutorialEnabled(username, true)
-                                    setTutorialOn(true)
-                                    setMessage('Conseils réinitialisés — ils réapparaîtront au fil de la partie.')
-                                }}
-                                className="kcd-btn kcd-btn--info text-xs py-1 px-2"
-                                title="Revoir tous les conseils depuis le début"
-                                aria-label="Revoir tous les conseils"
-                            >
-                                ↻
+                                💡 Tuto
                             </button>
                             {!isGameOver && (
                                 <button
@@ -743,20 +732,18 @@ export default function GamePage() {
                                     disabled={combatRunning || loading}
                                     className="kcd-btn kcd-btn--danger text-xs py-1 px-2 disabled:opacity-50"
                                 >
-                                    ↻ Nouvelle partie
+                                    ⟲ New Game
                                 </button>
                             )}
                             {wavePreview && !isGameOver && (
                                 /* Prochaine vague : types présents (pas les effectifs), nouveautés
-                                   cerclées d'or, et alerte texte si nouvelle menace ou Boss. */
+                                   cerclées d'or (nom dans l'infobulle, en clair sur très grand
+                                   écran) et alerte Boss. Le numéro est sur le bouton de lancement. */
                                 <div
-                                    className="flex items-center gap-1.5 px-2 py-0.5 rounded"
+                                    className="flex items-center gap-1 px-1.5 py-0.5 rounded"
                                     style={{ background: 'rgba(0,0,0,.35)', border: '1px solid #6b4a24' }}
                                     aria-label={`Prochaine vague (${wavePreview.waveNumber}) : ${wavePreview.enemyTypes.map((t) => ENEMY_TUTORIAL[t]?.title ?? t).join(', ')}`}
                                 >
-                                    <span className="font-read text-[11px] leading-tight text-[#e9d9b0] text-center">
-                                        Vague<br />{wavePreview.waveNumber}
-                                    </span>
                                     {wavePreview.enemyTypes.map((type) => {
                                         // Vague 1 : tout est « nouveau », le signaler n'apprend rien.
                                         const isNew = wavePreview.waveNumber > 1 && wavePreview.newEnemyTypes.includes(type)
@@ -774,10 +761,10 @@ export default function GamePage() {
                                     })}
                                     {wavePreview.bossWave ? (
                                         <span className="font-read text-[11px] font-bold px-1.5 py-0.5 rounded-sm text-white" style={{ background: '#b91c1c' }}>
-                                            ☠ Boss !
+                                            ☠ Boss
                                         </span>
                                     ) : wavePreview.newEnemyTypes.length > 0 && wavePreview.waveNumber > 1 && (
-                                        <span className="font-read text-[11px] font-bold px-1.5 py-0.5 rounded-sm text-[#3a2a10]" style={{ background: '#f2c94c' }}>
+                                        <span className="hidden 2xl:inline font-read text-[11px] font-bold px-1.5 py-0.5 rounded-sm text-[#3a2a10]" style={{ background: '#f2c94c' }}>
                                             Nouveau : {wavePreview.newEnemyTypes.map((t) => ENEMY_TUTORIAL[t]?.title ?? t).join(', ')}
                                         </span>
                                     )}
@@ -786,9 +773,15 @@ export default function GamePage() {
                             <button
                                 onClick={handleStartWave}
                                 disabled={loading || isGameOver || combatRunning || awaitingBonusChoice}
-                                className="kcd-btn kcd-btn--primary font-med text-base py-2 px-5 disabled:opacity-50"
+                                className="kcd-btn kcd-btn--primary font-med text-base py-2 px-3 disabled:opacity-50 whitespace-nowrap"
+                                aria-label={awaitingBonusChoice ? 'Choisis un bonus' : `Lancer la vague ${wavePreview?.waveNumber ?? waveNumber + 1}`}
                             >
-                                {awaitingBonusChoice ? '★ Choisis un bonus' : '⚔ Lancer la vague'}
+                                {/* Libellé court entre 1024 et 1280 px : la barre tient sur une ligne. */}
+                                {awaitingBonusChoice ? (
+                                    <>★ <span className="hidden xl:inline">Choisis un </span>bonus</>
+                                ) : (
+                                    <>⚔ <span className="hidden xl:inline">Lancer la </span>vague {wavePreview?.waveNumber ?? waveNumber + 1}</>
+                                )}
                             </button>
                         </div>
                     </div>
@@ -797,7 +790,7 @@ export default function GamePage() {
                     {/* En fenêtre étroite : le panneau stats/évolution est masqué (le plateau
                         garderait sinon une taille minuscule). La carte d'amélioration, elle,
                         reste visible même en petit car on en a besoin pour améliorer une tour. */}
-                    <aside className={`w-full lg:w-64 shrink-0 min-h-0 overflow-y-auto max-h-[38vh] lg:max-h-none flex-col gap-3 ${selectedTowerObj && canInspect ? 'flex' : 'hidden lg:flex'}`}>
+                    <aside className={`w-full lg:w-56 xl:w-64 shrink-0 min-h-0 overflow-y-auto max-h-[38vh] lg:max-h-none flex-col gap-3 ${selectedTowerObj && canInspect ? 'flex' : 'hidden lg:flex'}`}>
                         {selectedTowerObj && canInspect && (
                             /* Carte d'évolution de la tour cliquée : niveau, amélioration,
                                aperçu du prochain niveau, priorité de tir. Pendant une vague :

@@ -125,7 +125,7 @@ export default function CoopPage() {
         const inCorridor = mapIsCorridor(mapDef, x, y)
         if (selectedTower === 'WALL' && !inCorridor) { setNotice('Le mur se pose sur le couloir des ennemis.'); return }
         if (selectedTower !== 'WALL' && inCorridor) { setNotice('Impossible de poser une tour sur le couloir.'); return }
-        if (selectedTower !== 'WALL' && !inCorridor && !mapIsBuildable(mapDef, x, y)) { setNotice('Trop loin des routes — construis en bordure (décor).'); return }
+        if (selectedTower !== 'WALL' && !inCorridor && !mapIsBuildable(mapDef, x, y)) { setNotice('Impossible de construire ici.'); return }
         const cost = TOWERS.find((t) => t.type === selectedTower)?.cost ?? 0
         if ((hud?.gold ?? 0) < cost) { setNotice(`Or insuffisant : il faut ${cost} or.`); return }
         actions.placeTower(selectedTower, x, y)
@@ -191,7 +191,7 @@ export default function CoopPage() {
             {/* ---- LOBBY ---- */}
             {!running && (
                 <div className="relative z-10 flex-1 min-h-0 flex items-center justify-center overflow-y-auto">
-                    <div className="kcd-panel-titled w-[440px] max-w-[94vw]">
+                    <div className="kcd-panel-titled w-[640px] max-w-[94vw]">
                         <h2 className="kcd-title font-med text-center text-xl mb-4">Jouer à deux</h2>
 
                         {!match && (
@@ -205,7 +205,7 @@ export default function CoopPage() {
                                     <p className="text-[11px] text-[#8a6a2c] text-center">Carte de la partie</p>
                                     <MapSelector value={pendingMapId} onChange={setPendingMapId} disabled={!connected} />
                                 </div>
-                                <button onClick={() => actions.create(pendingMapId)} disabled={!connected} className="kcd-btn font-med text-lg py-2 disabled:opacity-50">
+                                <button onClick={() => actions.create(pendingMapId)} disabled={!connected} className="kcd-btn kcd-btn--primary font-med text-lg py-2 disabled:opacity-50">
                                     Créer une partie
                                 </button>
                                 <div className="flex items-center gap-2 text-[#8a6a2c] text-xs">
@@ -217,7 +217,7 @@ export default function CoopPage() {
                                         onChange={(e) => setCode(e.target.value.toUpperCase())}
                                         placeholder="CODE"
                                         maxLength={6}
-                                        className="flex-1 px-3 py-2 rounded bg-[#f5e8c6] text-[#43310f] text-center tracking-widest font-med uppercase"
+                                        className="war-input flex-1 min-w-0 text-center tracking-widest uppercase"
                                     />
                                     <button onClick={() => actions.join(code)} disabled={!connected || code.length < 4} className="kcd-btn px-4 disabled:opacity-50">
                                         Rejoindre

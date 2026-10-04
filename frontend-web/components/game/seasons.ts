@@ -90,9 +90,12 @@ export const FOG_CYCLE: Cell[][] = [
 ]
 export const fogCellsFor = (wave: number): Cell[] => (wave >= 1 ? FOG_CYCLE[(wave - 1) % FOG_CYCLE.length] : [])
 
-export const MAP_THEMES: Record<string, { season: string; ground: string; road: string; accent: string; challenge: string }> = {
-    desert: { season: 'Été', ground: '#8b734c', road: '#dbbd7d', accent: '#f1d484', challenge: 'Un long parcours pour maîtriser votre défense.' },
-    fourche: { season: 'Hiver', ground: '#667f87', road: '#e0edf0', accent: '#bedfe9', challenge: 'Trois branches à couvrir autour du château.' },
-    spring: { season: 'Printemps', ground: '#405c3c', road: '#c9b68b', accent: '#bce5c0', challenge: 'Château au cœur du lac, attaqué des deux côtés par ses deux ponts. Crue aux vagues 3, 6, 9…, sur des berges qui changent : leurs tours ne tirent plus. Parfois la grêle : ennemis +25 % de dégâts subis.' },
-    autumn: { season: 'Automne', ground: '#715039', road: '#c89c68', accent: '#f3bd75', challenge: 'Un raccourci coupe le serpentin. La boue ralentit les ennemis (pas les Trolls ni les boss), la brume coûte 1 case de portée : toutes deux changent de place à chaque vague.' },
+/** Difficulté affichée au choix de la carte : 1 abordable, 2 rude, 3 redoutable. */
+export type MapDifficulty = 1 | 2 | 3
+
+export const MAP_THEMES: Record<string, { season: string; ground: string; road: string; accent: string; challenge: string; difficulty: MapDifficulty }> = {
+    desert: { season: 'Été', ground: '#8b734c', road: '#dbbd7d', accent: '#f1d484', difficulty: 1, challenge: 'Un long serpentin, parfait pour apprendre à défendre.' },
+    fourche: { season: 'Hiver', ground: '#667f87', road: '#e0edf0', accent: '#bedfe9', difficulty: 2, challenge: 'Trois chemins se rejoignent devant ton château.' },
+    spring: { season: 'Printemps', ground: '#405c3c', road: '#c9b68b', accent: '#bce5c0', difficulty: 3, challenge: 'Ton château au milieu du lac, assiégé par deux ponts.' },
+    autumn: { season: 'Automne', ground: '#715039', road: '#c89c68', accent: '#f3bd75', difficulty: 2, challenge: 'Un raccourci, de la boue et de la brume qui changent à chaque vague.' },
 }
