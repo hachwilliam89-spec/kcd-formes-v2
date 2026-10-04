@@ -10,6 +10,12 @@ interface GameCanvasProps {
     // Type de tour sélectionné → aperçu de pose (case verte/rouge + cercle de
     // portée) qui suit le curseur. null = aucun aperçu (ex. pendant le combat).
     selectedTower?: string | null
+    // Tour posée sélectionnée (id) : coins dorés + portée réelle sur le plateau,
+    // même sélection que la carte de tour du panneau. null = aucune.
+    selectedTowerId?: string | null
+    // Inspection des tours posées au survol (éclaircie + cadre + portée). La page
+    // la coupe quand un clic sur une tour ne ferait rien (combat, fin de partie).
+    inspectEnabled?: boolean
     // Map active (tracé + biome). Changer de map = remonter le canvas (key côté page).
     mapId?: string | null
 }
@@ -26,7 +32,7 @@ export interface GameCanvasHandle {
 }
 
 const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCanvas(
-    { towers, onCellClick, selectedTower = null, mapId = null },
+    { towers, onCellClick, selectedTower = null, selectedTowerId = null, inspectEnabled = false, mapId = null },
     ref
 ) {
     const gameRef = useRef<Phaser.Game | null>(null)
@@ -82,6 +88,16 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
     useEffect(() => {
         sceneRef.current?.setBuildPreview(selectedTower)
     }, [selectedTower])
+
+    // Survol / sélection des tours posées. Appelables avant la fin du boot : la
+    // scène mémorise l'état et le dessine dès que ses calques existent.
+    useEffect(() => {
+        sceneRef.current?.setTowerInspect(inspectEnabled)
+    }, [inspectEnabled])
+
+    useEffect(() => {
+        sceneRef.current?.setSelectedTower(selectedTowerId)
+    }, [selectedTowerId])
 
     useImperativeHandle(ref, () => ({
         playWave: (ticks, onTick, onComplete, unseenEnemyTypes, onNeedTutorial) => {

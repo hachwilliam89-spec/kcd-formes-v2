@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useGame } from '@/hooks/useGame'
 import { useAuth } from '@/hooks/useAuth'
 import type { TowerData } from '@/components/game/GameScene'
-import { TOP_RESERVED_ROWS } from '@/components/game/constants'
+import { TOP_RESERVED_ROWS, TOWER_BASE_RANGE, towerRangeAt } from '@/components/game/constants'
 import { getMapDef, mapIsCorridor, mapIsBuildable, GAME_MAPS } from '@/components/game/maps'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
 import MapSelector from '@/components/game/MapSelector'
@@ -61,23 +61,23 @@ const TOWER_ROLE: Record<TowerType, string> = {
     WALL: 'Barrage sur le couloir : bloque les ennemis.',
 }
 
-// Stats de base des tours (miroir de TowerType côté backend : baseDamage, baseRange).
+// Stats de base des tours (miroir de TowerType côté backend : baseDamage ; la
+// portée vient de constants.ts, partagée avec les cercles de portée du plateau).
 // cadence = descripteur de vitesse de tir (miroir qualitatif de attackSpeed :
 // ARCHER 0.6, CATAPULT 0.1, BALLISTA 0.12 ; MAGE applique ses dégâts en continu).
 // hp = PV de structure au niveau 1 (miroir de Tower.getMaxHp : structureHp sinon baseCost×3).
 const TOWER_STATS: Record<TowerType, { damage: number; range: number; kind: string; cadence: string; hp: number }> = {
-    ARCHER:   { damage: 12,  range: 3.0, kind: 'Monocible',            cadence: 'Rapide',   hp: 150 },
-    MAGE:     { damage: 11,  range: 2.5, kind: 'Continu · magique',    cadence: 'Continue', hp: 300 },
-    CATAPULT: { damage: 40,  range: 4.0, kind: 'Zone (AoE)',           cadence: 'Lente',    hp: 450 },
-    BALLISTA: { damage: 110, range: 5.0, kind: 'Monocible · anti-gros', cadence: 'Lente',   hp: 600 },
-    WALL:     { damage: 0,   range: 0,   kind: 'Barrage',              cadence: '—',        hp: 450 },
+    ARCHER:   { damage: 12,  range: TOWER_BASE_RANGE.ARCHER, kind: 'Monocible',            cadence: 'Rapide',   hp: 150 },
+    MAGE:     { damage: 11,  range: TOWER_BASE_RANGE.MAGE, kind: 'Continu · magique',    cadence: 'Continue', hp: 300 },
+    CATAPULT: { damage: 40,  range: TOWER_BASE_RANGE.CATAPULT, kind: 'Zone (AoE)',           cadence: 'Lente',    hp: 450 },
+    BALLISTA: { damage: 110, range: TOWER_BASE_RANGE.BALLISTA, kind: 'Monocible · anti-gros', cadence: 'Lente',   hp: 600 },
+    WALL:     { damage: 0,   range: TOWER_BASE_RANGE.WALL, kind: 'Barrage',              cadence: '—',        hp: 450 },
 }
 // Montée en puissance par niveau (miroir de Tower.getDamage/getRange/getMaxHp).
 const dmgMult = (lvl: number) => (lvl >= 3 ? 2.6 : 1 + (lvl - 1) * 0.6)   // 1.0 / 1.6 / 2.6
-const rangeBonus = (lvl: number) => (lvl >= 3 ? 0.9 : (lvl - 1) * 0.35)   // +0 / +0.35 / +0.9
 const hpMult = (lvl: number) => (lvl >= 3 ? 2.2 : 1 + (lvl - 1) * 0.5)    // 1.0 / 1.5 / 2.2
 const towerDamage = (type: TowerType, lvl: number) => Math.floor(TOWER_STATS[type].damage * dmgMult(lvl))
-const towerRange = (type: TowerType, lvl: number) => Math.round((TOWER_STATS[type].range + rangeBonus(lvl)) * 10) / 10
+const towerRange = (type: TowerType, lvl: number) => Math.round(towerRangeAt(type, lvl) * 10) / 10
 const towerHp = (type: TowerType, lvl: number) => Math.round(TOWER_STATS[type].hp * hpMult(lvl))
 
 // Modes de ciblage (voir backend TargetingMode) : libellés courts + explication.
@@ -86,6 +86,20 @@ const TARGETING_MODES: { mode: 'CLOSEST' | 'FIRST' | 'STRONGEST'; label: string;
     { mode: 'FIRST', label: 'Le plus avancé', hint: "Vise celui le plus près du château — stoppe les fuyards" },
     { mode: 'STRONGEST', label: 'Le plus solide', hint: "Vise le plus de PV — concentre le feu sur les élites" },
 ]
+
+// Repère de sélection : les mêmes coins dorés que sur le plateau (voir
+// GameScene.drawSelectionCorners) → la carte se relie à SA tour d'un coup d'œil.
+function SelectionCorners() {
+    const corner = 'pointer-events-none absolute w-2 h-2 border-[#c9971c]'
+    return (
+        <>
+            <span className={`${corner} top-0 left-0 border-t-2 border-l-2`} />
+            <span className={`${corner} top-0 right-0 border-t-2 border-r-2`} />
+            <span className={`${corner} bottom-0 left-0 border-b-2 border-l-2`} />
+            <span className={`${corner} bottom-0 right-0 border-b-2 border-r-2`} />
+        </>
+    )
+}
 
 export default function GamePage() {
     const router = useRouter()
@@ -495,7 +509,13 @@ export default function GamePage() {
                     Grand écran → panneau stats/évolution à droite. */}
                 <div className="flex-1 min-h-0 flex flex-col gap-1.5 min-w-0">
                     <div className="relative w-full flex-1 min-w-0 min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
-                        <GameCanvas key={mapId} mapId={mapId} ref={canvasRef} towers={towers} onCellClick={handleCellClick} selectedTower={canAct ? selectedTower : null} />
+                        <GameCanvas
+                            key={mapId} mapId={mapId} ref={canvasRef} towers={towers} onCellClick={handleCellClick}
+                            selectedTower={canAct ? selectedTower : null}
+                            // Même visibilité que la carte de tour : masquée pendant le combat.
+                            selectedTowerId={canAct ? selectedTowerId : null}
+                            inspectEnabled={canAct}
+                        />
                     </div>
 
                     {/* Barre d'action : tours en tuiles + actions (JUSTE sous la grille en étroit) */}
@@ -562,7 +582,10 @@ export default function GamePage() {
                             <div className="kcd-panel flex flex-col gap-3">
                                 <div className="flex justify-between items-center">
                                     <span className="flex items-center gap-2 font-med text-base text-[#43310f]">
-                                        <TowerIcon type={selectedTowerObj.type} size={22} />
+                                        <span className="relative inline-flex p-1">
+                                            <TowerIcon type={selectedTowerObj.type} size={22} />
+                                            <SelectionCorners />
+                                        </span>
                                         {TOWER_INFO[selectedTowerObj.type].label}
                                     </span>
                                     <button onClick={() => setSelectedTowerId(null)} aria-label="Fermer">

@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import type { Cell } from './constants'
-import { TOP_RESERVED_ROWS } from './constants'
+import { TOP_RESERVED_ROWS, towerRangeAt } from './constants'
 import { GAME_MAPS, DEFAULT_MAP_ID, getMapDef, mapIsCorridor, mapIsBuildable, mapPathDir, mapLaneStarts, mapCastle } from './maps'
 import { audio, Sfx } from '@/lib/audio'
 
@@ -115,11 +115,35 @@ const TOWER_COLORS: Record<string, number> = {
     WALL: 0x78716c,     // pierre — structure passive, volontairement terne
 }
 
-// Portée de chaque tour (cases), reprise de TowerType.baseRange côté backend :
-// sert au cercle de portée de l'aperçu de pose (voir setBuildPreview). 0 = mur.
-const TOWER_RANGE: Record<string, number> = {
-    ARCHER: 3.0, MAGE: 2.5, CATAPULT: 4.0, BALLISTA: 5.0, WALL: 0,
+// Largeur affichée des tours, en cases (la hauteur suit les proportions du
+// sprite). < 1 : la silhouette tient dans SA case avec ~2 px de marge de chaque
+// côté → deux tours voisines ne se chevauchent plus et on voit d'un coup d'œil
+// quelle case appartient à quelle tour. Elles ne débordent que vers le haut, où
+// le tri par profondeur (unitDepth) fait passer le premier plan devant.
+// Réglable par modèle (avant : 1.25 pour toutes → débord sur les voisines).
+const TOWER_WIDTH: Record<string, number> = {
+    ARCHER: 0.9, MAGE: 0.9, CATAPULT: 0.9, BALLISTA: 0.9,
 }
+const DEFAULT_TOWER_WIDTH = 0.9
+// Mur : barricade centrée et orientée sur le couloir (pas une tour) — inchangé.
+const WALL_WIDTH = 1.3
+
+// Profondeurs d'affichage (setDepth). Sol, décor et calques Graphics « au sol »
+// restent ≤ 0 ; les UNITÉS (tours, armes, ennemis) sont triées par la position
+// de leurs pieds — plus bas à l'écran = devant — dans une plage étroite au-dessus ;
+// les repères d'interface passent par-dessus (pastilles 6, projectiles 9, impacts 10).
+const DEPTH_RANGE = 0.5  // cercle de portée (tour survolée/sélectionnée), sous les unités
+const DEPTH_UNITS = 1    // + pieds (en cases) / 100 → 1.00 … 1.17
+const DEPTH_FOCUS = 4.5  // cadre de survol / coins de sélection, au-dessus des unités
+const DEPTH_BARS = 5     // barres de vie (tours + ennemis), toujours lisibles
+const unitDepth = (footCellY: number) => DEPTH_UNITS + footCellY / 100
+
+// Survol / sélection d'une tour posée (voir refreshFocus). La tour est éclaircie
+// (teinte en mode SCREEN), jamais agrandie : grossir recréerait le chevauchement.
+const HOVER_COLOR = 0xf5ecd0  // crème : survol
+const SELECT_COLOR = 0xf2c94c // or : sélection (même or que les pastilles de palier)
+const HOVER_TINT = 0x3a3a3a   // éclaircie neutre
+const SELECT_TINT = 0x4a3c12  // éclaircie chaude, dorée
 
 // Couleurs par type d'ennemi
 const ENEMY_COLORS: Record<string, number> = {
@@ -235,12 +259,24 @@ export class GameScene extends Phaser.Scene {
     // mono-cible) — séparé de enemiesGraphics pour pouvoir le vider/redessiner
     // indépendamment à chaque tick sans repasser par drawEnemies.
     private effectsGraphics!: Phaser.GameObjects.Graphics
-    // Aperçu de pose (multi) : surbrillance verte/rouge de la case survolée + cercle
-    // de portée de la tour sélectionnée. Actif seulement si buildPreviewType est posé
-    // (via setBuildPreview) — le solo ne l'utilise pas, donc rien ne change côté solo.
+    // Aperçu de pose : surbrillance verte/rouge de la case survolée + cercle de
+    // portée du type à poser. Actif seulement si buildPreviewType est posé (via
+    // setBuildPreview, solo comme multi).
     private previewGraphics!: Phaser.GameObjects.Graphics
     private buildPreviewType: string | null = null
     private hoverCell: { x: number; y: number } | null = null
+    // Repères de la tour survolée / sélectionnée (voir refreshFocus) : cercle de
+    // portée SOUS les unités, cadre et coins dorés AU-DESSUS.
+    private rangeGraphics!: Phaser.GameObjects.Graphics
+    private focusGraphics!: Phaser.GameObjects.Graphics
+    // Barres de vie des ennemis : calque à part, au-dessus des unités, pour qu'un
+    // ennemi qui passe derrière une tour garde sa jauge visible.
+    private enemyBarsGraphics!: Phaser.GameObjects.Graphics
+    // Inspection des tours posées au survol (voir setTowerInspect) et tour
+    // sélectionnée par la page (voir setSelectedTower).
+    private inspectEnabled = false
+    private hoveredTowerId: string | null = null
+    private selectedTowerId: string | null = null
 
     // Map active (tracé + biome). Fixée par le canvas AVANT le boot de la scène
     // (setActiveMap) ; create() rend alors le bon terrain/décor. Défaut = désert.
@@ -405,6 +441,12 @@ export class GameScene extends Phaser.Scene {
         this.towersGraphics = this.add.graphics()
         this.enemiesGraphics = this.add.graphics()
         this.effectsGraphics = this.add.graphics()
+        // towersGraphics ne porte plus que les barres de vie (et le repli
+        // géométrique) : au-dessus des sprites, sinon la tour les masquerait.
+        this.towersGraphics.setDepth(DEPTH_BARS)
+        this.enemyBarsGraphics = this.add.graphics().setDepth(DEPTH_BARS)
+        this.rangeGraphics = this.add.graphics().setDepth(DEPTH_RANGE)
+        this.focusGraphics = this.add.graphics().setDepth(DEPTH_FOCUS)
 
         // Animations marche (bouclée) + mort (une fois) par type à sprite.
         SPRITE_ENEMY_TYPES.forEach((type) => {
@@ -525,15 +567,23 @@ export class GameScene extends Phaser.Scene {
             }
         })
 
-        // Aperçu de pose : suit le curseur (multi uniquement, voir setBuildPreview).
+        // Survol : suit la case sous le curseur → inspection des tours posées
+        // (refreshFocus) et aperçu de pose. Ne redessine qu'au changement de case.
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-            if (!this.buildPreviewType) return
-            this.hoverCell = { x: Math.floor(pointer.x / CELL_SIZE), y: Math.floor(pointer.y / CELL_SIZE) }
-            this.drawBuildPreview()
+            const x = Math.floor(pointer.x / CELL_SIZE)
+            const y = Math.floor(pointer.y / CELL_SIZE)
+            if (this.hoverCell && this.hoverCell.x === x && this.hoverCell.y === y) return
+            this.hoverCell = { x, y }
+            if (this.syncHoveredTower()) this.refreshFocus()
+            if (this.buildPreviewType) this.drawBuildPreview()
         })
-        this.input.on('pointerout', () => {
+        // Curseur sorti du canvas. 'gameout' et non 'pointerout' : ce dernier ne
+        // concerne que les GameObjects interactifs (il n'y en a aucun ici), si bien
+        // que l'aperçu restait affiché après avoir quitté le plateau.
+        this.input.on(Phaser.Input.Events.GAME_OUT, () => {
             this.hoverCell = null
             this.previewGraphics?.clear()
+            if (this.syncHoveredTower()) this.refreshFocus()
         })
 
         // Coop : signale que la scène est prête (textures chargées, calques créés)
@@ -573,15 +623,37 @@ export class GameScene extends Phaser.Scene {
     }
 
     /**
-     * Aperçu de pose (multi) : type de tour sélectionné → cercle de portée + case
-     * verte/rouge au survol. null = désactive (ex. hors partie). Le solo n'appelle
-     * jamais cette méthode, son rendu est donc inchangé.
+     * Aperçu de pose : type de tour sélectionné → cercle de portée + case
+     * verte/rouge au survol. null = désactive (combat, fin de partie).
      */
     setBuildPreview(type: string | null) {
         this.buildPreviewType = type
         if (!this.previewGraphics) return
         if (!type) { this.hoverCell = null; this.previewGraphics.clear(); return }
         this.drawBuildPreview()
+    }
+
+    /**
+     * Inspection des tours posées au survol : éclaircie + cadre de la case +
+     * portée réelle (voir refreshFocus). Activée par la page quand un clic sur une
+     * tour la sélectionne vraiment (solo hors combat) ; coupée sinon pour ne pas
+     * suggérer une interaction qui n'existe pas (combat, coop).
+     */
+    setTowerInspect(enabled: boolean) {
+        this.inspectEnabled = enabled
+        this.syncHoveredTower()
+        this.refreshFocus()
+        if (this.buildPreviewType) this.drawBuildPreview()
+    }
+
+    /**
+     * Tour posée sélectionnée (id, null = aucune) — la même que la carte de tour
+     * du panneau : coins dorés sur sa case, éclaircie dorée et portée réelle
+     * (niveau compris) tant qu'elle reste sélectionnée.
+     */
+    setSelectedTower(id: string | null) {
+        this.selectedTowerId = id
+        this.refreshFocus()
     }
 
     /** Dessine la case survolée (verte si posable, rouge sinon) + le cercle de portée. */
@@ -591,6 +663,9 @@ export class GameScene extends Phaser.Scene {
         const type = this.buildPreviewType
         const cell = this.hoverCell
         if (!type || !cell) return
+        // Survol d'une tour posée (inspection active) : c'est elle qu'on met en
+        // avant (refreshFocus) — un clic la sélectionne, il ne pose rien.
+        if (this.hoveredTowerId) return
 
         const inGrid = cell.x >= 0 && cell.x < GRID_WIDTH && cell.y >= 0 && cell.y < GRID_HEIGHT
         if (!inGrid) return
@@ -609,13 +684,123 @@ export class GameScene extends Phaser.Scene {
         this.previewGraphics.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2)
 
         // Cercle de portée (tours à tir uniquement).
-        const range = TOWER_RANGE[type] ?? 0
+        const range = towerRangeAt(type)
         if (range > 0) {
             const cx = px + CELL_SIZE / 2, cy = py + CELL_SIZE / 2
             this.previewGraphics.fillStyle(0xffe066, 0.06)
             this.previewGraphics.fillCircle(cx, cy, range * CELL_SIZE)
             this.previewGraphics.lineStyle(2, 0xffe066, 0.6)
             this.previewGraphics.strokeCircle(cx, cy, range * CELL_SIZE)
+        }
+    }
+
+    // ── Survol / sélection des tours posées ──────────────────────────────
+
+    private towerAt(x: number, y: number): TowerData | undefined {
+        for (const t of this.towersById.values()) if (t.x === x && t.y === y) return t
+        return undefined
+    }
+
+    /**
+     * Recalcule la tour sous le curseur (inspection active ; murs exclus, un clic
+     * dessus ne sélectionne rien) et le curseur « main ». Renvoie true si elle a
+     * changé — l'appelant redessine alors les repères (refreshFocus).
+     */
+    private syncHoveredTower(): boolean {
+        const cell = this.hoverCell
+        const tower = this.inspectEnabled && cell ? this.towerAt(cell.x, cell.y) : undefined
+        const id = tower && tower.type !== 'WALL' ? tower.id : null
+        if (id === this.hoveredTowerId) return false
+        this.hoveredTowerId = id
+        this.input?.setDefaultCursor(id ? 'pointer' : '')
+        return true
+    }
+
+    /**
+     * Repères de la tour survolée et de la tour sélectionnée. On n'agrandit jamais
+     * la tour (ça recréerait le chevauchement) : on l'éclaircit, on marque SA case
+     * et on trace SA portée réelle.
+     * - survol : cadre crème + portée discrète ;
+     * - sélection : coins dorés (repris dans le panneau) + portée dorée.
+     * Le cercle ne concerne que ces deux tours → le plateau reste lisible.
+     */
+    private refreshFocus() {
+        if (!this.rangeGraphics) return
+        this.applyFocusTints()
+        this.rangeGraphics.clear()
+        this.focusGraphics.clear()
+
+        const selected = this.selectedTowerId ? this.towersById.get(this.selectedTowerId) : undefined
+        const hovered = this.hoveredTowerId && this.hoveredTowerId !== this.selectedTowerId
+            ? this.towersById.get(this.hoveredTowerId)
+            : undefined
+
+        if (hovered) {
+            this.drawTowerRange(hovered, HOVER_COLOR, 0.05, 0.5)
+            this.focusGraphics.lineStyle(2, HOVER_COLOR, 0.8)
+            this.focusGraphics.strokeRect(
+                hovered.x * CELL_SIZE + 1, hovered.y * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2,
+            )
+        }
+        if (selected) {
+            this.drawTowerRange(selected, SELECT_COLOR, 0.08, 0.8)
+            this.drawSelectionCorners(selected.x * CELL_SIZE, selected.y * CELL_SIZE)
+        }
+    }
+
+    /** Cercle de portée RÉELLE d'une tour (niveau compris, miroir du backend). */
+    private drawTowerRange(tower: TowerData, color: number, fillAlpha: number, strokeAlpha: number) {
+        const radius = towerRangeAt(tower.type, tower.level ?? 1) * CELL_SIZE
+        if (radius <= 0) return
+        const cx = tower.x * CELL_SIZE + CELL_SIZE / 2
+        const cy = tower.y * CELL_SIZE + CELL_SIZE / 2
+        this.rangeGraphics.fillStyle(color, fillAlpha)
+        this.rangeGraphics.fillCircle(cx, cy, radius)
+        this.rangeGraphics.lineStyle(2, color, strokeAlpha)
+        this.rangeGraphics.strokeCircle(cx, cy, radius)
+    }
+
+    /** Coins dorés aux 4 angles de la case, liserés de sombre (lisibles sur sable comme sur neige). */
+    private drawSelectionCorners(px: number, py: number) {
+        const g = this.focusGraphics
+        const len = 10
+        const x0 = px + 1, y0 = py + 1, x1 = px + CELL_SIZE - 1, y1 = py + CELL_SIZE - 1
+        const corners: [number, number, number, number][] = [
+            [x0, y0, 1, 1], [x1, y0, -1, 1], [x0, y1, 1, -1], [x1, y1, -1, -1],
+        ]
+        const passes: [number, number][] = [[5, 0x2a1a06], [3, SELECT_COLOR]]
+        for (const [width, color] of passes) {
+            g.lineStyle(width, color, 1)
+            for (const [cx, cy, sx, sy] of corners) {
+                g.beginPath()
+                g.moveTo(cx + sx * len, cy)
+                g.lineTo(cx, cy)
+                g.lineTo(cx, cy + sy * len)
+                g.strokePath()
+            }
+        }
+    }
+
+    // Teinte appliquée par tour (survol / sélection) : on ne retouche que les
+    // sprites concernés — drawTowers tourne à 15 Hz en coop.
+    private focusTints = new Map<string, number>()
+
+    private applyFocusTints() {
+        const want = new Map<string, number>()
+        if (this.hoveredTowerId) want.set(this.hoveredTowerId, HOVER_TINT)
+        if (this.selectedTowerId) want.set(this.selectedTowerId, SELECT_TINT) // la sélection prime
+        for (const id of this.focusTints.keys()) if (!want.has(id)) this.tintTower(id, null)
+        // Réappliquée à chaque fois : le sprite a pu être recréé entre-temps.
+        for (const [id, tint] of want) this.tintTower(id, tint)
+        this.focusTints = want
+    }
+
+    /** Éclaircit (mode SCREEN : respecte la transparence) ou rétablit une tour, base + arme. */
+    private tintTower(id: string, tint: number | null) {
+        for (const part of [this.towerSprites.get(id), this.towerWeapons.get(id)]) {
+            if (!part) continue
+            if (tint == null) part.clearTint()
+            else part.setTintMode(Phaser.TintModes.SCREEN).setTint(tint)
         }
     }
 
@@ -740,21 +925,15 @@ export class GameScene extends Phaser.Scene {
             const py = tower.y * CELL_SIZE
             const hasSprite = TOWER_SPRITE_TYPES.includes(tower.type)
 
-            // Repère de palier : pastilles dorées (✦) au-dessus d'une tour améliorée
-            // (niveau ≥ 2) pour distinguer d'un coup d'œil les tours évoluées. Texte
-            // indépendant, poussé dans towerTexts → détruit/reconstruit à chaque redraw.
-            const lvl = tower.level ?? 1
-            if (lvl >= 2 && tower.type !== 'WALL') {
-                const pips = this.add.text(px + CELL_SIZE / 2, py - 3, '✦'.repeat(lvl), {
-                    fontFamily: 'monospace', fontSize: '11px', color: '#f2c94c',
-                }).setOrigin(0.5, 1).setDepth(6)
-                pips.setStroke('#3a2a10', 3)
-                this.towerTexts.push(pips)
-            }
-
             if (hasSprite) {
                 const isWall = tower.type === 'WALL'
                 const rot = ROT_WEAPON[tower.type]
+                // Tour : pieds au bas de SA case (1 px au-dessus du bord) et largeur
+                // < 1 case (TOWER_WIDTH) → elle ne mord plus sur ses voisines ; seule
+                // la structure déborde vers le haut, triée en profondeur (unitDepth).
+                const footY = py + CELL_SIZE - 1
+                const width = CELL_SIZE * (TOWER_WIDTH[tower.type] ?? DEFAULT_TOWER_WIDTH)
+                const depth = unitDepth(tower.y + 1)
                 if (rot) {
                     // Tour à arme rotative : base statique + arme superposée qui
                     // pivote (voir aimWeapon / drawEffects). La base est stockée
@@ -762,28 +941,29 @@ export class GameScene extends Phaser.Scene {
                     let base = this.towerSprites.get(tower.id)
                     if (!base) {
                         base = this.add.image(0, 0, `tower-${tower.type}-base`).setOrigin(0.5, 1)
-                        base.setScale((CELL_SIZE * 1.25) / base.width)
+                        base.setScale(width / base.width)
                         this.towerSprites.set(tower.id, base)
                     }
-                    base.setPosition(px + CELL_SIZE / 2, py + CELL_SIZE + 2)
+                    base.setPosition(px + CELL_SIZE / 2, footY).setDepth(depth)
                     let weapon = this.towerWeapons.get(tower.id)
                     if (!weapon) {
                         weapon = this.add.sprite(0, 0, `tower-${tower.type}-weapon`, 0).setOrigin(rot.pivotX, rot.pivotY)
-                        weapon.setScale((CELL_SIZE * 1.25) / base.width)
-                        weapon.setDepth(1) // au-dessus de la base
+                        weapon.setScale(width / base.width) // même échelle que sa base
                         this.towerWeapons.set(tower.id, weapon)
                     }
-                    const mountY = (py + CELL_SIZE + 2) - base.displayHeight * (1 - rot.mountFrac)
+                    // Juste au-dessus de SA base, mais sous les tours de la rangée
+                    // suivante (deux rangées sont espacées de 0.01 en profondeur).
+                    weapon.setDepth(depth + 0.001)
+                    const mountY = footY - base.displayHeight * (1 - rot.mountFrac)
                     weapon.setPosition(px + CELL_SIZE / 2, mountY)
-                    this.drawStructureHpBar(tower, px, py)
+                    this.drawTowerMarkers(tower, px, footY - base.displayHeight)
                     return
                 }
                 const isAnimated = TOWER_ANIM[tower.type] != null
                 let sprite = this.towerSprites.get(tower.id)
                 if (!sprite) {
-                    // Tour à arme animée (Archer, Baliste, Mage, Catapulte) :
-                    // Sprite au repos sur la frame 0 ; les autres (Mur) restent
-                    // des Images statiques.
+                    // Tour à arme animée (Mage) : Sprite au repos sur la frame 0 ;
+                    // les autres (Mur) restent des Images statiques.
                     sprite = isAnimated
                         ? this.add.sprite(0, 0, `tower-${tower.type}-anim`, 0)
                         : this.add.image(0, 0, `tower-${tower.type}`)
@@ -799,28 +979,50 @@ export class GameScene extends Phaser.Scene {
                         // Pointes = sens OPPOSÉ au déplacement (face aux assaillants).
                         const angle = dx > 0 ? -90 : dx < 0 ? 90 : dy < 0 ? 180 : 0
                         sprite.setAngle(angle)
-                        sprite.setScale((CELL_SIZE * 1.3) / sprite.width)
+                        sprite.setScale((CELL_SIZE * WALL_WIDTH) / sprite.width)
                     } else {
                         // Tour : ancrée en bas-centre, base au bas de la case, la
                         // structure déborde vers le haut (comme les ennemis).
                         sprite.setOrigin(0.5, 1)
-                        sprite.setScale((CELL_SIZE * 1.25) / sprite.width)
+                        sprite.setScale(width / sprite.width)
                     }
                     this.towerSprites.set(tower.id, sprite)
                 }
-                sprite.setPosition(
-                    px + CELL_SIZE / 2,
-                    isWall ? py + CELL_SIZE / 2 : py + CELL_SIZE + 2,
-                )
-                this.drawStructureHpBar(tower, px, py)
+                sprite.setPosition(px + CELL_SIZE / 2, isWall ? py + CELL_SIZE / 2 : footY)
+                // Mur : barricade au ras du sol, triée sur le milieu de sa case.
+                sprite.setDepth(isWall ? unitDepth(tower.y + 0.5) : depth)
+                this.drawTowerMarkers(tower, px, isWall ? py : footY - sprite.displayHeight)
                 return
             }
 
             // Repli géométrique (type sans sprite) : carré coloré.
             this.towersGraphics.fillStyle(TOWER_COLORS[tower.type] ?? 0xffffff, 1)
             this.towersGraphics.fillRect(px + 4, py + 4, CELL_SIZE - 8, CELL_SIZE - 8)
-            this.drawStructureHpBar(tower, px, py)
+            this.drawTowerMarkers(tower, px, py)
         })
+
+        // Pose, amélioration (portée), destruction en combat : la tour survolée ou
+        // sélectionnée a pu changer → survol, repères et aperçu remis à jour.
+        this.syncHoveredTower()
+        this.refreshFocus()
+        if (this.buildPreviewType) this.drawBuildPreview()
+    }
+
+    /**
+     * Repères au-dessus d'une structure, calés sur le HAUT de son sprite (topY)
+     * plutôt que sur sa case : barre de vie si elle est endommagée, puis pastilles
+     * de palier (✦) d'une tour améliorée (niveau ≥ 2). Les pastilles sont des Text
+     * indépendants, poussés dans towerTexts → détruits/reconstruits à chaque redraw.
+     */
+    private drawTowerMarkers(tower: TowerData, px: number, topY: number) {
+        const barShown = this.drawStructureHpBar(tower, px, topY - 6)
+        const lvl = tower.level ?? 1
+        if (lvl < 2 || tower.type === 'WALL') return
+        const pips = this.add.text(px + CELL_SIZE / 2, barShown ? topY - 7 : topY - 1, '✦'.repeat(lvl), {
+            fontFamily: 'monospace', fontSize: '11px', color: '#f2c94c',
+        }).setOrigin(0.5, 1).setDepth(6)
+        pips.setStroke('#3a2a10', 3)
+        this.towerTexts.push(pips)
     }
 
     /**
@@ -828,19 +1030,20 @@ export class GameScene extends Phaser.Scene {
      * déjà subi des dégâts (Sapeur, rayon/pulse de Boss, mêlée contre un mur) ;
      * une structure intacte ou dont le backend n'envoie pas encore hp/maxHp ne
      * l'affiche pas, pour ne pas surcharger l'écran en l'absence de menace.
+     * Renvoie true si la barre est dessinée.
      */
-    private drawStructureHpBar(tower: TowerData, px: number, py: number) {
-        if (tower.hp == null || tower.maxHp == null || tower.hp >= tower.maxHp) return
+    private drawStructureHpBar(tower: TowerData, px: number, barY: number): boolean {
+        if (tower.hp == null || tower.maxHp == null || tower.hp >= tower.maxHp) return false
 
         const hpRatio = tower.maxHp > 0 ? Math.max(0, tower.hp / tower.maxHp) : 0
         const barWidth = CELL_SIZE * 0.8
         const barX = px + CELL_SIZE / 2 - barWidth / 2
-        const barY = py - 6
 
         this.towersGraphics.fillStyle(0x000000, 0.5)
         this.towersGraphics.fillRect(barX, barY, barWidth, 4)
         this.towersGraphics.fillStyle(hpRatio > 0.3 ? 0x22c55e : 0xef4444, 1)
         this.towersGraphics.fillRect(barX, barY, barWidth * hpRatio, 4)
+        return true
     }
 
     /**
@@ -877,6 +1080,7 @@ export class GameScene extends Phaser.Scene {
         const renderTick = () => {
             if (index >= ticks.length) {
                 this.enemiesGraphics.clear()
+                this.enemyBarsGraphics.clear()
                 this.effectsGraphics.clear()
                 this.clearEnemySprites()
                 this.waveTimer?.remove()
@@ -986,6 +1190,7 @@ export class GameScene extends Phaser.Scene {
 
     private drawEnemies(enemies: EnemySnapshot[], deaths: string[] = [], attackingIds: Set<string> = new Set(), reachedIds: Set<string> = new Set()) {
         this.enemiesGraphics.clear()
+        this.enemyBarsGraphics.clear()
 
         const alive = new Set(enemies.map((e) => e.id))
         const dying = new Set(deaths)
@@ -1070,6 +1275,9 @@ export class GameScene extends Phaser.Scene {
                     sprite.play(wantKey)
                 }
                 sprite.setPosition(px, py - CELL_SIZE * 0.25) // pieds ~au centre de la case
+                // Tri en profondeur avec les tours (pieds ~aux 3/4 de la case) : un
+                // ennemi qui passe devant une tour la recouvre, derrière il est masqué.
+                sprite.setDepth(unitDepth(enemy.y + 0.75))
                 this.drawEnemyHpBar(enemy, px, py, radius, isBoss)
                 return
             }
@@ -1101,10 +1309,10 @@ export class GameScene extends Phaser.Scene {
         const barX = px - barWidth / 2
         const barY = py - radius - 6
 
-        this.enemiesGraphics.fillStyle(0x000000, 0.5)
-        this.enemiesGraphics.fillRect(barX, barY, barWidth, 4)
-        this.enemiesGraphics.fillStyle(hpRatio > 0.3 ? 0x22c55e : 0xef4444, 1)
-        this.enemiesGraphics.fillRect(barX, barY, barWidth * hpRatio, 4)
+        this.enemyBarsGraphics.fillStyle(0x000000, 0.5)
+        this.enemyBarsGraphics.fillRect(barX, barY, barWidth, 4)
+        this.enemyBarsGraphics.fillStyle(hpRatio > 0.3 ? 0x22c55e : 0xef4444, 1)
+        this.enemyBarsGraphics.fillRect(barX, barY, barWidth * hpRatio, 4)
     }
 
     /**

@@ -215,3 +215,17 @@ export const CORRIDOR_CELL_SET = DEFAULT_PATH.corridorSet
 export const CORRIDOR_CELLS = DEFAULT_PATH.corridorCells
 export const isCorridorCell = (x: number, y: number) => corridorHas(DEFAULT_PATH, x, y)
 export const pathDirectionAt = (x: number, y: number) => pathDirectionAtIn(DEFAULT_PATH, x, y)
+
+// ── Portée des tours (cases) ─────────────────────────────────────────────────
+// Miroir de TowerType.baseRange + Tower.getRange() côté backend (bonus de palier :
+// +0 / +0.35 / +0.9). Partagé par la page (carte de tour) et la scène (cercles de
+// portée) pour que les deux montrent exactement la même valeur. 0 = mur.
+export const TOWER_BASE_RANGE: Record<string, number> = {
+  ARCHER: 3.0, MAGE: 2.5, CATAPULT: 4.0, BALLISTA: 5.0, WALL: 0,
+}
+const towerRangeBonus = (level: number) => (level >= 3 ? 0.9 : (level - 1) * 0.35)
+/** Portée réelle (non arrondie) d'une tour à un niveau donné. */
+export function towerRangeAt(type: string, level = 1): number {
+  const base = TOWER_BASE_RANGE[type] ?? 0
+  return base > 0 ? base + towerRangeBonus(level) : 0
+}
