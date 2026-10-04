@@ -45,7 +45,23 @@ public final class MapCatalog {
                     // désalignent, sans empiéter sur la forêt des bandes mortes centrales.
                     List.of(
                             new Position(9, 1), new Position(10, 1), new Position(11, 1), new Position(12, 1),
-                            new Position(9, 15), new Position(10, 15), new Position(11, 15), new Position(12, 15))));
+                            new Position(9, 15), new Position(10, 15), new Position(11, 15), new Position(12, 15))),
+            "spring", new Def(List.of(
+                    List.of(new Position(0, 4), new Position(7, 4), new Position(7, 7),
+                            new Position(16, 7), new Position(16, 9), new Position(19, 9)),
+                    List.of(new Position(0, 12), new Position(7, 12), new Position(7, 9), new Position(19, 9))),
+                    0, List.of()),
+            "autumn", new Def(List.of(List.of(
+                    new Position(0, 3), new Position(15, 3), new Position(15, 7),
+                    new Position(4, 7), new Position(4, 12), new Position(19, 12))), 0, List.of()));
+
+    public static TerrainType terrain(String mapId) {
+        return switch (normalize(mapId)) {
+            case "spring" -> TerrainType.SPRING;
+            case "autumn" -> TerrainType.AUTUMN;
+            default -> TerrainType.NONE;
+        };
+    }
 
     private MapCatalog() {}
 
@@ -57,6 +73,8 @@ public final class MapCatalog {
     /** Construit une GameMap neuve pour la map demandée (désert par défaut). */
     public static GameMap buildMap(String mapId) {
         Def def = MAPS.get(normalize(mapId));
-        return GameMap.ofLanes(WIDTH, HEIGHT, def.lanes(), def.corridorHalfWidth(), def.wideSpots());
+        GameMap map = GameMap.ofLanes(WIDTH, HEIGHT, def.lanes(), def.corridorHalfWidth(), def.wideSpots());
+        map.setTerrain(terrain(mapId));
+        return map;
     }
 }

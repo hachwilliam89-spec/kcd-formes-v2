@@ -1,3 +1,4 @@
+import type { TerrainForecast } from '@/components/game/seasons'
 import { useRouter } from 'next/navigation'
 import { useGameStore } from '@/store/gameStore'
 import { useAuthStore } from '@/store/authStore'
@@ -6,6 +7,7 @@ import api from '@/lib/api'
 // Aperçu de la prochaine vague (voir backend WavePreview) : types présents, ceux
 // jamais croisés dans cette partie, et arrivée d'un Boss. Pas les effectifs.
 export interface WavePreview {
+    terrain?: TerrainForecast
     waveNumber: number
     enemyTypes: string[]
     newEnemyTypes: string[]

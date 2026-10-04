@@ -3,6 +3,7 @@ package com.kcdformes.domain.model.match;
 import com.kcdformes.domain.model.EnemyType;
 import com.kcdformes.domain.model.GameMap;
 import com.kcdformes.domain.model.Position;
+import com.kcdformes.domain.model.SeasonalTerrain;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,6 +26,7 @@ public class MatchGameState {
     public final List<List<Position>> lanePaths;
     public final List<Position> path;                 // = lanePaths.get(0) : voie de réf. (château partagé)
     public int spawnLaneCursor = 0;                    // répartition round-robin des spawns entre voies
+    public final SeasonalTerrain terrain;
     public final GameMap map;                         // porte les tours posées (coop : or partagé)
     public final List<LiveEnemy> enemies = new ArrayList<>();
     public int gold;                                  // or PARTAGÉ entre les deux joueurs (coop)
@@ -78,6 +80,7 @@ public class MatchGameState {
         this.lanePaths = lanePaths;
         this.path = lanePaths.get(0);
         this.map = map;
+        this.terrain = new SeasonalTerrain(map.getTerrain(), wave);
         this.castleMaxHp = castleMaxHp;
         this.castleHp = castleMaxHp;
         this.gold = startingGold;

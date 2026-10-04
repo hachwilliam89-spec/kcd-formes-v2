@@ -21,6 +21,7 @@ public class GameMapMapper {
     public Map<String, Object> toJson(GameMap map) {
         Map<String, Object> json = new HashMap<>();
         json.put("width", map.getWidth());
+        json.put("terrain", map.getTerrain().name());
         json.put("height", map.getHeight());
         json.put("pathStart", Map.of("x", map.getPathStart().x(), "y", map.getPathStart().y()));
         json.put("pathEnd", Map.of("x", map.getPathEnd().x(), "y", map.getPathEnd().y()));
@@ -102,6 +103,8 @@ public class GameMapMapper {
             Position pathEnd = new Position(endMap.get("x"), endMap.get("y"));
             map = new GameMap(width, height, pathStart, pathEnd);
         }
+
+        map.setTerrain(TerrainType.valueOf((String) json.getOrDefault("terrain", "NONE")));
 
         List<Map<String, Object>> towers = (List<Map<String, Object>>) json.getOrDefault("towers", List.of());
         for (Map<String, Object> t : towers) {

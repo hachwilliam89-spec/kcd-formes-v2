@@ -390,7 +390,9 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         GameEntity game = loadOwnedGame(gameId, playerId);
         // Même numéro et même seed que startWave : l'aperçu décrit exactement la
         // vague qui sera jouée.
-        return waveFactory.previewWave(game.getWaveNumber() + 1, game.getSeed());
+        WavePreview preview = waveFactory.previewWave(game.getWaveNumber() + 1, game.getSeed());
+        return new WavePreview(preview.waveNumber(), preview.enemyTypes(), preview.newEnemyTypes(), preview.bossWave(),
+                SeasonalTerrain.forecast(MapCatalog.terrain(game.getMapId()), preview.waveNumber()));
     }
 
     @Override

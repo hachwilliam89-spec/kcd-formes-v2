@@ -3,7 +3,7 @@
 // rejouée exactement comme en solo (playWave). Mesure le temps CPU de chaque
 // image Phaser (update + rendu) et le publie dans window.__bench pour run.mjs.
 //
-// Paramètres d'URL : enemies, towers, seed, map (desert | fourche),
+// Paramètres d'URL : enemies, towers, seed, map (desert | fourche | spring | autumn),
 // mode (wave | idle), perf (affiche le compteur ?perf=1 du jeu).
 import Phaser from 'phaser'
 import { GameScene, type TowerData, type TickSnapshot, type EnemySnapshot } from '@/components/game/GameScene'

@@ -3,6 +3,7 @@
 // Couche client du multijoueur coop (STOMP au-dessus de /ws). Encapsule la
 // connexion, le lobby (create/join/ready/start), la pose de tour, et le flux de
 // snapshots de jeu. Voir docs/MULTIPLAYER.md.
+import type { TerrainSnapshot } from '@/components/game/seasons'
 import { useCallback, useRef, useState } from 'react'
 import { Client, type StompSubscription } from '@stomp/stompjs'
 import { wsBaseUrl } from '@/lib/ws'
@@ -18,6 +19,7 @@ export type EnemyV = { id: string; type: string; x: number; y: number; hp: numbe
 export type TowerV = { id: string; type: string; x: number; y: number; level: number }
 export type ShotV = { fromX: number; fromY: number; toX: number; toY: number }
 export type Snapshot = {
+    terrain?: TerrainSnapshot
     tick: number; wave: number; gold: number; castleHp: number; castleMaxHp: number
     pendingBonuses: number
     status: string; enemies: EnemyV[]; towers: TowerV[]; shots: ShotV[]

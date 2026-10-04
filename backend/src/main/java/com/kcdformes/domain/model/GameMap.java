@@ -7,6 +7,10 @@ import java.util.*;
 
 public class GameMap {
 
+    private TerrainType terrain = TerrainType.NONE;
+    public TerrainType getTerrain() { return terrain; }
+    public void setTerrain(TerrainType terrain) { this.terrain = Objects.requireNonNull(terrain); }
+
     private final int width;
     private final int height;
     // Voies du chemin. Chaque voie est une liste de waypoints (spawn -> château) :

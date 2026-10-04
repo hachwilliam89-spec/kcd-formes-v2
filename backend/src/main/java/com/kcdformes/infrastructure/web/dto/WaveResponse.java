@@ -1,6 +1,7 @@
 package com.kcdformes.infrastructure.web.dto;
 
 import com.kcdformes.domain.model.Wave;
+import com.kcdformes.domain.model.SeasonalTerrain;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase.StartWaveResult;
 import com.kcdformes.domain.service.WaveSimulationService.TickSnapshot;
 
@@ -55,7 +56,8 @@ public record WaveResponse(
             List<UUID> stunnedTowers,
             // Ennemis touchés par la défense du château ce tick (tir des remparts).
             List<UUID> castleAttacks,
-            int castleHp
+            int castleHp,
+            SeasonalTerrain.Snapshot terrain
     ) {}
 
     public static WaveResponse from(StartWaveResult result) {
@@ -102,7 +104,8 @@ public record WaveResponse(
                         .toList(),
                 tick.stunnedTowers(),
                 tick.castleAttacks(),
-                tick.castleHp()
+                tick.castleHp(),
+                tick.terrain()
         );
     }
 }

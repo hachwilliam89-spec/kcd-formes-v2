@@ -123,6 +123,9 @@ public class MatchEngine {
             s.ticksToNextSpawn = INTER_WAVE_TICKS;
         }
 
+        s.terrain.beginWave(s.wave);
+        s.terrain.advance();
+
         // 2) Déplacement + comportements spéciaux (Sapeur), arrivée au château.
         Iterator<LiveEnemy> it = s.enemies.iterator();
         while (it.hasNext()) {
@@ -152,6 +155,11 @@ public class MatchEngine {
             handleBossPulse(s, e);
         }
 
+        // Même terrain que le solo ; le ramassage des morts crédite l'or une fois.
+        for (LiveEnemy e : s.enemies) {
+            if (e.hp > 0 && !e.type.magicArmor) e.hp -= s.terrain.damageAt(e.x, e.y);
+        }
+
         // 5) Tir des tours (cible selon le mode ; profils de dégâts fidèles au solo).
         for (Tower tower : new ArrayList<>(map.getTowers())) {
             if (tower.isDestroyed()) continue;
@@ -163,6 +171,7 @@ public class MatchEngine {
                 else s.towerStuns.put(tower.getId(), stun - 1);
                 continue;
             }
+            if (s.terrain.disables(tower)) continue;
             if (tower.getType().baseDamage == 0) continue; // WALL : structure passive
 
             if (tower.getType().damageType == DamageType.CONTINUOUS) {
@@ -237,6 +246,7 @@ public class MatchEngine {
     /** Résout un tir tour → ennemi : dégâts effectifs + trait pour le rendu. */
     private void fireAt(MatchGameState s, Tower tower, LiveEnemy target) {
         applyDamage(tower, target, effectiveDamage(tower, target));
+        if (tower.getType() == TowerType.CATAPULT) s.terrain.ignite(target.x, target.y);
         s.shots.add(new double[]{tower.getX(), tower.getY(), target.x, target.y});
     }
 

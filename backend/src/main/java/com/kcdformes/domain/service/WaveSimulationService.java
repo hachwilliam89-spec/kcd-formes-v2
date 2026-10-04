@@ -1,6 +1,7 @@
 package com.kcdformes.domain.service;
 
 import com.kcdformes.domain.model.Castle;
+import com.kcdformes.domain.model.SeasonalTerrain;
 import com.kcdformes.domain.model.DamageType;
 import com.kcdformes.domain.model.Enemy;
 import com.kcdformes.domain.model.EnemyType;
@@ -93,7 +94,8 @@ public class WaveSimulationService {
             // Ennemis touchés par la défense du château ce tick (voir
             // CASTLE_DEFENSE_*) : le frontend anime un tir depuis l'arrivée.
             List<UUID> castleAttacks,
-            int castleHp
+            int castleHp,
+            SeasonalTerrain.Snapshot terrain
     ) {}
 
     public record SimulationResult(List<TickSnapshot> ticks, int goldEarned, int castleDamageTaken) {}
@@ -109,6 +111,7 @@ public class WaveSimulationService {
             throw new IllegalStateException("Aucun chemin disponible sur la map");
         }
 
+        SeasonalTerrain terrain = new SeasonalTerrain(map.getTerrain(), wave.getNumber());
         List<Tower> towers = map.getTowers();
         Map<UUID, Double> cooldowns = new HashMap<>();
         for (Tower tower : towers) {
@@ -158,6 +161,7 @@ public class WaveSimulationService {
         int tick = 0;
         while (tick < MAX_TICKS) {
             tick++;
+            terrain.advance();
             List<DamageEvent> damageEvents = new ArrayList<>();
             List<TowerDamageEvent> towerDamageEvents = new ArrayList<>();
             List<UUID> deaths = new ArrayList<>();
@@ -286,6 +290,16 @@ public class WaveSimulationService {
                         destroyedTowers, towerStuns));
             }
 
+            // Le feu respecte l'armure magique et ne touche que les ennemis apparus.
+            for (Enemy enemy : wave.getEnemies()) {
+                if (enemy.isDead() || escaped.contains(enemy.getId()) || tick <= enemy.getSpawnDelayTicks()
+                        || enemy.getType().magicArmor) continue;
+                int damage = terrain.damageAt(enemy.getX(), enemy.getY());
+                if (damage == 0) continue;
+                enemy.takeDamage(damage);
+                if (enemy.isDead()) { deaths.add(enemy.getId()); wave.addGold(enemy.getGoldReward()); }
+            }
+
             // 2. Attaques des tours (cible : ennemi à portée le plus proche)
             for (Tower tower : towers) {
                 if (tower.isDestroyed()) {
@@ -308,6 +322,8 @@ public class WaveSimulationService {
                     }
                     continue;
                 }
+
+                if (terrain.disables(tower)) continue;
 
                 if (tower.getType().baseDamage == 0) {
                     // Structure passive (WALL) : ne tire jamais — son rôle est de
@@ -339,6 +355,8 @@ public class WaveSimulationService {
                 }
 
                 applyDamage(tower, target, effectiveDamage(tower, target), wave, damageEvents, deaths);
+
+                if (tower.getType() == TowerType.CATAPULT) terrain.ignite(target.getX(), target.getY());
 
                 if (tower.getType().damageType == DamageType.AOE) {
                     // Dégâts réduits (moitié) aux ennemis proches de la cible principale,
@@ -424,7 +442,7 @@ public class WaveSimulationService {
 
             ticks.add(new TickSnapshot(tick, snapshot, damageEvents, towerDamageEvents, deaths, reached,
                     destroyedTowers, bossAbilityEvents, List.copyOf(towerStuns.keySet()),
-                    castleAttacks, castle.getHp()));
+                    castleAttacks, castle.getHp(), terrain.snapshot(map.getTowers())));
 
             boolean allResolved = wave.getEnemies().stream()
                     .allMatch(enemy -> enemy.isDead() || escaped.contains(enemy.getId()));

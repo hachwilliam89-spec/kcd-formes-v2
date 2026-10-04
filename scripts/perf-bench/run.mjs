@@ -15,6 +15,8 @@ const front = path.resolve(here, '../../frontend-web')
 
 const { values: opt } = parseArgs({
     options: {
+        serve: { type: 'boolean', default: false }, // aperçu manuel sans pilote navigateur
+        seasonal: { type: 'boolean', default: false },
         enemies: { type: 'string', default: '200' },
         towers: { type: 'string', default: '32' },
         map: { type: 'string', default: 'desert' },
@@ -29,8 +31,9 @@ const { values: opt } = parseArgs({
 })
 
 if (opt.help) {
-    console.log(`Usage : npm run bench -- [--enemies 200] [--towers 32] [--map desert|fourche]
-                       [--idle] [--headed] [--software] [--profile] [--json]`)
+    console.log(`Usage : npm run bench -- [--enemies 200] [--towers 32] [--map desert|fourche|spring|autumn]
+                       [--idle] [--headed] [--software] [--profile] [--json]
+                       [--serve] [--seasonal]`)
     process.exit(0)
 }
 if (!fs.existsSync(path.join(front, 'public/sprites'))) {
@@ -50,7 +53,7 @@ const phaserGlobal = {
     },
 }
 await build({
-    entryPoints: [path.join(here, 'entry.ts')],
+    entryPoints: [path.join(here, opt.seasonal ? 'seasonal.ts' : 'entry.ts')],
     bundle: true,
     outfile: path.join(here, 'dist/bundle.js'),
     alias: { '@': front },
@@ -74,8 +77,13 @@ const server = http.createServer((req, res) => {
         res.end(data)
     })
 })
-await new Promise((resolve) => server.listen(0, resolve))
+await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
 const port = server.address().port
+
+if (opt.serve) {
+    console.log(`Aperçu manuel : http://localhost:${port}/?map=${opt.map}`)
+    await new Promise(() => {})
+}
 
 // 3. Chrome : celui installé (channel chrome), ou BENCH_CHROME=/chemin/vers/chrome.
 const browser = await chromium.launch({

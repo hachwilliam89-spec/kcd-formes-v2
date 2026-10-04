@@ -3,7 +3,9 @@
 // Miniature (aperçu) d'un plateau : chemin, château (coloré selon ses PV), tours
 // (couleur par type) et ennemis (taille/couleur par type). Utilisé pour l'aperçu
 // de la grille adverse en versus. Léger : re-render à chaque snapshot serveur.
-import { GRID_W, GRID_H, CORRIDOR_CELLS, PATH_START, PATH_END } from './constants'
+import { GRID_W, GRID_H } from './constants'
+import { getMapDef, mapCastle } from './maps'
+import { MAP_THEMES } from './seasons'
 import type { Blip, TowerBlip } from '@/hooks/useVersus'
 
 // Couleurs des tours (par TYPE) — reprises de la légende du jeu. Exportées pour
@@ -28,24 +30,27 @@ const ENEMY_STYLE: Record<string, { color: string; r: number }> = {
 }
 const ENEMY_DEFAULT = { color: '#d64545', r: 0.30 }
 
-export function MiniBoard({ enemies = [], towers = [], castleRatio = 1, className = '' }: {
+export function MiniBoard({ enemies = [], towers = [], castleRatio = 1, className = '', mapId }: {
+    mapId?: string
     enemies?: Blip[]
     towers?: TowerBlip[]
     castleRatio?: number          // PV du château adverse (0..1) → couleur du marqueur
     className?: string
 }) {
+    const map = getMapDef(mapId)
+    const end = mapCastle(map)
     const castleColor = castleRatio > 0.5 ? '#5bbd3a' : castleRatio > 0.25 ? '#eab308' : '#d64545'
     return (
         <svg viewBox={`0 0 ${GRID_W} ${GRID_H}`} preserveAspectRatio="xMidYMid meet"
-             className={className} style={{ background: '#2f2113', borderRadius: 6, border: '1px solid #120a06' }}>
+             className={className} style={{ background: MAP_THEMES[map.id].ground, borderRadius: 6, border: '1px solid #120a06' }}>
             {/* Couloir (route des ennemis) — plus contrasté */}
-            {CORRIDOR_CELLS.map((c, i) => (
-                <rect key={i} x={c.x} y={c.y} width={1} height={1} fill="#6b4f2c" />
+            {map.path.corridorCells.map((c, i) => (
+                <rect key={i} x={c.x} y={c.y} width={1} height={1} fill={MAP_THEMES[map.id].road} />
             ))}
             {/* Entrée (spawn) : petit triangle vert */}
-            <circle cx={PATH_START.x + 0.5} cy={PATH_START.y + 0.5} r={0.5} fill="#3a7a12" stroke="#dff0c8" strokeWidth={0.12} />
+            {map.lanes.map((lane, i) => <circle key={`entry${i}`} cx={lane[0].x + 0.5} cy={lane[0].y + 0.5} r={0.5} fill="#3a7a12" stroke="#dff0c8" strokeWidth={0.12} />)}
             {/* Château (fin du chemin), coloré selon ses PV */}
-            <rect x={PATH_END.x - 0.5} y={PATH_END.y - 0.5} width={2} height={2} rx={0.2}
+            <rect x={end.x - 0.5} y={end.y - 0.5} width={2} height={2} rx={0.2}
                   fill={castleColor} stroke="#2a1a0a" strokeWidth={0.18} />
             {/* Tours (couleur par type) */}
             {towers.map((t, i) => (

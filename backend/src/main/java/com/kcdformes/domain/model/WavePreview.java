@@ -14,7 +14,11 @@ import java.util.List;
  * @param bossWave      la vague contient au moins un Boss
  */
 public record WavePreview(int waveNumber, List<EnemyType> enemyTypes, List<EnemyType> newEnemyTypes,
-                          boolean bossWave) {
+                          boolean bossWave, SeasonalTerrain.Forecast terrain) {
+
+    public WavePreview(int waveNumber, List<EnemyType> enemyTypes, List<EnemyType> newEnemyTypes, boolean bossWave) {
+        this(waveNumber, enemyTypes, newEnemyTypes, bossWave, SeasonalTerrain.forecast(TerrainType.NONE, waveNumber));
+    }
 
     public WavePreview {
         enemyTypes = List.copyOf(enemyTypes);

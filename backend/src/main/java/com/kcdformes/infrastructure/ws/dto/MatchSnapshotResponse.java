@@ -1,6 +1,7 @@
 package com.kcdformes.infrastructure.ws.dto;
 
 import com.kcdformes.domain.model.Tower;
+import com.kcdformes.domain.model.SeasonalTerrain;
 import com.kcdformes.domain.model.match.LiveEnemy;
 import com.kcdformes.domain.model.match.Match;
 import com.kcdformes.domain.model.match.MatchGameState;
@@ -21,7 +22,8 @@ public record MatchSnapshotResponse(
         String status,
         List<EnemyView> enemies,
         List<TowerView> towers,
-        List<ShotView> shots
+        List<ShotView> shots,
+        SeasonalTerrain.Snapshot terrain
 ) {
     public record EnemyView(String id, String type, double x, double y, int hp, int maxHp) {}
     public record TowerView(String id, String type, int x, int y, int level) {}
@@ -40,7 +42,7 @@ public record MatchSnapshotResponse(
                 .toList();
         return new MatchSnapshotResponse(
                 s.tick, s.wave, s.gold, s.castleHp, s.castleMaxHp, s.pendingBonuses,
-                status, enemies, towers, shots);
+                status, enemies, towers, shots, s.terrain.snapshot(s.map.getTowers()));
     }
 
     private static EnemyView toView(LiveEnemy e) {

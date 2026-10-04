@@ -4,7 +4,7 @@
 // (MapCatalog) — mêmes id, mêmes voies, même halfWidth.
 import { Cell, PathData, buildLanesData, corridorHas, buildableHas, pathDirectionAtIn } from './constants'
 
-export type Biome = 'desert' | 'prairie' | 'snow'
+export type Biome = 'desert' | 'prairie' | 'snow' | 'spring' | 'autumn'
 
 export type MapDef = {
   id: string
@@ -55,6 +55,13 @@ export const GAME_MAPS: MapDef[] = [
     // Aires de croisement (route élargie vers les bords haut/bas) — IDENTIQUE au backend.
     { x: 9, y: 1 }, { x: 10, y: 1 }, { x: 11, y: 1 }, { x: 12, y: 1 },
     { x: 9, y: 15 }, { x: 10, y: 15 }, { x: 11, y: 15 }, { x: 12, y: 15 },
+  ]),
+  defLanes('spring', 'Les Jardins éveillés', 'spring', '', [
+    [{ x: 0, y: 4 }, { x: 7, y: 4 }, { x: 7, y: 7 }, { x: 16, y: 7 }, { x: 16, y: 9 }, { x: 19, y: 9 }],
+    [{ x: 0, y: 12 }, { x: 7, y: 12 }, { x: 7, y: 9 }, { x: 19, y: 9 }],
+  ]),
+  defLanes('autumn', 'Le Val des feuilles', 'autumn', '', [
+    [{ x: 0, y: 3 }, { x: 15, y: 3 }, { x: 15, y: 7 }, { x: 4, y: 7 }, { x: 4, y: 12 }, { x: 19, y: 12 }],
   ]),
 ]
 

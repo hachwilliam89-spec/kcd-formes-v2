@@ -58,7 +58,7 @@ const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCa
             if (pendingRef.current) {
                 const s = pendingRef.current
                 pendingRef.current = null
-                scene.pushCoopSnapshot(s.enemies, s.towers, s.shots)
+                scene.pushCoopSnapshot(s.enemies, s.towers, s.shots, s.terrain)
             }
         })
 
@@ -115,7 +115,7 @@ const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCa
 
     useImperativeHandle(ref, () => ({
         pushSnapshot: (snap) => {
-            if (readyRef.current) sceneRef.current?.pushCoopSnapshot(snap.enemies, snap.towers, snap.shots)
+            if (readyRef.current) sceneRef.current?.pushCoopSnapshot(snap.enemies, snap.towers, snap.shots, snap.terrain)
             else pendingRef.current = snap
         },
     }))

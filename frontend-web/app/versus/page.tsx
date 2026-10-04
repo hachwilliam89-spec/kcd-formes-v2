@@ -333,7 +333,7 @@ export default function VersusPage() {
                             {/* Aperçu live de sa grille (mini-map) : château coloré selon PV,
                                 ennemis par type, tours par type. */}
                             <div className="flex-1 min-h-0 flex items-center justify-center">
-                                <MiniBoard enemies={oppHud.enemies} towers={oppHud.towers} castleRatio={oppRatio} className="w-full h-full" />
+                                <MiniBoard mapId={match?.mapId} enemies={oppHud.enemies} towers={oppHud.towers} castleRatio={oppRatio} className="w-full h-full" />
                             </div>
                             {/* Légende des tours présentes chez l'adversaire → savoir quoi lui envoyer. */}
                             {(() => {

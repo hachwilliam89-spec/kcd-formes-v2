@@ -2,9 +2,11 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import Phaser from 'phaser'
+import type { TerrainForecast } from './seasons'
 import { GameScene, TowerData, TickSnapshot, PlacementVerdict } from './GameScene'
 
 interface GameCanvasProps {
+    terrainForecast?: TerrainForecast
     towers: TowerData[]
     onCellClick: (x: number, y: number) => void
     // Type de tour sélectionné → aperçu de pose (case verte/rouge + cercle de
@@ -39,7 +41,7 @@ export interface GameCanvasHandle {
 const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCanvas(
     {
         towers, onCellClick, selectedTower = null, selectedTowerId = null, inspectEnabled = false,
-        placementValidator, onTowersLive, mapId = null,
+        placementValidator, onTowersLive, mapId = null, terrainForecast,
     },
     ref
 ) {
@@ -120,6 +122,8 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
     useEffect(() => {
         sceneRef.current?.setOnTowersLive(onTowersLive)
     }, [onTowersLive])
+
+    useEffect(() => { sceneRef.current?.setTerrainForecast(terrainForecast) }, [terrainForecast, mapId])
 
     useImperativeHandle(ref, () => ({
         playWave: (ticks, onTick, onComplete, unseenEnemyTypes, onNeedTutorial) => {

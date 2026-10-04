@@ -1,3 +1,6 @@
+import { paintSeasonalTerrain } from './seasonalTerrain'
+import { paintCastle } from './castles'
+import { FLOOD_CELLS, LEAF_CELLS, type TerrainSnapshot, type TerrainForecast } from './seasons'
 import Phaser from 'phaser'
 import type { Cell } from './constants'
 import { TOP_RESERVED_ROWS, MAX_WALLS, towerRangeAt } from './constants'
@@ -98,6 +101,7 @@ export interface BossAbilityEvent {
 }
 
 export interface TickSnapshot {
+    terrain?: TerrainSnapshot
     tick: number
     // Tours étourdies par le pulse d'un Boss pendant ce tick (état complet par
     // tick, recalculé côté backend) : grisées tant qu'elles y figurent — le
@@ -282,6 +286,11 @@ export class GameScene extends Phaser.Scene {
     // setBuildPreview, solo comme multi).
     private previewGraphics!: Phaser.GameObjects.Graphics
     private buildPreviewType: string | null = null
+    private terrainForecast?: TerrainForecast
+    private terrainLayer?: Phaser.GameObjects.Image
+    private terrainLabel?: Phaser.GameObjects.Text
+    private terrainKey = ''
+    private seasonalCombat = false
     private hoverCell: { x: number; y: number } | null = null
     // Repères de la tour survolée / sélectionnée (voir refreshFocus) : cercle de
     // portée SOUS les unités, cadre et coins dorés AU-DESSUS.
@@ -459,7 +468,7 @@ export class GameScene extends Phaser.Scene {
         this.load.image('road_fill', '/sprites/terrain/road_fill.png')
         // Map "terres désolées" pré-composée (terre terne + piste sableuse aux bords
         // naturels) : image unique, rendu garanti (voir buildBakedTerrain).
-        for (const m of GAME_MAPS) this.load.image(`map-${m.id}`, m.image)
+        for (const m of GAME_MAPS) if (m.image) this.load.image(`map-${m.id}`, m.image)
         // Thème terres désolées / ruines : PAS d'arbres/herbe verts. Ruines "tall"
         // (colonne, tombes, croix, bannières, palissade, feu) calées en HAUTEUR ;
         // "flat" (ossements, tronc, rocher, souche) en LARGEUR ; rochers + petits cailloux.
@@ -480,9 +489,11 @@ export class GameScene extends Phaser.Scene {
         this.load.image('snow-lantern', '/sprites/decor/snow/lantern.png')
         this.load.image('snow-dirt', '/sprites/decor/snow/dirt.png')
         this.load.image('snow-pebbles', '/sprites/decor/snow/pebbles.png')
+        // Packs fournis localement : ignorés par git, inclus dans le bundle privé d’assets.
+        this.load.image('season-plants', '/sprites/seasonal/plants.png')
+        this.load.image('season-road', '/sprites/seasonal/garden-road.png')
         // Châteaux : le tien (arrivée, à défendre) + celui de l'ennemi (spawn, décoratif).
-        this.load.image('castle', '/sprites/castle/castle.png')
-        this.load.image('castle-enemy', '/sprites/castle/castle_enemy.png')
+        // Fortifications dessinées par biome dans drawPath, sans sprite externe.
     }
 
     create() {
@@ -594,6 +605,7 @@ export class GameScene extends Phaser.Scene {
 
         this.drawGrid()
         this.drawPath()
+        this.renderTerrainState()
         this.prewarmShaders()
 
         // Rejoue les tours arrivées pendant l'initialisation de la scène
@@ -861,7 +873,7 @@ export class GameScene extends Phaser.Scene {
 
         // Étiquette : coût si la pose est possible, sinon la raison du refus.
         const text = ok
-            ? (verdict.cost != null ? `${verdict.cost} or` : '')
+            ? (verdict.cost != null ? `${verdict.cost} or` : '') + (this.activeMapId === 'spring' && FLOOD_CELLS.some(p => p.x === cell.x && p.y === cell.y) ? ' · berge inondable (v. 3, 6, 9…)' : '')
             : (verdict.reason ?? 'Pose impossible')
         const label = this.ensureGhostLabel()
         label.setVisible(text !== '')
@@ -1038,6 +1050,63 @@ export class GameScene extends Phaser.Scene {
         if (this.enemiesGraphics) callback()
     }
 
+    setTerrainForecast(forecast?: TerrainForecast) {
+        this.terrainForecast = forecast
+        if (!this.seasonalCombat && !this.coopActive) this.renderTerrainState()
+    }
+
+    /** Le serveur décide des effets ; ce calque ne fait que représenter son état. */
+    private renderTerrainState(state?: TerrainSnapshot) {
+        if (!this.towersGraphics || !['spring', 'autumn'].includes(this.activeMapId)) return
+        const key = JSON.stringify([state, this.terrainForecast, this.seasonalCombat])
+        if (key === this.terrainKey) return
+        this.terrainKey = key
+        const g = this.make.graphics({ x: 0, y: 0 })
+        const burning = new Set(state?.burning.map(p => `${p.x},${p.y}`))
+        const burned = new Set(state?.burned.map(p => `${p.x},${p.y}`))
+        const flooded = state?.flooded ?? false
+        const forecast = !this.seasonalCombat && this.terrainForecast?.flooded
+        for (const p of this.activeMapId === 'spring' ? FLOOD_CELLS : LEAF_CELLS) {
+            const x = p.x * CELL_SIZE, y = p.y * CELL_SIZE
+            if (this.activeMapId === 'spring') {
+                g.fillStyle(flooded ? 0x538fae : 0x7ca8a2, flooded ? 0.72 : 0.18)
+                g.fillRect(x + 2, y + 2, 36, 36)
+                g.lineStyle(forecast ? 2 : 1, forecast ? 0xe5f6ff : 0x91c5d1, 0.85)
+                g.strokeRect(x + 3, y + 3, 34, 34)
+                g.lineStyle(2, 0xc2e4e8, 0.65)
+                g.lineBetween(x + 10, y + 28, x + 18, y + 30); g.lineBetween(x + 18, y + 30, x + 28, y + 27)
+            } else {
+                const id = `${p.x},${p.y}`, fire = burning.has(id), ash = burned.has(id)
+                g.fillStyle(ash ? 0x302b28 : fire ? 0xad492b : 0xa75c32, 0.85)
+                g.fillRoundedRect(x + 4, y + 5, 32, 30, 5)
+                for (let i = 0; i < 6; i++) {
+                    g.fillStyle(ash ? 0x72665b : fire ? (i % 2 ? 0xffdb83 : 0xf79346) : (i % 2 ? 0xd7a452 : 0xcb7940), 0.95)
+                    g.fillRect(x + 8 + (i * 7) % 25, y + 9 + (i * 11) % 23, 4, fire ? 7 : 3)
+                }
+            }
+        }
+        // Un seul quad entre deux changements d’état : aucun tracé statique par image.
+        const textureKey = `season-overlay-${this.activeMapId}`
+        const texture = this.textures.get(textureKey) as Phaser.Textures.CanvasTexture
+        if (this.textures.exists(textureKey)) texture.getContext().clearRect(0, 0, 800, 640)
+        g.generateTexture(textureKey, 800, 640)
+        g.destroy()
+        if (!this.terrainLayer) this.terrainLayer = this.add.image(0, 0, textureKey).setOrigin(0, 0).setDepth(0.3)
+        // Baisse d'opacité explicite des tours suspendues ; restaurée à la décrue.
+        const disabled = new Set(state?.disabledTowers ?? [])
+        for (const [id, sprite] of this.towerSprites) {
+            sprite.setAlpha(disabled.has(id) ? 0.48 : 1)
+            this.towerWeapons.get(id)?.setAlpha(disabled.has(id) ? 0.48 : 1)
+        }
+        const label = this.activeMapId === 'spring'
+            ? flooded ? 'CRUE · tours des berges suspendues' : forecast ? 'PROCHAINE VAGUE : CRUE · berges bleues' : 'BERGES BLEUES · crue aux vagues 3, 6, 9…'
+            : 'FEUILLES · catapulte → feu → cendres (jusqu’à la prochaine vague)'
+        if (!this.terrainLabel) this.terrainLabel = this.add.text(400, 8, '', {
+            fontFamily: 'sans-serif', fontSize: '12px', color: '#f9edd0', backgroundColor: '#26382b', padding: { x: 9, y: 5 },
+        }).setOrigin(0.5, 0).setDepth(DEPTH_LABEL)
+        this.terrainLabel.setText(label)
+    }
+
     startCoop() {
         this.coopActive = true
     }
@@ -1052,11 +1121,14 @@ export class GameScene extends Phaser.Scene {
         enemies: EnemySnapshot[],
         towers: { id: string; type: string; x: number; y: number; level: number }[],
         shots: { fromX: number; fromY: number; toX: number; toY: number }[],
+        terrain?: TerrainSnapshot,
     ) {
         // Tours : réutilise le rendu solo (sprites, base+arme, PV…).
         this.drawTowers(towers.map((t) => ({
             id: t.id, type: t.type as TowerData['type'], x: t.x, y: t.y, level: t.level,
         })))
+
+        this.renderTerrainState(terrain)
 
         // Diff ennemis pour distinguer morts (tués) et arrivées (au château).
         const prevEnemies = this.coopCurr?.enemies ?? []
@@ -1329,6 +1401,7 @@ export class GameScene extends Phaser.Scene {
         // éclats du Mage au début de cette vague-ci (index repart de 0).
         this.magicFxTick.clear()
         this.castleFell = false
+        this.seasonalCombat = true
         this.soloPrev = null
         this.soloCurr = null
 
@@ -1345,6 +1418,8 @@ export class GameScene extends Phaser.Scene {
                 this.waveRender = undefined
                 this.soloPrev = null
                 this.soloCurr = null
+                this.seasonalCombat = false
+                this.renderTerrainState()
                 onComplete?.()
                 return
             }
@@ -1377,8 +1452,8 @@ export class GameScene extends Phaser.Scene {
         renderTick()
         if (ticks.length > 1) {
             this.waveTimer = this.time.addEvent({ delay: TICK_DELAY_MS, callback: renderTick, loop: true })
-        } else {
-            onComplete?.()
+        } else if (ticks.length === 1) {
+            renderTick()
         }
     }
 
@@ -1393,6 +1468,7 @@ export class GameScene extends Phaser.Scene {
 
     /** Dessine un tick de la vague (extrait de playWave pour être réutilisé). */
     private drawWaveTick(tick: TickSnapshot, index: number) {
+            this.renderTerrainState(tick.terrain)
             // Dégâts de siège de ce tick (Sapeur ou pulse de Boss) : appliqués en
             // direct aux copies locales (voir towersById) pour que les jauges des
             // tours baissent PENDANT l'animation — sans ça, les dégâts du Boss
@@ -2057,6 +2133,10 @@ export class GameScene extends Phaser.Scene {
 
         // Thème neige (Fourche) : décor dédié semé dans les ZONES MORTES. Sort tôt —
         // le décor terres désolées ci-dessous ne s'applique qu'aux autres cartes.
+        if (['spring', 'autumn'].includes(this.activeMapId)) {
+            this.addVignette()
+            return
+        }
         if (this.mapDef.biome === 'snow') {
             this.drawSnowDecor(rnd, nearCastle)
             this.bakeDecorShadows()
@@ -2206,6 +2286,20 @@ export class GameScene extends Phaser.Scene {
         // Map pré-composée (terre désolée + piste sableuse naturelle) : une seule image
         // mise à l'échelle du plateau. Rendu identique garanti, aucun masque runtime.
         const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
+        if (['spring', 'autumn'].includes(this.activeMapId)) {
+            const key = `season-ground-${this.activeMapId}`
+            if (!this.textures.exists(key)) {
+                const tex = this.textures.createCanvas(key, w, h)
+                const ctx = tex?.getContext()
+                if (ctx && tex) {
+                    const plants = this.textures.exists('season-plants') ? this.textures.get('season-plants').getSourceImage() as HTMLImageElement : undefined
+                    const road = this.textures.exists('season-road') ? this.textures.get('season-road').getSourceImage() as HTMLImageElement : undefined
+                    paintSeasonalTerrain(ctx, this.mapDef, plants, road); tex.refresh()
+                }
+            }
+            this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-20)
+            return
+        }
         this.add.image(0, 0, `map-${this.mapDef.id}`).setOrigin(0, 0).setDepth(-20).setDisplaySize(w, h)
         // Cartes multi-voies : le sol est uni (pas de route peinte) → on trace la
         // route au runtime, exactement sur les cases des voies (union du couloir),
@@ -2329,42 +2423,24 @@ export class GameScene extends Phaser.Scene {
     }
 
     private drawPath() {
-        // Le couloir est matérialisé par les tuiles de terre (voir create). On
-        // pose seulement les deux châteaux, à chaque extrémité du chemin serpentin :
-        // celui de l'ennemi au spawn (PATH_START, décoratif) et le tien à l'arrivée
-        // (PATH_END, celui qu'on défend). Forteresses compactes (~2,4 cases de
-        // large), ancrées en bas de leur case, débordant vers le haut.
-        const castleW = CELL_SIZE * 2.4
-
-        // Un château ennemi par ENTRÉE UNIQUE : plusieurs voies peuvent partager le
-        // même départ (une route qui fourche) → un seul château ; deux entrées
-        // distinctes → deux châteaux. Clair, orienté vers la droite = vers le champ.
+        // Textures natives réutilisables : même silhouette lisible, matériaux par saison.
+        const keyFor = (enemy: boolean) => {
+            const key = `fort-${this.activeMapId}-${enemy ? 'enemy' : 'player'}`
+            if (!this.textures.exists(key)) {
+                const tex = this.textures.createCanvas(key, 100, 112)
+                if (tex) { paintCastle(tex.getContext(), this.activeMapId, enemy); tex.refresh() }
+            }
+            return key
+        }
         const uniqueStarts = mapLaneStarts(this.mapDef).filter(
-            (s, i, arr) => arr.findIndex((o) => o.x === s.x && o.y === s.y) === i,
+            (s, i, arr) => arr.findIndex(o => o.x === s.x && o.y === s.y) === i,
         )
         for (const start of uniqueStarts) {
-            const startX = start.x * CELL_SIZE + CELL_SIZE / 2
-            const startGroundY = (start.y + 2) * CELL_SIZE // +2 : descendu d'une case
-            const enemyCastle = this.add.image(startX, startGroundY, 'castle').setOrigin(0.35, 1).setDepth(-15)
-            enemyCastle.setScale(castleW / enemyCastle.width)
-            enemyCastle.setFlipX(true)
+            this.add.image(Math.max(32, start.x * CELL_SIZE + 20), start.y * CELL_SIZE + 37, keyFor(true))
+                .setOrigin(0.5, 1).setDisplaySize(68, 76).setDepth(-15)
         }
-
-        // Ton château à l'arrivée commune (sombre, orienté vers la gauche = vers le champ).
         const end = mapCastle(this.mapDef)
-        const endX = end.x * CELL_SIZE + CELL_SIZE / 2
-        const endGroundY = (end.y + 2) * CELL_SIZE // +2 : descendu d'une case
-        const castle = this.add.image(endX, endGroundY, 'castle-enemy').setOrigin(0.65, 1).setDepth(-15)
-        castle.setScale(castleW / castle.width)
-
-        // Drapeaux rouges de part et d'autre du château (cases rendues non
-        // constructibles car trop fortes) : repère héraldique. Depth -16 → derrière
-        // le château, ils dépassent juste sur les côtés.
-        for (const dy of [-1, 1]) {
-            const fx = (end.x - 1) * CELL_SIZE + CELL_SIZE / 2
-            const fy = (end.y + dy + 1) * CELL_SIZE
-            const flag = this.add.image(fx, fy, 'decor-ruinT-6').setOrigin(0.5, 0.94).setDepth(-16)
-            flag.setScale((CELL_SIZE * 1.15) / flag.height)
-        }
+        this.add.image(Math.min(768, end.x * CELL_SIZE + 20), end.y * CELL_SIZE + 37, keyFor(false))
+            .setOrigin(0.5, 1).setDisplaySize(68, 76).setDepth(-15)
     }
 }

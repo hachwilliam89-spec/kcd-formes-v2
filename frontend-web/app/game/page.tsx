@@ -663,6 +663,7 @@ export default function GamePage() {
                     <div className="relative w-full flex-1 min-w-0 min-h-0 rounded-lg overflow-hidden" style={{ border: '2px solid #2f1c0d' }}>
                         <GameCanvas
                             key={mapId} mapId={mapId} ref={canvasRef} towers={towers} onCellClick={handleCellClick}
+                            terrainForecast={wavePreview?.terrain}
                             selectedTower={canAct ? selectedTower : null}
                             // Même visibilité que la carte de tour (lecture seule en combat).
                             selectedTowerId={canInspect ? selectedTowerId : null}
@@ -671,6 +672,17 @@ export default function GamePage() {
                             onTowersLive={(live) => setLiveTowerHp(Object.fromEntries(live.map((t) => [t.id, t.hp ?? null])))}
                         />
                     </div>
+
+                            {wavePreview?.terrain?.type === 'SPRING' && !isGameOver && !combatRunning && (
+                                <p className="shrink-0 font-read text-xs px-3 py-1 rounded border border-cyan-700/30 bg-cyan-100 text-slate-800">
+                                    {wavePreview.terrain.flooded ? `Vague ${wavePreview.waveNumber} : crue. Les tours des cases bleues ne tireront pas pendant cette vague.` : `Vague ${wavePreview.waveNumber} : eaux basses. Prochaine crue à la vague ${Math.ceil((wavePreview.waveNumber + 1) / 3) * 3}.`}
+                                </p>
+                            )}
+                            {wavePreview?.terrain?.type === 'AUTUMN' && !isGameOver && (
+                                <p className="shrink-0 font-read text-xs px-3 py-1 rounded border border-orange-800/30 bg-orange-100 text-amber-950">
+                                    Catapulte → feuilles en feu → cendres. Renouvellement à chaque vague ; les ennemis à armure magique résistent.
+                                </p>
+                            )}
 
                     {/* Barre d'action : tours en tuiles + actions (JUSTE sous la grille en étroit) */}
                     <div className="kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-1">

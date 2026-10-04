@@ -37,7 +37,7 @@ npm run bench -- --headed              # fenêtre visible : vrai GPU, vraie vsyn
 |---|---|---|
 | `--enemies N` | 200 | taille de la vague (≈ 130 à l'écran au pic pour 200) |
 | `--towers N` | 32 | tours posées (types et niveaux variés) |
-| `--map` | `desert` | `desert` ou `fourche` |
+| `--map` | `desert` | `desert`, `fourche`, `spring` ou `autumn` |
 | `--seed N` | 1 | graine de la vague |
 | `--idle` | — | mesure 8 s sans vague (calques fixes, météo) |
 | `--profile` | — | profil CPU pendant la mesure : top 15 des fonctions |
@@ -76,3 +76,17 @@ Compilations de shaders pendant la mesure : 0
 Causes trouvées avec ce banc : calques `Graphics` statiques re-tessellés à chaque
 image (quadrillage des parcelles : ~78 % d'une image) et compilations de shaders
 en pleine vague.
+
+## Aperçu manuel des saisons
+
+```bash
+node scripts/perf-bench/run.mjs --serve --seasonal --map spring
+```
+
+À lancer depuis la racine : ouvrir l’URL affichée, choisir une carte et les boutons
+repos / annonce / crue / feu / cendres / fin de vague. Aucun navigateur n’est lancé
+par `--serve`. Les états sont synthétiques : ils vérifient le rendu de la vraie scène,
+pas les règles métier (couvertes par `SeasonalTerrainTest`). La mesure de 8 secondes
+porte uniquement sur le rendu de l’état affiché ; ce n’est pas une mesure de combat chargé.
+
+`--serve` sans `--seasonal` sert le banc habituel, pour un pilotage manuel.
