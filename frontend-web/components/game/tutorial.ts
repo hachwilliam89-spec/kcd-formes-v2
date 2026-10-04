@@ -1,14 +1,18 @@
 // Contenu et persistance du tutoriel contextuel (bulles BD).
 // - Ennemis : conseil affiché à la 1re apparition de chaque type pendant une vague.
-// - Tours : conseil affiché à la 1re pose de chaque type.
+// - Tours : conseil affiché à la 1re sélection de chaque type.
+// - Astuces : fonctionnalités d'interface, chacune au moment où elle sert.
 // Persistance : localStorage, clé par pseudo (= "par compte" sur ce navigateur).
-// Un bouton "Revoir le tuto" réinitialise l'ensemble (voir resetTutorial).
+// Le joueur peut couper toutes les bulles (setTutorialEnabled) et les revoir
+// depuis le début (resetTutorial).
 
 export type TutorialEntry = {
   title: string
   body: string
   icon?: string // chemin d'icône pixel optionnel (public/sprites/ui)
 }
+
+export type TutorialKind = 'enemy' | 'tower' | 'tip'
 
 // clé = type d'ennemi (voir EnemyType backend / SPRITE_ENEMY_TYPES).
 export const ENEMY_TUTORIAL: Record<string, TutorialEntry> = {
@@ -66,7 +70,53 @@ export const TOWER_TUTORIAL: Record<string, TutorialEntry> = {
   },
 }
 
+// Astuces d'interface — clé = moment de déclenchement (voir game/page.tsx).
+export const FEATURE_TUTORIAL: Record<string, TutorialEntry> = {
+  // À l'arrivée sur le plateau.
+  build: {
+    title: 'Construire',
+    body: "Choisis une tour dans la barre du bas (ou touches 1 à 5), puis survole le terrain : la silhouette montre l'emplacement, le cercle la portée, l'étiquette le coût — ou pourquoi c'est impossible. Échap annule la pose.",
+  },
+  // Après la 1re tour posée.
+  inspect: {
+    title: 'Tes tours',
+    body: 'Survole une tour pour voir sa portée. Clique-la pour la sélectionner : coins dorés sur le plateau, et sa fiche dans le panneau pour l’améliorer ou choisir sa cible.',
+  },
+  // À la 1re sélection d'une tour.
+  upgrade: {
+    title: 'Améliorer et cibler',
+    body: 'Chaque niveau (3 max) augmente dégâts, portée et solidité. La priorité de tir choisit l’ennemi visé : le plus proche, le plus avancé ou le plus solide. Échap ferme la fiche.',
+  },
+  // À la fin de la 1re vague.
+  combat: {
+    title: 'Pendant les vagues',
+    body: 'Tu peux cliquer une tour en plein combat pour suivre ses PV et sa portée. Construction, amélioration et ciblage attendent la fin de la vague.',
+  },
+}
+
 const storageKey = (username: string) => `kcd_tuto_seen_${username || 'invite'}`
+const disabledKey = (username: string) => `kcd_tuto_off_${username || 'invite'}`
+
+/** Bulles de conseils actives pour ce compte (activées par défaut). */
+export function isTutorialEnabled(username: string): boolean {
+  if (typeof window === 'undefined') return true
+  try {
+    return window.localStorage.getItem(disabledKey(username)) !== '1'
+  } catch {
+    return true
+  }
+}
+
+/** Active / coupe toutes les bulles (ennemis, tours, astuces) pour ce compte. */
+export function setTutorialEnabled(username: string, enabled: boolean) {
+  if (typeof window === 'undefined') return
+  try {
+    if (enabled) window.localStorage.removeItem(disabledKey(username))
+    else window.localStorage.setItem(disabledKey(username), '1')
+  } catch {
+    /* quota / mode privé : le réglage ne survivra simplement pas au rechargement */
+  }
+}
 
 /** Ensemble des clés de tuto déjà vues par ce compte (sur ce navigateur). */
 export function getSeenTutorials(username: string): Set<string> {

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 import { useGame } from '@/hooks/useGame'
 import { useAuth } from '@/hooks/useAuth'
-import type { TowerData } from '@/components/game/GameScene'
+import type { TowerData, PlacementVerdict } from '@/components/game/GameScene'
 import { TOP_RESERVED_ROWS, TOWER_BASE_RANGE, towerRangeAt } from '@/components/game/constants'
 import { getMapDef, mapIsCorridor, mapIsBuildable, GAME_MAPS } from '@/components/game/maps'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
@@ -18,8 +18,9 @@ import { UnitChip } from '@/components/game/UnitChip'
 import { TowerIcon } from '@/components/game/UnitIcon'
 import { audio } from '@/lib/audio'
 import {
-    ENEMY_TUTORIAL, TOWER_TUTORIAL, getSeenTutorials, markTutorialSeen, resetTutorial,
-    type TutorialEntry,
+    ENEMY_TUTORIAL, TOWER_TUTORIAL, FEATURE_TUTORIAL, getSeenTutorials, markTutorialSeen, resetTutorial,
+    isTutorialEnabled, setTutorialEnabled,
+    type TutorialEntry, type TutorialKind,
 } from '@/components/game/tutorial'
 import api from '@/lib/api'
 
@@ -113,7 +114,9 @@ export default function GamePage() {
 
     const canvasRef = useRef<GameCanvasHandle>(null)
 
-    const [selectedTower, setSelectedTower] = useState<TowerType>('ARCHER')
+    // Type de tour à poser. null = hors mode de pose (Échap) : un clic sur le
+    // terrain ne construit rien.
+    const [selectedTower, setSelectedTower] = useState<TowerType | null>('ARCHER')
     // Map choisie sur l'écran de départ (avant création de la partie).
     const [pendingMapId, setPendingMapId] = useState<string>('desert')
     // Modale de confirmation « nouvelle partie » (remplace window.confirm).
@@ -127,6 +130,9 @@ export default function GamePage() {
     const [bonusChoiceLoading, setBonusChoiceLoading] = useState(false)
     // Tour sélectionnée (clic) : ouvre la carte d'info (amélioration + ciblage).
     const [selectedTowerId, setSelectedTowerId] = useState<string | null>(null)
+    // PV des tours en direct pendant une vague (siège, destructions), remontés par
+    // la scène : la carte de tour reste juste en combat. null = le store fait foi.
+    const [liveTowerHp, setLiveTowerHp] = useState<Record<string, number | null> | null>(null)
     const [leaderboard, setLeaderboard] = useState<{
         top: { rank: number; username: string; bestWave: number }[]
         me: { rank: number; username: string; bestWave: number } | null
@@ -135,8 +141,14 @@ export default function GamePage() {
     const [showLeaderboard, setShowLeaderboard] = useState(false)
     // Onglet de classement affiché : 'global' (toutes cartes) ou un id de carte.
     const [lbTab, setLbTab] = useState<string>('global')
-    // Bulle de tuto en cours (null = aucune). enemy => la vague est en pause.
-    const [tutorial, setTutorial] = useState<{ entry: TutorialEntry; kind: 'enemy' | 'tower' } | null>(null)
+    // Bulles de tuto en attente, affichées une par une (une astuce et un nouvel
+    // ennemi peuvent tomber en même temps). En tête = bulle visible ; enemy =>
+    // la vague est en pause tant qu'elle est ouverte.
+    const [tutorialQueue, setTutorialQueue] = useState<{ entry: TutorialEntry; kind: TutorialKind }[]>([])
+    const tutorial = tutorialQueue[0] ?? null
+    // Bulles de conseils activées (réglage par compte, voir tutorial.ts). Relu
+    // après le montage : localStorage n'existe pas au rendu serveur.
+    const [tutorialOn, setTutorialOn] = useState(true)
 
     // Redirection vers la connexion : UNIQUEMENT une fois le store relu depuis
     // localStorage (authHydrated). La réhydratation de persist est asynchrone —
@@ -224,72 +236,175 @@ export default function GamePage() {
     // Affiche la bulle de tuto pour ce type (ennemi/tour) si le compte ne l'a
     // pas encore vue. Renvoie true si une bulle a été ouverte (utile pour mettre
     // la vague en pause côté ennemis).
-    function maybeShowTutorial(kind: 'enemy' | 'tower', type: string): boolean {
+    function maybeShowTutorial(kind: TutorialKind, type: string): boolean {
         const username = player?.username ?? ''
+        if (!isTutorialEnabled(username)) return false
         const key = `${kind}:${type}`
         if (getSeenTutorials(username).has(key)) return false
-        const entry = kind === 'enemy' ? ENEMY_TUTORIAL[type] : TOWER_TUTORIAL[type]
+        const entry = kind === 'enemy' ? ENEMY_TUTORIAL[type]
+            : kind === 'tower' ? TOWER_TUTORIAL[type]
+            : FEATURE_TUTORIAL[type]
         if (!entry) return false
         markTutorialSeen(username, key)
-        setTutorial({ entry, kind })
+        setTutorialQueue((queue) => [...queue, { entry, kind }])
         return true
     }
 
+    // Ferme la bulle visible (ou toutes, si le joueur coupe les conseils). Une
+    // bulle d'ennemi tenait la vague en pause : on la relance en la fermant.
+    function closeTutorial(disableAll = false) {
+        const enemyWasPending = disableAll
+            ? tutorialQueue.some((t) => t.kind === 'enemy')
+            : tutorial?.kind === 'enemy'
+        if (disableAll) {
+            setTutorialEnabled(player?.username ?? '', false)
+            setTutorialOn(false)
+            setTutorialQueue([])
+            setMessage('Conseils désactivés — réactivables avec le bouton « Conseils ».')
+        } else {
+            setTutorialQueue((queue) => queue.slice(1))
+        }
+        if (enemyWasPending) canvasRef.current?.resumeWave?.()
+    }
+
+    function toggleTutorial() {
+        const next = !tutorialOn
+        setTutorialEnabled(player?.username ?? '', next)
+        setTutorialOn(next)
+        if (!next) setTutorialQueue([])
+        setMessage(next ? 'Conseils réactivés.' : 'Conseils désactivés — réactivables avec le bouton « Conseils ».')
+    }
+
+    // Réglage relu une fois le pseudo connu (localStorage, côté client uniquement).
+    useEffect(() => {
+        setTutorialOn(isTutorialEnabled(player?.username ?? ''))
+    }, [player?.username])
+
+    // Astuce « Construire » à l'arrivée sur le plateau (une seule fois par compte).
+    useEffect(() => {
+        if (gameId && map && !isGameOver) maybeShowTutorial('tip', 'build')
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [gameId, Boolean(map)])
+
+    /**
+     * Règles de pose côté client (le backend reste l'arbitre final), filtrées ici
+     * pour un retour immédiat au lieu d'un aller-retour réseau voué au rejet.
+     * Une seule source pour l'aperçu du plateau (raison courte) et le message
+     * après un clic (raison détaillée).
+     */
+    function checkPlacement(type: TowerType, x: number, y: number):
+        { ok: true; cost: number } | { ok: false; cost: number; short: string; long: string } {
+        const cost = TOWER_INFO[type].cost
+        const fail = (short: string, long: string) => ({ ok: false as const, cost, short, long })
+        const placed = map?.towers ?? []
+        if (placed.some((t) => t.x === x && t.y === y)) return fail('Case occupée', 'Cette case est déjà occupée.')
+        // Rangée du haut réservée (tampon d'affichage des tours) : non constructible.
+        if (y < TOP_RESERVED_ROWS) return fail('Rangée réservée', 'Rangée du haut réservée (affichage).')
+        // Règle du couloir, INVERSÉE selon le type : le mur-barrage se pose
+        // uniquement SUR le couloir des ennemis, les tours uniquement en dehors.
+        const mapDef = getMapDef(mapId)
+        const inCorridor = mapIsCorridor(mapDef, x, y)
+        if (type === 'WALL' && !inCorridor) {
+            return fail('Mur : sur le couloir', 'Le mur se pose sur le couloir des ennemis (pour leur barrer la route)')
+        }
+        // 6 = PlaceTowerService.MAX_WALLS côté backend (anti-donjon : paver le
+        // couloir de murs entassait toute la vague sous le feu de la défense
+        // entière, victoire garantie).
+        if (type === 'WALL' && placed.filter((t) => t.type === 'WALL').length >= 6) {
+            return fail('Limite de 6 murs', 'Limite de 6 murs atteinte — le mur est un point de blocage, pas une forteresse')
+        }
+        if (type !== 'WALL' && inCorridor) {
+            return fail('Pas sur le couloir', 'Impossible de construire une tour sur le couloir des ennemis')
+        }
+        // Bande constructible : les tours ne se posent qu'au bord des routes. Loin
+        // des routes = zone morte (décor).
+        if (type !== 'WALL' && !mapIsBuildable(mapDef, x, y)) {
+            return fail('Trop loin des routes', 'Trop loin des routes — construis en bordure (le reste est du décor)')
+        }
+        if (gold < cost) return fail(`Or insuffisant (${cost})`, `Or insuffisant : il faut ${cost} or (tu en as ${gold}).`)
+        return { ok: true, cost }
+    }
+
+    // Même règles pour l'aperçu du plateau : coût si OK, sinon raison courte.
+    function placementValidator(type: string, x: number, y: number): PlacementVerdict {
+        const verdict = checkPlacement(type as TowerType, x, y)
+        return verdict.ok
+            ? { ok: true, cost: verdict.cost }
+            : { ok: false, cost: verdict.cost, reason: verdict.short }
+    }
+
     async function handleCellClick(x: number, y: number) {
-        if (isGameOver || combatRunning) return
+        if (isGameOver) return
 
         // Cliquer sur une tour existante la SÉLECTIONNE (carte d'info : amélioration
         // + mode de ciblage) au lieu de l'améliorer directement — un clic ne doit
         // plus dépenser de l'or par surprise. Un mur n'a ni amélioration utile ni
         // ciblage : cliquer dessus ne sélectionne rien.
         const existingTower = (map?.towers ?? []).find((t) => t.x === x && t.y === y)
-        if (existingTower) {
-            setSelectedTowerId(existingTower.type === 'WALL' ? null : existingTower.id)
+        const inspectable = existingTower && existingTower.type !== 'WALL' ? existingTower : null
+        // Pendant la vague : consultation seulement. Cliquer une tour l'inspecte
+        // (carte en lecture seule), cliquer ailleurs referme l'inspection.
+        if (combatRunning || existingTower) {
+            setSelectedTowerId(inspectable?.id ?? null)
+            if (inspectable && !combatRunning) maybeShowTutorial('tip', 'upgrade')
             return
         }
+        // Hors mode de pose (Échap) : un clic sur le terrain referme juste la carte.
+        if (!selectedTower) { setSelectedTowerId(null); return }
 
-        // Rangée du haut réservée (tampon d'affichage des tours) : non constructible.
-        if (y < TOP_RESERVED_ROWS) { setMessage('Rangée du haut réservée (affichage).'); return }
+        const verdict = checkPlacement(selectedTower, x, y)
+        if (!verdict.ok) { setMessage(verdict.long); return }
 
-        // Règle du couloir, INVERSÉE selon le type (le backend reste l'arbitre
-        // final) : le mur-barrage se pose uniquement SUR le couloir des ennemis,
-        // les tours uniquement en dehors. Filtré ici pour un retour immédiat au
-        // lieu d'un aller-retour réseau voué au rejet.
-        const mapDef = getMapDef(mapId)
-        const inCorridor = mapIsCorridor(mapDef, x, y)
-        if (selectedTower === 'WALL' && !inCorridor) {
-            setMessage('Le mur se pose sur le couloir des ennemis (pour leur barrer la route)')
-            return
-        }
-        // 6 = PlaceTowerService.MAX_WALLS côté backend (anti-donjon : paver le
-        // couloir de murs entassait toute la vague sous le feu de la défense
-        // entière, victoire garantie). Le backend rejette de toute façon.
-        if (selectedTower === 'WALL' &&
-            (map?.towers ?? []).filter((t) => t.type === 'WALL').length >= 6) {
-            setMessage('Limite de 6 murs atteinte — le mur est un point de blocage, pas une forteresse')
-            return
-        }
-        if (selectedTower !== 'WALL' && inCorridor) {
-            setMessage('Impossible de construire une tour sur le couloir des ennemis')
-            return
-        }
-        // Bande constructible : les tours ne se posent qu'au bord des routes. Loin
-        // des routes = zone morte (décor). Le backend reste l'arbitre final.
-        if (selectedTower !== 'WALL' && !inCorridor && !mapIsBuildable(mapDef, x, y)) {
-            setMessage('Trop loin des routes — construis en bordure (le reste est du décor)')
-            return
-        }
-
-        const cost = TOWER_INFO[selectedTower].cost
+        const cost = verdict.cost
         try {
             await placeTower(selectedTower, x, y, cost)
             audio.play('tower_place')
             setMessage(`${TOWER_INFO[selectedTower].label} placé(e) en (${x}, ${y})`)
+            maybeShowTutorial('tip', 'inspect')
         } catch {
             audio.play('error', { volume: 0.6 })
             setMessage('Impossible de placer ici (or insuffisant ou case invalide)')
         }
     }
+
+    // Choix du type à poser (clic sur la barre ou touche 1–5).
+    function selectTowerType(type: TowerType) {
+        audio.play('ui_click', { volume: 0.5 })
+        setSelectedTower(type)
+        maybeShowTutorial('tower', type)
+    }
+
+    // Raccourcis clavier : 1–5 = type de tour (ordre de la barre), Échap = referme
+    // la carte de tour, puis sort du mode de pose. Touches physiques (e.code) :
+    // sur AZERTY, la rangée du haut donne « & é " ' ( » sans Maj. Réabonné à
+    // chaque rendu pour toujours lire l'état courant (or, combat, déblocages).
+    useEffect(() => {
+        function onKeyDown(e: KeyboardEvent) {
+            if (e.ctrlKey || e.metaKey || e.altKey) return
+            const target = e.target as HTMLElement | null
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+            if (e.key === 'Escape') {
+                if (tutorial) closeTutorial()
+                else if (showLeaderboard) setShowLeaderboard(false)
+                else if (selectedTowerId) setSelectedTowerId(null)
+                else setSelectedTower(null)
+                return
+            }
+            const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code)
+            // (pas canAct : déclaré plus bas dans le rendu)
+            if (!digit || isGameOver || combatRunning || tutorial || confirmNewGame || showLeaderboard) return
+            const type = (Object.keys(TOWER_INFO) as TowerType[])[Number(digit[1]) - 1]
+            if (!type) return
+            e.preventDefault()
+            if (bestWave < TOWER_INFO[type].unlockWave) {
+                setMessage(`${TOWER_INFO[type].label} — débloquée à la vague ${TOWER_INFO[type].unlockWave}`)
+                return
+            }
+            selectTowerType(type)
+        }
+        window.addEventListener('keydown', onKeyDown)
+        return () => window.removeEventListener('keydown', onKeyDown)
+    })
 
     async function handleUpgradeSelected(tower: TowerData) {
         const level = tower.level ?? 1
@@ -318,6 +433,7 @@ export default function GamePage() {
         try {
             setLoading(true)
             setCombatRunning(true)
+            setLiveTowerHp(null)
             audio.resume()
             audio.play('wave_start')
             audio.music('game') // no-op tant que la musique n'est pas fournie
@@ -339,34 +455,43 @@ export default function GamePage() {
                 // de leurs PV reflète l'état réel après combat.
                 refreshGame().catch(() => {
                     // best-effort : un échec n'empêche pas d'afficher le résultat de la vague.
-                })
+                }).finally(() => setLiveTowerHp(null)) // le store refetché refait foi
                 if (data.gameStatus === 'DEFEAT') {
                     audio.music(null)
                     audio.play('defeat')
                     setIsGameOver(true)
                     setMessage(`Le château est tombé à la vague ${data.number}. Partie terminée.`)
-                } else if (data.status === 'VICTORY') {
+                    return
+                }
+                if (data.status === 'VICTORY') {
                     audio.play('victory')
                     setMessage(`Vague ${data.number} repoussée — +${data.goldEarned} or !`)
                 } else {
                     setMessage(`Vague ${data.number} : des ennemis ont atteint le château (-${data.castleDamageTaken} PV). +${data.goldEarned} or.`)
                 }
+                // Après la 1re vague survécue : astuce sur l'inspection en combat.
+                maybeShowTutorial('tip', 'combat')
             }
 
             if (canvasRef.current) {
                 // Tuto ennemis : la scène met la vague en pause à la 1re apparition
                 // d'un type non encore vu et appelle onNeedTutorial → bulle. La
                 // reprise se fait au clic « Compris » (voir rendu de TutorialBubble).
-                const seen = getSeenTutorials(player?.username ?? '')
+                const username = player?.username ?? ''
+                const seen = getSeenTutorials(username)
                 const unseenEnemyTypes = new Set(
-                    Object.keys(ENEMY_TUTORIAL).filter((t) => !seen.has(`enemy:${t}`)),
+                    isTutorialEnabled(username)
+                        ? Object.keys(ENEMY_TUTORIAL).filter((t) => !seen.has(`enemy:${t}`))
+                        : [],
                 )
                 canvasRef.current.playWave(
                     data.ticks,
                     (tickCastleHp: number) => setLiveCastleHp(tickCastleHp),
                     finishWave,
                     unseenEnemyTypes,
-                    (type: string) => maybeShowTutorial('enemy', type),
+                    // La scène s'est mise en pause : si la bulle ne s'ouvre pas
+                    // (conseils coupés entre-temps), on relance aussitôt.
+                    (type: string) => { if (!maybeShowTutorial('enemy', type)) canvasRef.current?.resumeWave() },
                 )
             } else {
                 finishWave()
@@ -394,8 +519,14 @@ export default function GamePage() {
     // Tour sélectionnée (objet) : recalculée depuis la map à chaque rendu (le
     // store est la source de vérité) — null si sa case a été libérée (détruite
     // en combat). Distinct de `selectedTower` (state du TYPE à poser).
-    const selectedTowerObj = selectedTowerId
+    const selectedTowerStored = selectedTowerId
         ? towers.find((t) => t.id === selectedTowerId) ?? null
+        : null
+    // En combat, PV en direct (siège) ; une tour détruite pendant la vague
+    // disparaît des PV live → sa carte se referme aussitôt.
+    const destroyedLive = !!(selectedTowerStored && liveTowerHp && !(selectedTowerStored.id in liveTowerHp))
+    const selectedTowerObj: TowerData | null = selectedTowerStored && !destroyedLive
+        ? { ...selectedTowerStored, hp: liveTowerHp?.[selectedTowerStored.id] ?? selectedTowerStored.hp }
         : null
     const hpRatio = castleMaxHp > 0 ? Math.max(0, Math.min(1, liveCastleHp / castleMaxHp)) : 0
 
@@ -404,6 +535,8 @@ export default function GamePage() {
     const wallCount = towerCounts.WALL ?? 0
     const totalTowers = towers.filter((t) => t.type !== 'WALL').length
     const canAct = !isGameOver && !combatRunning
+    // Inspection des tours : aussi pendant la vague (lecture seule), pas après la défaite.
+    const canInspect = !isGameOver
 
     // Écran de départ : pas de partie en cours (et rien à reprendre) → choix de la
     // map avant de lancer. On attend gameHydrated pour ne pas afficher ce menu
@@ -512,9 +645,11 @@ export default function GamePage() {
                         <GameCanvas
                             key={mapId} mapId={mapId} ref={canvasRef} towers={towers} onCellClick={handleCellClick}
                             selectedTower={canAct ? selectedTower : null}
-                            // Même visibilité que la carte de tour : masquée pendant le combat.
-                            selectedTowerId={canAct ? selectedTowerId : null}
-                            inspectEnabled={canAct}
+                            // Même visibilité que la carte de tour (lecture seule en combat).
+                            selectedTowerId={canInspect ? selectedTowerId : null}
+                            inspectEnabled={canInspect}
+                            placementValidator={placementValidator}
+                            onTowersLive={(live) => setLiveTowerHp(Object.fromEntries(live.map((t) => [t.id, t.hp ?? null])))}
                         />
                     </div>
 
@@ -522,11 +657,12 @@ export default function GamePage() {
                     <div className="kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-1">
                         <span className="font-med text-sm text-[#e9d9b0] w-16 shrink-0">Tours</span>
                         <div className="flex flex-wrap gap-1.5">
-                            {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(([type, info]) => {
+                            {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(([type, info], i) => {
                                 const locked = bestWave < info.unlockWave
                                 return (
                                     <UnitChip
                                         key={type}
+                                        hotkey={String(i + 1)}
                                         icon={<TowerIcon type={type} size={32} />}
                                         label={info.label}
                                         cost={info.cost}
@@ -534,8 +670,8 @@ export default function GamePage() {
                                         selected={selectedTower === type}
                                         affordable={gold >= info.cost}
                                         disabled={!canAct || locked}
-                                        onClick={() => { audio.play('ui_click', { volume: 0.5 }); setSelectedTower(type); maybeShowTutorial('tower', type) }}
-                                        title={locked ? `${info.label} — débloquée vague ${info.unlockWave}` : `${info.label} — ${info.cost} or`}
+                                        onClick={() => selectTowerType(type)}
+                                        title={locked ? `${info.label} — débloquée vague ${info.unlockWave}` : `${info.label} — ${info.cost} or (touche ${i + 1})`}
                                     />
                                 )
                             })}
@@ -547,10 +683,26 @@ export default function GamePage() {
                                 </button>
                             )}
                             <button
-                                onClick={() => { resetTutorial(player?.username ?? ''); setMessage('Tuto réinitialisé — les conseils réapparaîtront.') }}
+                                onClick={toggleTutorial}
                                 className="kcd-btn kcd-btn--info text-xs py-1 px-2"
+                                title={tutorialOn ? 'Couper les bulles de conseils' : 'Réactiver les bulles de conseils'}
+                                aria-pressed={tutorialOn}
                             >
-                                ↻ Tuto
+                                💡 Conseils : {tutorialOn ? 'oui' : 'non'}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const username = player?.username ?? ''
+                                    resetTutorial(username)
+                                    setTutorialEnabled(username, true)
+                                    setTutorialOn(true)
+                                    setMessage('Conseils réinitialisés — ils réapparaîtront au fil de la partie.')
+                                }}
+                                className="kcd-btn kcd-btn--info text-xs py-1 px-2"
+                                title="Revoir tous les conseils depuis le début"
+                                aria-label="Revoir tous les conseils"
+                            >
+                                ↻
                             </button>
                             {!isGameOver && (
                                 <button
@@ -575,10 +727,11 @@ export default function GamePage() {
                     {/* En fenêtre étroite : le panneau stats/évolution est masqué (le plateau
                         garderait sinon une taille minuscule). La carte d'amélioration, elle,
                         reste visible même en petit car on en a besoin pour améliorer une tour. */}
-                    <aside className={`w-full lg:w-64 shrink-0 min-h-0 overflow-y-auto max-h-[38vh] lg:max-h-none flex-col gap-3 ${selectedTowerObj && canAct ? 'flex' : 'hidden lg:flex'}`}>
-                        {selectedTowerObj && canAct && (
+                    <aside className={`w-full lg:w-64 shrink-0 min-h-0 overflow-y-auto max-h-[38vh] lg:max-h-none flex-col gap-3 ${selectedTowerObj && canInspect ? 'flex' : 'hidden lg:flex'}`}>
+                        {selectedTowerObj && canInspect && (
                             /* Carte d'évolution de la tour cliquée : niveau, amélioration,
-                               aperçu du prochain niveau, priorité de tir. */
+                               aperçu du prochain niveau, priorité de tir. Pendant une vague :
+                               consultable (PV en direct), actions désactivées. */
                             <div className="kcd-panel flex flex-col gap-3">
                                 <div className="flex justify-between items-center">
                                     <span className="flex items-center gap-2 font-med text-base text-[#43310f]">
@@ -595,25 +748,31 @@ export default function GamePage() {
 
                                 <div className="flex items-center gap-2 -mt-1">
                                     <span className="text-yellow-600 tracking-widest text-sm" title={`Niveau ${selectedTowerObj.level ?? 1} / ${MAX_TOWER_LEVEL}`}>{levelStars(selectedTowerObj.level ?? 1)}</span>
-                                    <span className="text-[11px] text-[#8a6a2c]">niv. {selectedTowerObj.level ?? 1}/{MAX_TOWER_LEVEL}</span>
+                                    <span className="font-read text-xs text-[#8a6a2c]">niv. {selectedTowerObj.level ?? 1}/{MAX_TOWER_LEVEL}</span>
                                 </div>
 
-                                <p className="text-[11px] text-[#8a6a2c]">{TOWER_ROLE[selectedTowerObj.type]}</p>
+                                {combatRunning && (
+                                    <p className="font-read text-xs text-[#5a3d16] rounded px-2 py-1" style={{ background: '#e6d6ab', borderLeft: '3px solid #8a6a2c' }}>
+                                        Vague en cours : consultation seulement. Amélioration et ciblage reviennent après le combat.
+                                    </p>
+                                )}
+
+                                <p className="font-read text-xs text-[#8a6a2c]">{TOWER_ROLE[selectedTowerObj.type]}</p>
 
                                 {/* Stats : valeur au niveau courant → au niveau suivant (si pas au max). */}
-                                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px]">
+                                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs font-read">
                                     <span className="text-[#8a6a2c]">Dégâts</span>
-                                    <span className="text-right font-med text-[#43310f]">
+                                    <span className="text-right font-semibold text-[#43310f]">
                                         {towerDamage(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
                                         {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerDamage(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
                                     </span>
                                     <span className="text-[#8a6a2c]">Portée</span>
-                                    <span className="text-right font-med text-[#43310f]">
+                                    <span className="text-right font-semibold text-[#43310f]">
                                         {towerRange(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
                                         {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerRange(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
                                     </span>
                                     <span className="text-[#8a6a2c]">PV (solidité)</span>
-                                    <span className="text-right font-med text-[#43310f]">
+                                    <span className="text-right font-semibold text-[#43310f]">
                                         {selectedTowerObj.hp ?? towerHp(selectedTowerObj.type, selectedTowerObj.level ?? 1)}/{selectedTowerObj.maxHp ?? towerHp(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
                                         {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerHp(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
                                     </span>
@@ -624,18 +783,18 @@ export default function GamePage() {
                                 </div>
 
                                 {(selectedTowerObj.level ?? 1) >= MAX_TOWER_LEVEL ? (
-                                    <div className="rounded px-2 py-1.5 text-[11px] text-[#3a6a12] text-center font-semibold" style={{ background: '#dff0c8', border: '1px solid #8bbf5a' }}>
+                                    <div className="rounded px-2 py-1.5 font-read text-xs text-[#3a6a12] text-center font-semibold" style={{ background: '#dff0c8', border: '1px solid #8bbf5a' }}>
                                         ✦ Niveau maximum atteint
                                     </div>
                                 ) : (
                                     <>
-                                        <div className="rounded px-2 py-1.5 text-[11px] text-[#5a3d16]" style={{ background: '#e6d6ab', borderLeft: '3px solid #b08a3c' }}>
+                                        <div className="rounded px-2 py-1.5 font-read text-xs text-[#5a3d16]" style={{ background: '#e6d6ab', borderLeft: '3px solid #b08a3c' }}>
                                             {(selectedTowerObj.level ?? 1) + 1 >= MAX_TOWER_LEVEL
                                                 ? `Niveau ${selectedTowerObj.level ?? 1} → ${MAX_TOWER_LEVEL} : bond décisif de dégâts, portée et solidité.`
                                                 : `Niveau ${selectedTowerObj.level ?? 1} → ${(selectedTowerObj.level ?? 1) + 1} : dégâts, portée et solidité renforcés.`}
                                         </div>
                                         <button onClick={() => handleUpgradeSelected(selectedTowerObj)}
-                                                disabled={gold < upgradeCost(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
+                                                disabled={combatRunning || gold < upgradeCost(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
                                                 className="kcd-btn text-sm py-1.5 flex items-center justify-center gap-1 disabled:opacity-50">
                                             ⬆ Améliorer
                                             <img src="/sprites/ui/icon_gold.png" alt="" aria-hidden className="kcd-icon" style={{ height: 13 }} />
@@ -646,21 +805,22 @@ export default function GamePage() {
 
                                 <div>
                                     <p className="text-xs font-semibold text-[#5a3d16]">Priorité de tir</p>
-                                    <p className="text-[11px] text-[#8a6a2c] mb-2">Sur quel ennemi cette tour vise en premier.</p>
+                                    <p className="font-read text-xs text-[#8a6a2c] mb-2">Sur quel ennemi cette tour vise en premier.</p>
                                     <div className="flex flex-col gap-1">
                                         {TARGETING_MODES.map((m) => {
                                             const active = (selectedTowerObj.targetingMode ?? 'CLOSEST') === m.mode
                                             return (
                                                 <button key={m.mode} onClick={() => handleSetTargeting(selectedTowerObj.id, m.mode)}
-                                                        className={`text-left px-2 py-1 rounded transition-all ${active ? 'bg-[#7a5a2c] text-[#f5e8c6]' : 'bg-[#cdb987] text-[#5a441c] hover:bg-[#d8c79a]'}`}>
+                                                        disabled={combatRunning}
+                                                        className={`text-left px-2 py-1 rounded transition-all disabled:cursor-not-allowed ${active ? 'bg-[#7a5a2c] text-[#f5e8c6]' : 'bg-[#cdb987] text-[#5a441c] enabled:hover:bg-[#d8c79a] disabled:opacity-60'}`}>
                                                     <span className="block text-xs font-semibold">{active ? '✓ ' : ''}{m.label}</span>
-                                                    <span className="block text-[11px] opacity-80">{m.hint}</span>
+                                                    <span className="block font-read text-xs opacity-80">{m.hint}</span>
                                                 </button>
                                             )
                                         })}
                                     </div>
                                     {selectedTowerObj.type === 'BALLISTA' && (
-                                        <p className="text-[11px] text-[#8a3d12] mt-2">
+                                        <p className="font-read text-xs text-[#8a3d12] mt-2">
                                             ⚔ La Baliste vise toujours les grosses cibles (Troll, Démon de givre, Chevalier, Boss) en priorité — le réglage départage seulement quand plusieurs sont à portée.
                                         </p>
                                     )}
@@ -674,16 +834,16 @@ export default function GamePage() {
                                 <div className="kcd-panel-titled">
                                     <h3 className="kcd-title font-med text-center text-base mb-2">Statistiques</h3>
                                     <div className="flex flex-col gap-1 text-sm text-[#43310f]">
-                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Meilleure vague</span><span className="font-med">{bestWave}</span></div>
-                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Tours posées</span><span className="font-med">{totalTowers}</span></div>
-                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Murs</span><span className="font-med">{wallCount}/6</span></div>
+                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Meilleure vague</span><span className="font-read font-semibold">{bestWave}</span></div>
+                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Tours posées</span><span className="font-read font-semibold">{totalTowers}</span></div>
+                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Murs</span><span className="font-read font-semibold">{wallCount}/6</span></div>
                                     </div>
                                 </div>
 
                                 {/* Évolution des tours : rôle + nombre posé par type. */}
                                 <div className="kcd-panel-titled">
                                     <h3 className="kcd-title font-med text-center text-base mb-2">Évolution des tours</h3>
-                                    <p className="text-[11px] text-[#8a6a2c] mb-2 text-center">Clique une tour posée pour l’améliorer (niveau ↑ = dégâts et portée ↑).</p>
+                                    <p className="font-read text-xs text-[#8a6a2c] mb-2 text-center">Clique une tour posée pour l’améliorer (niveau ↑ = dégâts et portée ↑). Touches 1–5 : choisir une tour, Échap : annuler.</p>
                                     <div className="flex flex-col gap-2">
                                         {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][])
                                             .filter(([type]) => type !== 'WALL')
@@ -695,11 +855,11 @@ export default function GamePage() {
                                                         <div className="min-w-0 flex-1">
                                                             <div className="flex items-center justify-between">
                                                                 <span className="text-sm font-med text-[#43310f]">{locked ? `🔒 ${TOWER_INFO[type].label}` : TOWER_INFO[type].label}</span>
-                                                                <span className="text-[11px] text-[#7a5320]">×{towerCounts[type] ?? 0}</span>
+                                                                <span className="font-read text-xs text-[#7a5320]">×{towerCounts[type] ?? 0}</span>
                                                             </div>
-                                                            <p className="text-[11px] text-[#8a6a2c] leading-tight">{locked ? `Débloquée vague ${TOWER_INFO[type].unlockWave}` : TOWER_ROLE[type]}</p>
+                                                            <p className="font-read text-xs text-[#8a6a2c] leading-snug">{locked ? `Débloquée vague ${TOWER_INFO[type].unlockWave}` : TOWER_ROLE[type]}</p>
                                                             {!locked && (
-                                                                <p className="text-[10px] text-[#7a5320] leading-tight">Dégâts {TOWER_STATS[type].damage} · Portée {TOWER_STATS[type].range} · {TOWER_STATS[type].hp} PV · Cadence {TOWER_STATS[type].cadence}</p>
+                                                                <p className="font-read text-[11px] text-[#7a5320] leading-snug">Dégâts {TOWER_STATS[type].damage} · Portée {TOWER_STATS[type].range} · {TOWER_STATS[type].hp} PV · Cadence {TOWER_STATS[type].cadence}</p>
                                                             )}
                                                         </div>
                                                     </div>
@@ -845,17 +1005,14 @@ export default function GamePage() {
                 </div>
             )}
 
-            {/* Bulle de tutoriel (1re apparition d'un ennemi / 1re pose d'une tour).
+            {/* Bulle de tutoriel (nouvel ennemi, nouvelle tour, astuce d'interface).
                 Pour un ennemi, la vague reste en pause tant qu'elle est ouverte. */}
             {tutorial && (
                 <TutorialBubble
                     entry={tutorial.entry}
                     kind={tutorial.kind}
-                    onClose={() => {
-                        const wasEnemy = tutorial.kind === 'enemy'
-                        setTutorial(null)
-                        if (wasEnemy) canvasRef.current?.resumeWave?.()
-                    }}
+                    onClose={() => closeTutorial()}
+                    onDisable={() => closeTutorial(true)}
                 />
             )}
 

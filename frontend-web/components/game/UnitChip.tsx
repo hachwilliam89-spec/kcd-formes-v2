@@ -6,7 +6,7 @@
 import type { ReactNode } from 'react'
 
 export function UnitChip({
-    icon, label, cost, income, affordable = true, selected, disabled, onClick, title, badge,
+    icon, label, cost, income, affordable = true, selected, disabled, onClick, title, badge, hotkey,
 }: {
     icon: ReactNode
     label: string
@@ -19,6 +19,8 @@ export function UnitChip({
     title?: string
     // Badge en haut à gauche (ex. « 🔒V10 » pour une tour verrouillée en solo).
     badge?: string
+    // Raccourci clavier rappelé en haut à droite (ex. « 1 ») — si pas de badge de revenu.
+    hotkey?: string
 }) {
     return (
         <button
@@ -44,6 +46,15 @@ export function UnitChip({
                         {badge}
                     </span>
                 )}
+                {hotkey && income == null && (
+                    <span
+                        className="absolute top-0.5 right-0.5 font-read text-[10px] font-bold text-[#f0e2c4] leading-none px-1 py-px rounded-sm"
+                        style={{ background: 'rgba(0,0,0,.55)' }}
+                        aria-hidden
+                    >
+                        {hotkey}
+                    </span>
+                )}
                 {income != null && (
                     <span
                         className="absolute top-0.5 right-0.5 text-[10px] font-med text-green-300 leading-none px-1 rounded-sm"
@@ -58,7 +69,7 @@ export function UnitChip({
                 style={{ background: '#e0cf9e', borderTop: '1px solid #6b4a24' }}
             >
                 <img src="/sprites/ui/icon_gold.png" alt="" aria-hidden style={{ height: 13, imageRendering: 'pixelated' }} />
-                <span className={`font-med text-sm leading-none ${affordable ? 'text-[#43310f]' : 'text-red-700'}`}>{cost}</span>
+                <span className={`font-read font-bold text-[13px] leading-none ${affordable ? 'text-[#43310f]' : 'text-red-700'}`}>{cost}</span>
             </span>
         </button>
     )

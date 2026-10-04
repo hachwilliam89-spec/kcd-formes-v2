@@ -135,6 +135,9 @@
 .pixel { image-rendering: pixelated; }
 .font-pixel { font-family: var(--font-pixel), ui-monospace, sans-serif; }
 .font-med { font-family: var(--font-med), serif; }
+/* Texte de lecture (stats, descriptions, coûts) : police simple et chiffres
+   tabulaires (colonnes alignées) — la médiévale reste aux titres, la pixel à l'habillage. */
+.font-read { font-family: var(--font-geist-sans), system-ui, sans-serif; font-variant-numeric: tabular-nums; }
 
 .kcd-panel {
   border-style: solid;

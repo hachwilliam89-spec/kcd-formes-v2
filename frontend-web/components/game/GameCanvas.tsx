@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import Phaser from 'phaser'
-import { GameScene, TowerData, TickSnapshot } from './GameScene'
+import { GameScene, TowerData, TickSnapshot, PlacementVerdict } from './GameScene'
 
 interface GameCanvasProps {
     towers: TowerData[]
@@ -16,6 +16,11 @@ interface GameCanvasProps {
     // Inspection des tours posées au survol (éclaircie + cadre + portée). La page
     // la coupe quand un clic sur une tour ne ferait rien (combat, fin de partie).
     inspectEnabled?: boolean
+    // Règles de pose de la page (or, limite de murs…) → l'aperçu affiche le coût
+    // ou la raison exacte d'un refus.
+    placementValidator?: (type: string, x: number, y: number) => PlacementVerdict
+    // PV / destructions des tours pendant une vague (siège) — carte de tour à jour en combat.
+    onTowersLive?: (towers: TowerData[]) => void
     // Map active (tracé + biome). Changer de map = remonter le canvas (key côté page).
     mapId?: string | null
 }
@@ -32,7 +37,10 @@ export interface GameCanvasHandle {
 }
 
 const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCanvas(
-    { towers, onCellClick, selectedTower = null, selectedTowerId = null, inspectEnabled = false, mapId = null },
+    {
+        towers, onCellClick, selectedTower = null, selectedTowerId = null, inspectEnabled = false,
+        placementValidator, onTowersLive, mapId = null,
+    },
     ref
 ) {
     const gameRef = useRef<Phaser.Game | null>(null)
@@ -98,6 +106,16 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
     useEffect(() => {
         sceneRef.current?.setSelectedTower(selectedTowerId)
     }, [selectedTowerId])
+
+    // Ré-attachés à chaque changement (même raison que onCellClick) : le
+    // validateur capture l'or et les tours du dernier rendu.
+    useEffect(() => {
+        sceneRef.current?.setPlacementValidator(placementValidator)
+    }, [placementValidator])
+
+    useEffect(() => {
+        sceneRef.current?.setOnTowersLive(onTowersLive)
+    }, [onTowersLive])
 
     useImperativeHandle(ref, () => ({
         playWave: (ticks, onTick, onComplete, unseenEnemyTypes, onNeedTutorial) => {
