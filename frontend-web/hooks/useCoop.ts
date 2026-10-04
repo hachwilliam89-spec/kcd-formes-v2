@@ -119,11 +119,11 @@ export function useCoop() {
         connect,
         create: (mapId?: string) => send('/app/match/create', { mode: 'COOP', mapId: mapId ?? 'desert' }),
         join: (code: string) => send('/app/match/join', { code: code.trim().toUpperCase() }),
-        setReady: (ready: boolean) => mid() && send(`/app/match/${mid()}/ready`, { ready }),
-        start: () => mid() && send(`/app/match/${mid()}/start`),
-        placeTower: (type: string, x: number, y: number) => { setError(null); mid() && send(`/app/match/${mid()}/tower`, { type, x, y }) },
-        chooseBonus: (type: string) => { setError(null); mid() && send(`/app/match/${mid()}/bonus`, { type }) },
-        sendChat: (text: string) => { mid() && send(`/app/match/${mid()}/chat`, { text }) },
+        setReady: (ready: boolean) => { if (mid()) send(`/app/match/${mid()}/ready`, { ready }) },
+        start: () => { if (mid()) send(`/app/match/${mid()}/start`) },
+        placeTower: (type: string, x: number, y: number) => { setError(null); if (mid()) send(`/app/match/${mid()}/tower`, { type, x, y }) },
+        chooseBonus: (type: string) => { setError(null); if (mid()) send(`/app/match/${mid()}/bonus`, { type }) },
+        sendChat: (text: string) => { if (mid()) send(`/app/match/${mid()}/chat`, { text }) },
         leave: () => {
             if (mid()) send(`/app/match/${mid()}/leave`)
             topicSub.current?.unsubscribe(); stateSub.current?.unsubscribe(); chatSub.current?.unsubscribe()

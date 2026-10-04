@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     rules: {
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/refs": "warn",
+      // Icônes et sprites pixel-art servis tels quels (image-rendering: pixelated) :
+      // next/image les redimensionnerait et les lisserait, sans gain de poids réel.
+      "@next/next/no-img-element": "off",
     },
   },
   // Override default ignores of eslint-config-next.

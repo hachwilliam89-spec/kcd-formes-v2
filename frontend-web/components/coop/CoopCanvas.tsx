@@ -83,6 +83,8 @@ const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCa
             gameRef.current = null
             readyRef.current = false
         }
+        // Montage unique : un changement de map remonte le composant (key côté page).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     // Clic sur une tour posée : la sélectionne (re-clic = désélection) au lieu de

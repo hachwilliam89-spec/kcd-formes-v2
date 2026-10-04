@@ -1853,7 +1853,6 @@ export class GameScene extends Phaser.Scene {
             if (!tower || !enemy) return
 
             const damageType = tower.damageType ?? 'SINGLE_TARGET'
-            const color = TOWER_COLORS[tower.type] ?? 0xffffff
             const towerPx = tower.x * CELL_SIZE + CELL_SIZE / 2
             const towerPy = tower.y * CELL_SIZE + CELL_SIZE / 2
             const targetPx = enemy.x * CELL_SIZE + CELL_SIZE / 2

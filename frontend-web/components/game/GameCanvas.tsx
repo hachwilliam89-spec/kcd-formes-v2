@@ -76,6 +76,8 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
             gameRef.current?.destroy(true)
             gameRef.current = null
         }
+        // Montage unique : un changement de map remonte le composant (key={mapId} côté page).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     // Ré-attache le callback à chaque changement : sinon le scene Phaser garde

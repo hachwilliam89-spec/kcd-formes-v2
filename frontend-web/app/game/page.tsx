@@ -215,9 +215,12 @@ export default function GamePage() {
         }
     }
 
+    // À la connexion seulement : refreshBestWave est recréée à chaque rendu, la
+    // mettre en dépendance relancerait les deux requêtes en boucle.
     useEffect(() => {
         if (!isAuthenticated) return
         refreshBestWave()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAuthenticated])
 
     // Plus d'auto-création : quand il n'y a pas de partie en cours, on affiche
