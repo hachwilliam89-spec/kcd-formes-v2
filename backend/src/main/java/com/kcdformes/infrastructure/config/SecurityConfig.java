@@ -32,6 +32,7 @@ public class SecurityConfig {
                     // Origin même en same-origin derrière le reverse-proxy Caddy).
                     config.setAllowedOrigins(java.util.List.of(
                             "http://localhost:3000",
+                            "http://localhost:3100", // front de dev (3000/3001 pris par d'autres projets)
                             "https://kcd-formes.fr",
                             "https://www.kcd-formes.fr"));
                     config.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));

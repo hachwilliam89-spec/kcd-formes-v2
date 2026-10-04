@@ -33,6 +33,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.addEndpoint("/ws")
                 .setAllowedOrigins(
                         "http://localhost:3000",
+                        "http://localhost:3100", // front de dev (3000/3001 pris par d'autres projets)
                         "https://kcd-formes.fr",
                         "https://www.kcd-formes.fr");
         // Pas de SockJS : le client utilise le WebSocket natif (@stomp/stompjs).
