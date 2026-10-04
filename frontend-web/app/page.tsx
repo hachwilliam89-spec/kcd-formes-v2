@@ -6,11 +6,11 @@ export default function HomePage() {
     return (
         <main className="ws-home font-pixel">
             <WarMap />
-            {/* Le blason fait office de « 4 » : il est épinglé sur la bannière du titre. */}
+            {/* Le blason est épinglé sur le bout de la bannière du titre. */}
             <header className="ws-hero">
-                <Image src="/brand/logo.webp" width={360} height={416} alt="" unoptimized preload className="ws-hero-crest" />
+                <Image src="/brand/logo.webp" width={360} height={397} alt="" unoptimized preload className="ws-hero-crest" />
                 <div className="ws-banner ws-hero-banner">
-                    <h1 className="ws-hero-title"><span className="sr-only">4 </span>War Seasons</h1>
+                    <h1 className="ws-hero-title">War Seasons</h1>
                     <p className="ws-hero-slogan">Défends ton royaume en tout temps, en tout lieu.</p>
                 </div>
             </header>

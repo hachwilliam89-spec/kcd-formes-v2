@@ -4,6 +4,7 @@
 // puis partie en direct partagée à deux (or commun, boucle autoritaire serveur).
 // UX : plateau plein écran (flex-1) + barre d'action en bas (Tours color-codées) →
 // tout tient sans scroll. Voir docs/MULTIPLAYER.md.
+import Brand from '@/components/brand/Brand'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
@@ -152,10 +153,10 @@ export default function CoopPage() {
             <div className="absolute inset-0 bg-[#160f08]/85" />
 
             {/* ---- HUD : 3 zones (ressources · vague · équipe + menu) ---- */}
-            <div className="relative z-10 kcd-panel-wood flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-2 shrink-0 py-1">
+            <div className="relative z-10 kcd-panel-wood ws-game-header flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-2 shrink-0 py-1">
                 {/* Gauche : titre + ressources */}
-                <div className="flex items-center gap-3">
-                    <h1 className="font-med text-xl md:text-2xl text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>Coop</h1>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
+                    <h1 className="ws-game-brand"><Brand mode="Coop" /></h1>
                     {running && hud && (
                         <>
                             <span className="flex items-center gap-1 text-yellow-300 font-med text-xl">
@@ -191,7 +192,7 @@ export default function CoopPage() {
             {/* ---- LOBBY ---- */}
             {!running && (
                 <div className="relative z-10 flex-1 min-h-0 flex items-center justify-center overflow-y-auto">
-                    <div className="kcd-panel-titled w-[640px] max-w-[94vw]">
+                    <div className="kcd-panel-titled ws-panel-ornate ws-lobby w-[640px] max-w-[94vw]">
                         <h2 className="kcd-title font-med text-center text-xl mb-4">Jouer à deux</h2>
 
                         {!match && (

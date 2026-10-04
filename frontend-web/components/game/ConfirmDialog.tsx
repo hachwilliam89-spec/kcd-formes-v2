@@ -28,11 +28,11 @@ export default function ConfirmDialog({
             onClick={onCancel}
         >
             <div
-                className="kcd-panel-wood w-full max-w-sm p-5 text-center"
+                className="kcd-panel-wood ws-dialog w-full max-w-sm p-5 text-center"
                 onClick={(e) => e.stopPropagation()}
             >
                 {title && (
-                    <h3 className="text-xl font-med text-yellow-300 mb-2" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>
+                    <h3 className="text-2xl font-med text-[#ebce8b] mb-2" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>
                         {title}
                     </h3>
                 )}

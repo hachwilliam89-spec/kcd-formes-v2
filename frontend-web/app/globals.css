@@ -7,8 +7,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-geist-sans);
+  --font-heading: var(--font-hero);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -128,21 +128,26 @@
   }
 }
 
-/* ── Polices : Pixelify Sans (interface, titres) + MedievalSharp (titres du HUD
-   historique) + Geist pour les longues lectures. Cadres et boutons : voir plus bas
+/* ── Polices : Grenze pour les titres, Geist pour les commandes et la lecture. Cadres et boutons : voir plus bas
    (pack Kenney « Pixel Adventure », public/ui/). */
 .pixel { image-rendering: pixelated; }
 .font-pixel { font-family: var(--font-pixel), ui-monospace, sans-serif; }
-.font-med { font-family: var(--font-med), serif; }
+.font-med { font-family: var(--font-med), serif; font-weight: 800; }
 /* Texte de lecture (stats, descriptions, coûts) : police simple et chiffres
    tabulaires (colonnes alignées) — la médiévale reste aux titres, la pixel à l'habillage. */
 .font-read { font-family: var(--font-geist-sans), system-ui, sans-serif; font-variant-numeric: tabular-nums; }
 
-/* ── 4 War Seasons : l'interface du jeu, en pixel art ─────────────────────
+/* ── War Seasons : l'interface du jeu, en pixel art ─────────────────────
    Cadres, boutons et bannière du pack « UI Pack - Pixel Adventure » de Kenney
    (CC0, public/ui/), découpés en 9 morceaux et agrandis ×2 ou ×3 pour garder des
    pixels entiers ; police pixel partout. Les mêmes images serviront au mobile. */
 :root {
+  --font-pixel: var(--font-geist-sans);
+  --font-med: var(--font-hero);
+  --font-prose: var(--font-geist-sans);
+  --ws-crimson: #883b35;
+  --ws-crimson-dark: #642725;
+  --ws-trim: #d8b574;
   --ws-ink: #24160f;
   --ws-wood: #6d4b27;
   --ws-parch: #fff1d2;
@@ -166,15 +171,15 @@
 .ws-panel-ornate { border-width: 22px; border-image: url('/ui/panel-parchment-ornate.png') 11 fill / 22px / 0 stretch; }
 .kcd-panel-wood {
   border: 12px solid var(--ws-wood);
-  border-image: url('/ui/panel-wood.png') 6 fill / 12px / 0 stretch;
-  background-color: #a3703a;
+  border-image: url('/ui/panel-wood.png') 6 / 12px / 0 stretch;
+  background: linear-gradient(135deg, #493126, #30221d);
   background-clip: padding-box;
   image-rendering: pixelated;
   color: var(--ws-cream);
 }
 .kcd-title {
-  color: #8e3f38;
-  border-bottom: 3px solid #c58747;
+  color: var(--ws-crimson-dark);
+  border-bottom: 2px solid var(--ws-trim);
   padding-bottom: 6px;
 }
 /* Bannière rouge (titres) : extrémités repliées fixes, milieu étiré. */
@@ -182,7 +187,7 @@
   display: inline-flex; align-items: center; justify-content: center;
   border-style: solid;
   border-width: 20px 64px 16px;
-  border-image: url('/ui/banner.png') 10 32 8 32 fill / 20px 64px 16px / 0 stretch;
+  border-image: url('/ui/banner-crimson.svg') 10 32 8 32 fill / 20px 64px 16px / 0 stretch;
   image-rendering: pixelated;
   font-family: var(--font-pixel), sans-serif; font-weight: 700;
   color: var(--ws-parch);
@@ -202,6 +207,7 @@
   text-shadow: 0 2px 0 var(--ws-wood);
   cursor: pointer;
   text-decoration: none;
+  transition: filter .12s ease, transform .12s ease;
 }
 .kcd-btn:hover:not(:disabled) { filter: brightness(1.1); }
 .kcd-btn:active:not(:disabled) { transform: translateY(2px); }
@@ -228,33 +234,30 @@
 .war-input:focus { border-color: var(--ws-gold-dark); }
 .kcd-icon { image-rendering: pixelated; height: 20px; width: auto; display: inline-block; vertical-align: middle; }
 /* ── Marque : blason + nom ────────────────────────────────────────────────── */
-.ws-brand { display: inline-flex; align-items: center; gap: 8px; }
-.ws-crest { display: block; width: 30px; height: auto; image-rendering: pixelated; }
-.ws-brand .ws-wordmark { font-size: 18px; padding: 0 2px; border-width: 12px 40px 10px; border-image-width: 12px 40px 10px; white-space: nowrap; }
 
 /* ── Accueil : la carte de guerre animée ──────────────────────────────────── */
 /* Le château reste visible : titre en haut à gauche, connexion à droite
    (mobile : titre en haut, connexion sous le château, la carte reste fixe). */
 .ws-home {
   position: relative; isolation: isolate; min-height: 100svh;
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 400px); gap: 24px;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 390px); gap: 32px;
   padding: 28px clamp(20px, 3vw, 48px); color: var(--ws-cream);
   background: #1b1a17; overflow-x: clip;
 }
 .ws-map { position: fixed; inset: 0; z-index: -1; background: #2a2a22 url('/home/war-map.webp') 100% 40% / cover no-repeat; image-rendering: pixelated; }
 .ws-map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
-/* Titre : le blason (le « 4 ») épinglé à gauche de la bannière, slogan dessous. */
-.ws-hero { display: flex; align-items: center; align-self: start; }
-.ws-hero-crest { position: relative; z-index: 1; flex: none; width: clamp(110px, 11vw, 150px); height: auto; margin-right: -46px; image-rendering: pixelated; filter: drop-shadow(0 6px 0 #00000059); }
+/* Titre : le blason épinglé à gauche de la bannière, slogan dessous. */
+.ws-hero { display: flex; align-items: center; align-self: start; min-width: 0; filter: drop-shadow(0 4px 0 #24160f38); }
+.ws-hero-crest { position: relative; z-index: 1; flex: none; width: clamp(100px, 10vw, 140px); height: auto; margin-right: -46px; image-rendering: pixelated; filter: drop-shadow(0 6px 0 #00000059); }
 .ws-hero-banner { flex-direction: column; align-items: flex-start; padding: 2px 4px 0 30px; border-width: 24px 64px 20px; border-image-width: 24px 64px 20px; text-shadow: none; }
-.ws-hero-title { margin: 0; font-family: var(--font-hero), serif; font-weight: 800; font-size: clamp(36px, 4vw, 56px); line-height: .95; color: var(--ws-parch); text-shadow: 0 3px 0 #8e3f38; white-space: nowrap; }
-.ws-hero-slogan { margin: 6px 0 0; font-family: var(--font-prose), serif; font-weight: 500; font-size: clamp(15px, 1.4vw, 19px); line-height: 1.25; color: #ffe6c4; text-shadow: 0 2px 0 #8e3f38; }
+.ws-hero-title { margin: 0; font-family: var(--font-hero), serif; font-weight: 800; font-size: clamp(32px, 3.5vw, 52px); line-height: .95; color: var(--ws-parch); text-shadow: 0 3px 0 #8e3f38; white-space: nowrap; }
+.ws-hero-slogan { margin: 6px 0 0; font-family: var(--font-prose), serif; font-weight: 500; font-size: clamp(12px, 1.1vw, 15px); line-height: 1.25; color: #ffe6c4; text-shadow: 0 2px 0 #8e3f38; }
 .ws-gate { grid-column: 2; align-self: start; width: 100%; margin-top: 30px; }
 
 /* ── Connexion : l'étendard ───────────────────────────────────────────────── */
 /* Suspendu par deux cordes ; roulé, il ne montre que les deux choix et se
    déroule par à-coups (comme une animation de sprite) sur le formulaire. */
-.ws-standard { --cloth: #8e2b23; --cloth-fold: #7a231c; --trim: #e2b04a; position: relative; width: 100%; padding-inline: 12px; filter: drop-shadow(0 8px 0 #0000004d); }
+.ws-standard { --cloth: var(--ws-crimson); --cloth-fold: var(--ws-crimson-dark); --trim: var(--ws-trim); position: relative; width: 100%; padding-inline: 12px; filter: drop-shadow(0 8px 0 #0000004d); }
 .ws-standard::before, .ws-standard::after { content: ''; position: absolute; top: -60px; height: 62px; width: 4px; background: repeating-linear-gradient(#d9b878 0 3px, #8a6a3a 3px 6px); box-shadow: 0 0 0 1px #24160f99; }
 .ws-standard::before { left: 32px; }
 .ws-standard::after { right: 32px; }
@@ -263,7 +266,7 @@
 .ws-standard-pole::before { left: -14px; }
 .ws-standard-pole::after { right: -14px; }
 .ws-standard-cloth {
-  position: relative; margin: -3px 10px 0; padding: 22px 12px 4px;
+  position: relative; margin: -3px 10px 0; padding: 24px 14px 8px;
   background: linear-gradient(90deg, var(--cloth-fold) 0 10px, var(--cloth) 10px calc(100% - 10px), var(--cloth-fold) calc(100% - 10px));
   border-inline: 6px solid var(--trim);
   box-shadow: -3px 0 0 var(--ws-ink), 3px 0 0 var(--ws-ink), inset 3px 0 0 #9a5b17, inset -3px 0 0 #9a5b17;
@@ -271,19 +274,24 @@
 }
 /* Passants de tissu autour de la hampe. */
 .ws-standard-cloth::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 9px; background: repeating-linear-gradient(90deg, #5e1913 0 14px, transparent 14px 30px); }
-.ws-standard-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ws-standard-choices { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
 .ws-standard .kcd-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: 10px; font-weight: 600; }
-.ws-standard-choice { min-height: 46px; font-size: 17px; white-space: nowrap; }
-.ws-standard-choice.is-active { transform: translateY(2px); filter: brightness(1.15); }
+.ws-standard-choice { min-height: 46px; font-size: 13px; white-space: nowrap; }
+.ws-standard-choice.is-active { transform: translateY(1px); filter: brightness(1.06); }
+.ws-standard-choice { position: relative; }
+.ws-standard-choice.is-active::after { content: ""; position: absolute; bottom: -7px; left: calc(50% - 3px); width: 6px; height: 6px; background: #fff0b8; transform: rotate(45deg); }
 .ws-standard-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s steps(9, end); }
 .ws-standard.is-open .ws-standard-body { grid-template-rows: 1fr; }
-.ws-standard-form { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding-inline: 5px; }
+.ws-standard-form { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 16px; padding-inline: 5px; }
 .ws-standard-form > :first-child { margin-top: 18px; }
 .ws-standard-form > :last-child { margin-bottom: 12px; }
-.ws-standard-label { display: block; margin-bottom: 4px; font-size: 14px; color: #ffe9b8; text-shadow: 0 2px 0 #4a120e; }
+.ws-standard-label { display: block; margin-bottom: 4px; font-size: 12px; color: #ffe9b8; text-shadow: 0 2px 0 #4a120e; }
 .ws-standard-hint { margin-top: 4px; font-size: 12px; color: #f2c99a; }
 .ws-standard-error { font-size: 14px; color: var(--ws-parch); background: #4a120e; border: 2px solid var(--trim); padding: 6px 8px; }
-.ws-standard-submit { min-height: 48px; font-size: 18px; margin-top: 4px; }
+.ws-standard-submit { min-height: 48px; font-size: 14px; margin-top: 8px; }
+.ws-standard .war-input { border-width: 2px; background: #fff5df; box-shadow: inset 2px 2px 0 #d9c29a; }
+.ws-standard .war-input::placeholder { color: #877454; }
+.ws-standard :focus-visible { outline-color: #fff0b8; outline-offset: 3px; }
 /* Bas de l'étendard à trois pointes : contour encre, galon doré, tissu. */
 .ws-standard-tail { position: relative; height: 40px; margin: 0 7px; background: var(--ws-ink); clip-path: polygon(0 0, 100% 0, 100% 100%, 75% 14px, 50% 100%, 25% 14px, 0 100%); }
 .ws-standard-tail::before, .ws-standard-tail::after { content: ''; position: absolute; top: 0; }
@@ -294,21 +302,21 @@
 .ws-title-banner { margin: 0; padding: 0 6px; border-width: 20px 56px 16px; border-image-width: 20px 56px 16px; font-family: var(--font-hero), serif; font-weight: 800; font-size: clamp(24px, 3vw, 34px); text-shadow: 0 3px 0 #8e3f38; white-space: nowrap; }
 .war-map-card { display: flex; flex-direction: column; min-width: 0; text-align: left; border: 3px solid var(--ws-ink); background: #2b1d12; box-shadow: 0 4px 0 var(--ws-ink); cursor: pointer; transition: transform .12s, border-color .12s; }
 .war-map-card:hover:not(:disabled) { border-color: var(--season-color); transform: translateY(-3px); }
-.war-map-card.is-selected { border-color: var(--ws-gold); box-shadow: 0 0 0 3px var(--ws-ink), 0 0 22px #f4c55259, 0 7px 0 var(--ws-ink); }
+.war-map-card.is-selected { border-color: var(--ws-gold); box-shadow: 0 0 0 2px var(--ws-ink), 0 0 0 4px #f4c55255, 0 5px 0 var(--ws-ink); }
 .war-map-card:disabled { opacity: .55; cursor: not-allowed; }
 .war-map-preview { position: relative; display: block; aspect-ratio: 16 / 10; overflow: hidden; border-bottom: 3px solid var(--season-color); background: #141d20; }
 .war-map-preview > img, .war-map-preview > svg { display: block; width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
 /* Saison : étiquette à la couleur de la carte, posée sur l'aperçu. */
 .war-map-season { position: absolute; top: 8px; left: 8px; padding: 1px 8px; background: var(--season-color); color: var(--ws-ink); font-family: var(--font-pixel), sans-serif; font-weight: 700; font-size: 13px; border: 2px solid var(--ws-ink); box-shadow: 0 2px 0 var(--ws-ink); }
 .war-map-check { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; display: grid; place-items: center; background: var(--ws-gold); color: var(--ws-ink); font-size: 14px; font-weight: 700; border: 2px solid var(--ws-ink); box-shadow: 0 2px 0 var(--ws-ink); }
-.war-map-body { display: flex; flex-direction: column; gap: 6px; flex: 1; padding: 10px 12px 12px; }
-.war-map-name { font-family: var(--font-hero), serif; font-weight: 800; font-size: 22px; line-height: 1.05; color: var(--ws-parch); }
-.war-map-desc { flex: 1; font-family: var(--font-prose), serif; font-weight: 500; font-size: 15px; line-height: 1.3; color: #e2d4b8; }
-.war-map-diff { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; font-family: var(--font-pixel), sans-serif; font-size: 13px; color: #e9d9b0; }
+.war-map-body { display: flex; flex-direction: column; gap: 8px; flex: 1; padding: 12px 14px 14px; }
+.war-map-name { font-family: var(--font-hero), serif; font-weight: 800; font-size: 22px; line-height: 1.15; color: var(--ws-parch); }
+.war-map-desc { flex: 1; font-family: var(--font-prose), serif; font-weight: 500; font-size: 13px; line-height: 1.6; color: #e2d4b8; }
+.war-map-diff { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-top: 8px; border-top: 1px solid #745735; margin-top: 2px; font-family: var(--font-pixel), sans-serif; font-size: 13px; color: #e9d9b0; }
 .war-map-diff > svg { flex: none; }
 .war-map-diff > span { margin-left: 4px; }
 
-@media (max-width: 899px) {
+@media (max-width: 1099px) {
   .ws-map { background-position: 53% 40%; }
   .ws-home { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 16px 14px 28px; }
   /* Le titre occupe le haut de l'écran : le château reste visible juste dessous. */
@@ -323,9 +331,64 @@
   .ws-hero-crest { width: 88px; margin-right: -34px; }
   .ws-hero-banner { padding-left: 24px; border-width: 18px 40px 14px; border-image-width: 18px 40px 14px; margin-top: 14px; }
   .ws-hero-title { font-size: 30px; }
-  .ws-hero-slogan { font-size: 14px; margin-top: 4px; }
+  .ws-hero-slogan { font-size: 12px; margin-top: 4px; }
   .ws-title-banner { font-size: 21px; border-width: 16px 40px 12px; border-image-width: 16px 40px 12px; }
+}
+@media (max-width: 420px) {
+  .ws-home { padding-inline: 12px; }
+  .ws-hero { width: 100%; }
+  .ws-hero-crest { width: 72px; margin-right: -26px; }
+  .ws-hero-banner { flex: 1; min-width: 0; padding-left: 12px; padding-right: 0; border-width: 16px 24px 12px; border-image-width: 16px 24px 12px; }
+  .ws-hero-title { font-size: clamp(24px, 7vw, 29px); }
+  .ws-hero-slogan { font-size: 11px; line-height: 1.3; }
+  .ws-standard { padding-inline: 9px; }
+  .ws-standard .ws-standard-choice { min-width: 0; padding-inline: 2px; font-size: 14px; }
+  .ws-standard-submit { font-size: 16px; }
+  .ws-title-banner { white-space: normal; text-align: center; font-size: 20px; border-inline-width: 24px; border-image-width: 16px 24px 12px; }
+  .war-map-body { padding: 10px; }
+  .war-map-name { font-size: 19px; }
+  .war-map-desc { font-size: 14px; }
+}
+@media (max-width: 360px) {
+  .ws-standard .ws-standard-choice { font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* Signature commune aux salons, dialogues et barres de jeu. */
+.kcd-btn { font-weight: 600; line-height: 1.3; }
+.kcd-btn.font-med { font-family: var(--font-geist-sans), sans-serif; font-weight: 600; }
+.kcd-panel, .kcd-panel-titled, .kcd-panel-wood { box-shadow: 0 4px 0 #24160f40; }
+.kcd-title { letter-spacing: .01em; }
+.ws-page-heading { display: flex; align-items: center; gap: 12px; }
+.ws-page-heading::before { content: '◆'; font-family: serif; font-size: 12px; color: var(--ws-trim); }
+.ws-lobby { padding: 16px; }
+.ws-lobby .kcd-title { padding-bottom: 12px; margin-bottom: 18px; }
+.ws-lobby input { min-width: 0; }
+.ws-lobby .war-map-desc { font-size: 12px; }
+.ws-lobby .war-map-name { font-size: 21px; }
+@media (max-width: 420px) {
+  .ws-standard .ws-standard-choice { font-size: 11px; }
+  .ws-standard-submit { font-size: 12px; }
+  .ws-lobby { padding: 8px; }
+  .war-map-desc { font-size: 12px; }
+}
+
+/* Blason et bannière partagés par les trois modes de jeu. */
+.ws-game-brand { margin: 0; flex-shrink: 0; }
+.ws-brand { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; }
+/* Le blason recouvre le bout replié de la bannière et touche le nom. */
+.ws-brand-mark { display: inline-flex; align-items: center; }
+.ws-crest { position: relative; z-index: 1; display: block; flex: none; width: 46px; height: auto; margin-right: -22px; image-rendering: pixelated; filter: drop-shadow(0 2px 0 #24160f66); }
+.ws-brand .ws-wordmark { padding: 0 8px 0 6px; border-width: 8px 20px 8px; border-image-width: 8px 20px 8px; font-family: var(--font-hero), serif; font-weight: 800; font-size: 20px; line-height: 1.1; white-space: nowrap; }
+/* Mode de jeu : plaque dorée séparée, lisible d'un coup d'œil. */
+.ws-brand-mode { padding: 3px 9px; font-family: var(--font-geist-sans), sans-serif; font-size: 12px; font-weight: 700; line-height: 1.2; color: var(--ws-ink); background: var(--ws-trim); border: 2px solid var(--ws-ink); box-shadow: inset 0 -2px 0 #9b733a, 0 2px 0 #24160f66; text-shadow: none; white-space: nowrap; }
+.ws-game-header { border-bottom-color: var(--ws-trim); }
+@media (max-width: 640px) {
+  .ws-game-header { column-gap: 10px; }
+  .ws-crest { width: 38px; margin-right: -18px; }
+  .ws-brand .ws-wordmark { font-size: 17px; border-width: 6px 16px; border-image-width: 6px 16px; padding-left: 5px; }
+  .ws-brand { gap: 8px; }
+  .ws-brand-mode { font-size: 11px; padding: 2px 7px; }
 }

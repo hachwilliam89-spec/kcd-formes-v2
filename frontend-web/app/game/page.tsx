@@ -1,5 +1,6 @@
 'use client'
 
+import Brand from '@/components/brand/Brand'
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
@@ -592,7 +593,7 @@ export default function GamePage() {
                 <div className="absolute inset-0 bg-[#160f08]/75" />
                 <div className="relative z-10 kcd-panel-wood w-full max-w-2xl lg:max-w-6xl p-4 md:p-6 flex flex-col gap-5">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                        <h1 className="ws-banner ws-title-banner">Choisis ton royaume</h1>
+                        <div className="flex flex-wrap items-center gap-4"><Brand mode="Solo" /><h1 className="font-med text-2xl text-[#ebce8b]">Choisis ton royaume</h1></div>
                         <button onClick={() => router.push('/')} className="kcd-btn kcd-btn--nav text-xs py-1 px-2">← Menu</button>
                     </div>
                     <MapSelector value={pendingMapId} onChange={setPendingMapId} disabled={loading} />
@@ -632,10 +633,10 @@ export default function GamePage() {
             <div className="absolute inset-0 bg-[#160f08]/80" />
 
             {/* HUD : 3 zones (ressources gauche · vague centre · menu droite) */}
-            <div className="relative z-30 kcd-panel-wood flex flex-wrap justify-between items-center gap-x-4 gap-y-1 mb-1.5 shrink-0 py-0.5">
+            <div className="relative z-30 kcd-panel-wood ws-game-header flex flex-wrap justify-between items-center gap-x-4 gap-y-1 mb-1.5 shrink-0 py-0.5">
                 {/* Gauche : titre + ressources */}
-                <div className="flex items-center gap-3">
-                    <h1 className="text-lg md:text-2xl font-med text-yellow-400" style={{ textShadow: '2px 2px 0 #2f1c0d' }}>4 War Seasons</h1>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
+                    <h1 className="ws-game-brand"><Brand mode="Solo" /></h1>
                     <span className="flex items-center gap-1 text-yellow-300 font-med text-xl">
                         <img src="/sprites/ui/icon_gold.png" alt="or" className="kcd-icon" /> {gold}
                     </span>

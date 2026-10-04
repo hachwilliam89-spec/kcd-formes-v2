@@ -100,7 +100,8 @@ export default function AuthForm() {
             onClick={() => choose(m)}
             aria-expanded={open && mode === m}
             aria-controls="auth-form"
-            className={`kcd-btn ${m === 'login' ? 'kcd-btn--primary' : ''} ws-standard-choice ${open && mode === m ? 'is-active' : ''}`}
+            disabled={loading}
+            className={`kcd-btn ${(open ? mode === m : m === 'login') ? 'kcd-btn--primary' : ''} ws-standard-choice ${open && mode === m ? 'is-active' : ''}`}
         >
             {label}
         </button>
