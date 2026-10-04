@@ -1,5 +1,5 @@
 import { paintSeasonalTerrain, roadTreeSpots, castleTreeSpots, recolorFoliage, TREES, FOLIAGE_TINTS } from './seasonalTerrain'
-import { paintCastle } from './castles'
+import { paintCastle, FORT_WIDTH, FORT_HEIGHT, PORTAL_FRAMES } from './castles'
 import { BANK_CELLS, LAKE, FOG_RANGE_PENALTY, type TerrainSnapshot, type TerrainForecast } from './seasons'
 import Phaser from 'phaser'
 import type { Cell } from './constants'
@@ -941,7 +941,7 @@ export class GameScene extends Phaser.Scene {
             return walls >= MAX_WALLS ? { ok: false, reason: `Limite de ${MAX_WALLS} murs` } : { ok: true }
         }
         if (corridor) return { ok: false, reason: 'Pas sur le couloir' }
-        return mapIsBuildable(this.mapDef, x, y) ? { ok: true } : { ok: false, reason: 'Trop loin des routes' }
+        return mapIsBuildable(this.mapDef, x, y) ? { ok: true } : { ok: false, reason: 'Impossible' }
     }
 
     /** Silhouette de l'aperçu (recréée seulement quand le type à poser change). */
@@ -2684,8 +2684,10 @@ export class GameScene extends Phaser.Scene {
             // au-dessus du sol mais sous les unités (depth < 0) → ambiance sans gêner.
             const sunX = w * 0.85, sunY = h * 0.05
             const key = 'sun-glare'
-            if (!this.textures.exists(key)) {
-                const tex = this.textures.createCanvas(key, w, h)
+            {
+                const tex = this.textures.get(key) instanceof Phaser.Textures.CanvasTexture
+                    ? this.textures.get(key) as Phaser.Textures.CanvasTexture
+                    : this.textures.createCanvas(key, w, h)
                 const ctx = tex?.getContext()
                 if (ctx) {
                     const g = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, Math.max(w, h) * 0.95)
@@ -2960,13 +2962,29 @@ export class GameScene extends Phaser.Scene {
         const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
         if (['spring', 'autumn'].includes(this.activeMapId)) {
             const key = `season-ground-${this.activeMapId}`
-            if (!this.textures.exists(key)) {
-                const tex = this.textures.createCanvas(key, w, h)
+            {
+                const tex = this.textures.get(key) instanceof Phaser.Textures.CanvasTexture
+                    ? this.textures.get(key) as Phaser.Textures.CanvasTexture
+                    : this.textures.createCanvas(key, w, h)
                 const ctx = tex?.getContext()
                 if (ctx && tex) {
                     const plants = this.textures.exists('season-plants') ? this.textures.get('season-plants').getSourceImage() as HTMLImageElement : undefined
                     const road = this.textures.exists('season-road') ? this.textures.get('season-road').getSourceImage() as HTMLImageElement : undefined
-                    paintSeasonalTerrain(ctx, this.mapDef, plants, road); tex.refresh()
+                    let plantIndex = 0
+                    ctx.clearRect(0, 0, w, h)
+                    paintSeasonalTerrain(ctx, this.mapDef, plants, road, (atlas, sprite, x, y, pw, ph) => {
+                        const plantKey = `${key}-plant-${plantIndex++}`
+                        if (!this.textures.exists(plantKey)) {
+                            const plant = this.textures.createCanvas(plantKey, pw, ph)
+                            if (plant) {
+                                const pc = plant.getContext()
+                                pc.imageSmoothingEnabled = false
+                                pc.drawImage(atlas, sprite.sx, sprite.sy, sprite.w, sprite.h, 0, 0, pw, ph)
+                                plant.refresh()
+                            }
+                        }
+                        this.add.image(x, y, plantKey).setOrigin(0.5, 1).setDepth(unitDepth(y / CELL_SIZE))
+                    }); tex.refresh()
                 }
             }
             this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-20)
@@ -3133,8 +3151,23 @@ export class GameScene extends Phaser.Scene {
         const keyFor = (enemy: boolean) => {
             const key = `fort-${this.activeMapId}-${enemy ? 'enemy' : 'player'}`
             if (!this.textures.exists(key)) {
-                const tex = this.textures.createCanvas(key, 100, 112)
-                if (tex) { paintCastle(tex.getContext(), this.activeMapId, enemy); tex.refresh() }
+                const frames = enemy ? PORTAL_FRAMES : 1
+                const columns = enemy ? 8 : 1
+                const tex = this.textures.createCanvas(key, FORT_WIDTH * columns, FORT_HEIGHT * Math.ceil(frames / columns))
+                if (tex) {
+                    const ctx = tex.getContext()
+                    for (let frame = 0; frame < frames; frame++) {
+                        const fx = (frame % columns) * FORT_WIDTH, fy = Math.floor(frame / columns) * FORT_HEIGHT
+                        ctx.save(); ctx.translate(fx, fy)
+                        paintCastle(ctx, this.activeMapId, enemy, frame / frames)
+                        ctx.restore()
+                        if (enemy) tex.add(frame, 0, fx, fy, FORT_WIDTH, FORT_HEIGHT)
+                    }
+                    tex.refresh()
+                }
+            }
+            if (enemy && !this.anims.exists(key)) {
+                this.anims.create({ key, frames: this.anims.generateFrameNumbers(key, { start: 0, end: PORTAL_FRAMES - 1 }), frameRate: 16, repeat: -1 })
             }
             return key
         }
@@ -3142,11 +3175,38 @@ export class GameScene extends Phaser.Scene {
             (s, i, arr) => arr.findIndex(o => o.x === s.x && o.y === s.y) === i,
         )
         for (const start of uniqueStarts) {
-            this.add.image(Math.min(768, Math.max(32, start.x * CELL_SIZE + 20)), start.y * CELL_SIZE + 37, keyFor(true))
-                .setOrigin(0.5, 1).setDisplaySize(68, 76).setDepth(-15)
+            const key = keyFor(true)
+            this.add.sprite(Math.min(756, Math.max(44, start.x * CELL_SIZE + 20)), start.y * CELL_SIZE + 37, key, 0)
+                .setOrigin(0.5, 1).setDisplaySize(88, 108).setDepth(unitDepth(start.y + 0.9)).play(key)
         }
         const end = mapCastle(this.mapDef)
-        this.add.image(Math.min(768, end.x * CELL_SIZE + 20), end.y * CELL_SIZE + 37, keyFor(false))
-            .setOrigin(0.5, 1).setDisplaySize(68, 76).setDepth(-15)
+        const castleWidth = this.activeMapId === 'fourche' ? 104 : 120
+        const castleHeight = this.activeMapId === 'fourche' ? 127 : 147
+        const halfCastle = castleWidth / 2
+        this.add.image(Phaser.Math.Clamp(end.x * CELL_SIZE + 20, halfCastle, GRID_WIDTH * CELL_SIZE - halfCastle), end.y * CELL_SIZE + 37, keyFor(false))
+            .setOrigin(0.5, 1).setDisplaySize(castleWidth, castleHeight).setDepth(unitDepth(end.y + 0.9))
+        if (this.activeMapId === 'autumn') {
+            // Brume d'ambiance seulement : discrète, sans effet de portée.
+            const mistKey = 'castle-autumn-mist'
+            if (!this.textures.exists(mistKey)) {
+                const texture = this.textures.createCanvas(mistKey, 96, 24)
+                if (texture) {
+                    const ctx = texture.getContext()
+                    for (let layer = 0; layer < 4; layer++) {
+                        ctx.fillStyle = `rgba(211, 207, 225, ${0.025 + layer * 0.012})`
+                        ctx.beginPath()
+                        ctx.ellipse(48, 13, 46 - layer * 7, 10 - layer * 2, 0, 0, Math.PI * 2)
+                        ctx.fill()
+                    }
+                    texture.refresh()
+                }
+            }
+            for (let i = 0; i < 3; i++) {
+                const mist = this.add.image(709 + i * 24, end.y * CELL_SIZE + 23 + i * 9, mistKey)
+                    .setScale(0.65 + i * 0.12).setAlpha(0.6).setDepth(unitDepth(end.y + 1.1))
+                this.tweens.add({ targets: mist, x: mist.x - 10, alpha: 0.95, duration: 4200 + i * 1300,
+                    delay: i * 600, ease: 'Sine.easeInOut', yoyo: true, repeat: -1 })
+            }
+        }
     }
 }

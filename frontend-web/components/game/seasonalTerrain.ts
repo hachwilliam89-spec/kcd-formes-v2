@@ -104,24 +104,22 @@ export function roadTreeSpots(map: MapDef): TreeSpot[] {
 }
 
 /**
- * Printemps : un arbre dans chaque coin de l'île du château, cerisiers et lilas en
- * diagonale, hors des files des ennemis qui arrivent par l'allée (sprites triés en
+ * Printemps : allée de six cerisiers et lilas devant le château, hors des files des ennemis qui arrivent par l'allée (sprites triés en
  * profondeur, comme les arbres de bord de route).
  */
 export function castleTreeSpots(map: MapDef): TreeSpot[] {
     if (map.water.length === 0) return []
     const c = map.waypoints[map.waypoints.length - 1]
     const x0 = (c.x - 1) * 40, y0 = (c.y - 1) * 40 // île de 3 × 3 cases
-    return [
-        { x: x0 + 18, y: y0 + 36, tree: 2, hue: 0, flip: false, scale: 0.3 },
-        { x: x0 + 102, y: y0 + 36, tree: 2, hue: 2, flip: true, scale: 0.3 },
-        { x: x0 + 18, y: y0 + 112, tree: 2, hue: 2, flip: false, scale: 0.3 },
-        { x: x0 + 102, y: y0 + 112, tree: 2, hue: 1, flip: true, scale: 0.3 },
-    ]
+    // Trois paires devant le château ; l'axe central et le pont restent libres.
+    return [0, 1, 2].flatMap(row => [
+        { x: x0 + 18, y: y0 + 82 + row * 22, tree: 2, hue: row % 3, flip: false, scale: 0.25 },
+        { x: x0 + 102, y: y0 + 82 + row * 22, tree: 2, hue: row % 3, flip: true, scale: 0.25 },
+    ])
 }
 
 /** Décor en pixels peint une seule fois : aucune géométrie statique à rejouer par image. */
-export function paintSeasonalTerrain(ctx: CanvasRenderingContext2D, map: MapDef, plants?: CanvasImageSource, road?: CanvasImageSource) {
+export function paintSeasonalTerrain(ctx: CanvasRenderingContext2D, map: MapDef, plants?: CanvasImageSource, road?: CanvasImageSource, standingPlant?: (atlas: CanvasImageSource, sprite: Sprite, x: number, y: number, w: number, h: number) => void) {
     ctx.imageSmoothingEnabled = false
     const autumn = map.id === 'autumn'
     const palette = autumn
@@ -225,7 +223,8 @@ export function paintSeasonalTerrain(ctx: CanvasRenderingContext2D, map: MapDef,
             ctx.fillStyle = LEAVES[Math.floor(rnd() * LEAVES.length)]
             ctx.fillRect(fx - w * 0.6 + rnd() * w * 1.2, footY - 6 + rnd() * 10, 3, 2)
         }
-        ctx.drawImage(atlas, s.sx, s.sy, s.w, s.h, fx - w / 2, footY - h, w, h)
+        if (standingPlant) standingPlant(atlas, s, fx, footY, w, h)
+        else ctx.drawImage(atlas, s.sx, s.sy, s.w, s.h, fx - w / 2, footY - h, w, h)
     }
     // Distance (Chebyshev) aux forts : on laisse le fort lisible (rien à 1 case, buissons à 2).
     const gateDist = (x: number, y: number) => Math.min(...[...map.lanes.map(l => l[0]), castle].map(p => Math.max(Math.abs(p.x - x), Math.abs(p.y - y))))

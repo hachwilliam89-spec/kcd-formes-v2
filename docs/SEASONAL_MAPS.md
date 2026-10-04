@@ -78,7 +78,7 @@ portée et l’aperçu de pose tiennent compte de la brume.
 
 ## Décors et assets
 
-- Sols et végétation composés une seule fois dans une texture de 800×640. Feuillages
+- Sols composés dans une texture de 800×640 ; arbres et buissons en sprites statiques triés par la position de leur pied, comme les arbres de route et les unités. Les troncs du fond ne passent ainsi plus devant les feuillages du premier plan. Feuillages
   recolorés pixel par pixel au chargement (`ctx.filter` n’est pas pris en charge par
   Safari) : automne orange, rouge, or ; printemps en cerisiers roses, lilas blancs et
   arbres verts d’origine, avec des massifs de fleurs. Arbres debout triés en
@@ -86,9 +86,22 @@ portée et l’aperçu de pose tiennent compte de la brume.
   au printemps.
 - Calque des dangers régénéré seulement lorsque son état change ; une image
   unique est rendue entre deux changements, sans Graphics statique par frame.
-- Fortifications compactes dessinées en Canvas2D : grès crénelé au désert,
-  toitures enneigées en hiver, petit fort végétalisé au printemps, toits roux en
-  automne. Drapeau rouge aux entrées, bleu au château à défendre.
+- Fortifications dessinées en Canvas2D : palais de grès à coupole turquoise au désert,
+  citadelle de cristal en hiver, sanctuaire végétalisé au printemps et château
+  médiéval aux toits ardoise et vitraux violets en automne. Châteaux à défendre
+  agrandis (120×147 pixels ; hiver : 104×127), triés en profondeur avec les unités. Enceinte en
+  perspective oblique, cour pavée, chemins de ronde crénelés, donjon en retrait,
+  tours à flancs ombrés, herse, escalier, lanternes et bannières. Coupole de
+  cuivre au désert, givre en hiver, lierre fleuri au printemps, ardoise et
+  bannières prune en automne. En hiver, centre bas à cristaux, remparts abaissés
+  et grande tour arrière droite contre le bord pour dégager la jonction des voies. Les entrées
+  ennemies sont des portails corrompus (88×108 pixels), avec runes et brèche
+  lumineuse : braise, violet glacé, vert vénéneux ou mauve selon la carte.
+  Vortex animé en boucle : trois spirales, particules aspirées et cœur pulsant.
+  32 images précalculées dans un atlas de 1152×704, lecture à 16 images/s ;
+  aucun redessin Canvas par tick. Textures générées au démarrage, sans nouveaux assets à transférer.
+- Placement hors zone constructible : message « Impossible » à la place de
+  « Trop loin des routes » ; les raisons utiles (or, occupation, limite de murs) restent explicites.
 - `sprites/seasonal/plants.png` : copie intacte de `TX Plant.png`, pack utilisateur
   **Pixel Art Top Down - Basic v1** (Cainos). Découpage de l’atlas au rendu ; teinte
   automnale appliquée uniquement lors de la composition du décor.
@@ -116,3 +129,9 @@ intégrés dans cette passe : ils nécessitent une sélection/adaptation distinc
 Facteur de boue, pénalité de brume et emplacements constituent un premier réglage.
 L’équilibrage sur de longues parties et le test réseau avec deux joueurs restent
 à faire. Le harnais historique de balance ne mesure que son scénario existant.
+
+### Décor des abords des châteaux
+
+- Printemps : six petits cerisiers et lilas en trois paires devant le château, axe du pont dégagé.
+- Désert : deux obélisques de grès à incrustations turquoise et touches de sable.
+- Automne : trois petites nappes de brume translucides à dérive lente au pied du château, purement décoratives (aucun effet sur la portée).
