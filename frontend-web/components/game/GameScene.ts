@@ -148,6 +148,11 @@ const DEPTH_BARS = 5     // barres de vie (tours + ennemis), toujours lisibles
 const DEPTH_LABEL = 7     // étiquette de l'aperçu de pose (coût / raison du refus)
 const unitDepth = (footCellY: number) => DEPTH_UNITS + footCellY / 100
 
+// Mirage (biome désert) : longueur d'onde de la texture tuilée (~2π/0.035, la
+// fréquence d'origine) et amplitude dessinée dans la texture.
+const HEAT_WAVELENGTH = 180
+const HEAT_TEX_AMP = 3
+
 // Police de lecture pour les textes du canvas (étiquettes) : simple et nette,
 // la pixel/médiévale reste réservée à l'habillage.
 const READABLE_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
@@ -266,7 +271,6 @@ const ROT_WEAPON: Record<string, {
 const TOWER_SPRITE_TYPES = ['ARCHER', 'MAGE', 'CATAPULT', 'BALLISTA', 'WALL']
 
 export class GameScene extends Phaser.Scene {
-    private gridGraphics!: Phaser.GameObjects.Graphics
     private towersGraphics!: Phaser.GameObjects.Graphics
     private enemiesGraphics!: Phaser.GameObjects.Graphics
     // Calque dédié aux effets de combat (rayon continu, cercle de zone, tir
@@ -323,15 +327,24 @@ export class GameScene extends Phaser.Scene {
     private get pathEnd(): Cell { return this.mapDef.waypoints[this.mapDef.waypoints.length - 1] }
     private onCellClick?: (x: number, y: number) => void
     // Effet d'ambiance neige (biome snow) : flocons mis à jour chaque frame.
-    private snowGfx?: Phaser.GameObjects.Graphics
-    private snowflakes: { x: number; y: number; vy: number; vx: number; r: number; a: number; c: number }[] = []
+    // Particules d'ambiance (neige / sable soufflé) : une petite Image par grain,
+    // déplacée chaque frame — regroupées par le moteur en un seul lot de quads,
+    // bien moins cher que des cercles redessinés dans un Graphics (voir bakeStatic).
+    private snowflakes: { img: Phaser.GameObjects.Image; x: number; y: number; vy: number; vx: number }[] = []
     // Mirage / ondes de chaleur (biome desert) : lignes ondulantes animées.
-    private heatGfx?: Phaser.GameObjects.Graphics
+    // Lignes du mirage : une bande d'onde tuilée par ligne, défilée et pulsée.
+    private heatLines: Phaser.GameObjects.TileSprite[] = []
+    // Ombres portées du décor, regroupées puis figées en une texture (voir bakeDecorShadows).
+    private decorShadows?: Phaser.GameObjects.Graphics
     private heatPhase = 0
     private waveTimer?: Phaser.Time.TimerEvent
     // Fonction de rendu du tick courant, conservée pour reprendre après une pause
     // de tuto (voir playWave / resumeWave).
     private waveRender?: () => void
+    // Compteur de performance (outil de dev, activé par ?perf=1 dans l'URL) :
+    // fps, temps CPU d'une image (update + rendu), ennemis et objets affichés.
+    private perfEnabled = false
+    private perfFrames: number[] = []
     // Évite de rejouer la volée d'explosions du château plusieurs fois (une seule
     // chute par vague).
     private castleFell = false
@@ -476,7 +489,6 @@ export class GameScene extends Phaser.Scene {
         this.drawTerrain()
         this.initWeather()
 
-        this.gridGraphics = this.add.graphics()
         this.previewGraphics = this.add.graphics() // sous les tours/ennemis (aperçu de pose)
         this.towersGraphics = this.add.graphics()
         this.enemiesGraphics = this.add.graphics()
@@ -627,9 +639,43 @@ export class GameScene extends Phaser.Scene {
             if (this.syncHoveredTower()) this.refreshFocus()
         })
 
+        if (this.perfEnabled) this.setupPerfOverlay()
+
         // Coop : signale que la scène est prête (textures chargées, calques créés)
         // pour que le canvas commence à pousser les snapshots serveur.
         this.onCoopReady?.()
+    }
+
+    /** Active le compteur de performance (à appeler avant le boot de la scène). */
+    enablePerfOverlay() {
+        this.perfEnabled = true
+    }
+
+    /**
+     * Compteur affiché en haut à gauche, rafraîchi toutes les 500 ms. Le temps CPU
+     * est mesuré du début de l'étape (PRE_STEP) à la fin du rendu (POST_RENDER) :
+     * c'est le budget à tenir sous ~16 ms pour du 60 fps.
+     */
+    private setupPerfOverlay() {
+        const text = this.add.text(4, 4, '', {
+            fontFamily: 'monospace', fontSize: '11px', color: '#9ef59e',
+            backgroundColor: 'rgba(0,0,0,0.65)', padding: { x: 4, y: 2 }, resolution: 2,
+        }).setDepth(100)
+        let stepStart = 0
+        this.game.events.on(Phaser.Core.Events.PRE_STEP, () => { stepStart = performance.now() })
+        this.game.events.on(Phaser.Core.Events.POST_RENDER, () => { this.perfFrames.push(performance.now() - stepStart) })
+        this.time.addEvent({
+            delay: 500, loop: true, callback: () => {
+                const frames = this.perfFrames
+                this.perfFrames = []
+                if (frames.length === 0) return
+                const avg = frames.reduce((a, b) => a + b, 0) / frames.length
+                text.setText(
+                    `${Math.round(this.game.loop.actualFps)} fps · CPU ${avg.toFixed(1)} ms (max ${Math.max(...frames).toFixed(1)})`
+                    + ` · ${this.enemySprites.size} ennemis · ${this.children.list.length} objets`,
+                )
+            },
+        })
     }
 
     update(_time: number, delta: number) {
@@ -1847,15 +1893,11 @@ export class GameScene extends Phaser.Scene {
     private initWeather() {
         const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
         if (this.mapDef.biome === 'snow') {
-            // Flocons : une couche au-dessus du jeu, redessinée chaque frame (updateWeather).
-            this.snowGfx = this.add.graphics().setDepth(60)
+            // Flocons : une couche au-dessus du jeu, animée chaque frame (updateWeather).
             this.snowflakes = []
             for (let i = 0; i < 90; i++) {
-                this.snowflakes.push({
-                    x: Math.random() * w, y: Math.random() * h,
-                    vy: 12 + Math.random() * 22, vx: -6 + Math.random() * 12,
-                    r: 1 + Math.random() * 2.2, a: 0.35 + Math.random() * 0.5, c: 0xffffff,
-                })
+                this.addWeatherGrain(60, w, h, 12 + Math.random() * 22, -6 + Math.random() * 12,
+                    1 + Math.random() * 2.2, 0.35 + Math.random() * 0.5, 0xffffff)
             }
         } else if (this.mapDef.biome === 'desert') {
             // Soleil TAPANT. 1) Halo chaud vif au coin haut-droit (soleil), alpha qui
@@ -1882,58 +1924,86 @@ export class GameScene extends Phaser.Scene {
             // Sable soufflé : grains sable qui dérivent en biais (surtout latéral), épars
             // et translucides → vivant et lisible, sans masquer le jeu (même système que
             // la neige, voir updateWeather). Couche au-dessus du plateau.
-            this.snowGfx = this.add.graphics().setDepth(55)
             this.snowflakes = []
             for (let i = 0; i < 70; i++) {
-                this.snowflakes.push({
-                    x: Math.random() * w, y: Math.random() * h,
-                    vy: 5 + Math.random() * 11, vx: 40 + Math.random() * 52,
-                    r: 0.9 + Math.random() * 1.7, a: 0.24 + Math.random() * 0.32,
-                    c: Math.random() < 0.5 ? 0xe7d7ac : 0xdcc790,
-                })
+                this.addWeatherGrain(55, w, h, 5 + Math.random() * 11, 40 + Math.random() * 52,
+                    0.9 + Math.random() * 1.7, 0.24 + Math.random() * 0.32,
+                    Math.random() < 0.5 ? 0xe7d7ac : 0xdcc790)
             }
             // Mirage : lignes chaudes ondulantes au ras du sol, animées (updateWeather).
             // Sous les unités (depth -6) → shimmer sur le sable sans masquer le jeu.
-            this.heatGfx = this.add.graphics().setDepth(-6)
+            // Une onde est dessinée UNE fois dans une petite texture, puis chaque
+            // ligne la tuile sur la largeur et la fait défiler (au lieu de 10
+            // polylignes de 80 points re-tracées à chaque frame).
+            if (!this.textures.exists('fx-heat')) {
+                const tex = this.textures.createCanvas('fx-heat', HEAT_WAVELENGTH, 12)
+                const ctx = tex?.getContext()
+                if (ctx) {
+                    ctx.strokeStyle = '#fff2d0'
+                    ctx.lineWidth = 2
+                    ctx.beginPath()
+                    for (let x = 0; x <= HEAT_WAVELENGTH; x += 2) {
+                        const y = 6 + Math.sin((x / HEAT_WAVELENGTH) * Math.PI * 2) * HEAT_TEX_AMP
+                        if (x === 0) ctx.moveTo(x, y)
+                        else ctx.lineTo(x, y)
+                    }
+                    ctx.stroke()
+                    tex?.refresh()
+                }
+            }
+            this.heatLines = []
+            const lines = 10
+            for (let i = 0; i < lines; i++) {
+                const y = h * 0.40 + (h * 0.55) * (i / (lines - 1))
+                const amp = 2 + 1.6 * (i / lines)
+                const line = this.add.tileSprite(0, y, w, 12, 'fx-heat').setOrigin(0, 0.5).setDepth(-6)
+                line.setScale(1, amp / HEAT_TEX_AMP)
+                this.heatLines.push(line)
+            }
         }
+    }
+
+    /** Un grain d'ambiance (flocon / sable) : petite Image ronde teintée. */
+    private addWeatherGrain(depth: number, w: number, h: number, vy: number, vx: number, r: number, alpha: number, color: number) {
+        if (!this.textures.exists('fx-dot')) {
+            const tex = this.textures.createCanvas('fx-dot', 8, 8)
+            const ctx = tex?.getContext()
+            if (ctx) {
+                ctx.fillStyle = '#ffffff'
+                ctx.beginPath()
+                ctx.arc(4, 4, 4, 0, Math.PI * 2)
+                ctx.fill()
+                tex?.refresh()
+            }
+        }
+        const x = Math.random() * w, y = Math.random() * h
+        const img = this.add.image(x, y, 'fx-dot').setDepth(depth).setAlpha(alpha).setTint(color).setScale(r / 4)
+        this.snowflakes.push({ img, x, y, vy, vx })
     }
 
     /** Anime les flocons (biome snow) — appelé chaque frame par update(). */
     private updateWeather(delta: number) {
-        if (!this.snowGfx || this.snowflakes.length === 0) return
+        if (this.snowflakes.length === 0) return
         const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
         const dt = Math.min(delta, 50) / 1000 // borné (onglet en arrière-plan)
-        const g = this.snowGfx
-        g.clear()
         for (const f of this.snowflakes) {
             f.y += f.vy * dt
             f.x += f.vx * dt + Math.sin(f.y * 0.03) * 0.4
             if (f.y > h + 4) { f.y = -4; f.x = Math.random() * w }
             if (f.x < -6) f.x = w + 6
             else if (f.x > w + 6) f.x = -6
-            g.fillStyle(f.c, f.a)
-            g.fillCircle(f.x, f.y, f.r)
+            f.img.setPosition(f.x, f.y)
         }
 
-        // Mirage / ondes de chaleur (desert) : lignes chaudes ondulantes au ras du sol.
-        if (this.heatGfx) {
+        // Mirage / ondes de chaleur (desert) : chaque ligne fait défiler son onde
+        // (même déphasage par ligne qu'avant) et respire en opacité.
+        if (this.heatLines.length > 0) {
             this.heatPhase += Math.min(delta, 50) * 0.004
-            const hg = this.heatGfx
-            hg.clear()
-            const lines = 10
-            for (let i = 0; i < lines; i++) {
-                const y = h * 0.40 + (h * 0.55) * (i / (lines - 1))
-                const amp = 2 + 1.6 * (i / lines)
-                const a = 0.05 + 0.06 * (0.5 + 0.5 * Math.sin(this.heatPhase * 1.6 + i * 0.7))
-                hg.lineStyle(2, 0xfff2d0, a)
-                hg.beginPath()
-                for (let x = 0; x <= w; x += 10) {
-                    const yy = y + Math.sin(x * 0.035 + this.heatPhase * 3 + i) * amp
-                    if (x === 0) hg.moveTo(x, yy)
-                    else hg.lineTo(x, yy)
-                }
-                hg.strokePath()
-            }
+            const k = (Math.PI * 2) / HEAT_WAVELENGTH
+            this.heatLines.forEach((line, i) => {
+                line.tilePositionX = (this.heatPhase * 3 + i) / k
+                line.setAlpha(0.05 + 0.06 * (0.5 + 0.5 * Math.sin(this.heatPhase * 1.6 + i * 0.7)))
+            })
         }
     }
 
@@ -1958,6 +2028,7 @@ export class GameScene extends Phaser.Scene {
         // le décor terres désolées ci-dessous ne s'applique qu'aux autres cartes.
         if (this.mapDef.biome === 'snow') {
             this.drawSnowDecor(rnd, nearCastle)
+            this.bakeDecorShadows()
             this.addVignette()
             return
         }
@@ -1974,9 +2045,7 @@ export class GameScene extends Phaser.Scene {
         // Sprite ancré en bas de case (déborde vers le haut) + ombre portée douce.
         // byHeight : cale la hauteur (éléments verticaux) ; sinon la largeur (éléments plats).
         const placeDecor = (key: string, cx: number, cy: number, span: number, shadowW: number, byHeight = false) => {
-            const sh = this.add.graphics().setDepth(-16)
-            sh.fillStyle(0x000000, 0.22)
-            sh.fillEllipse(cx, cy, shadowW, shadowW * 0.4)
+            this.decorShadow(cx, cy, shadowW, 0x000000, 0.22)
             const img = this.add.image(cx, cy, key).setOrigin(0.5, 0.92).setDepth(-15)
             img.setScale((CELL_SIZE * span) / (byHeight ? img.height : img.width))
         }
@@ -2024,6 +2093,7 @@ export class GameScene extends Phaser.Scene {
             else placeDecor(`decor-ruinF-${1 + Math.floor(rnd() * 4)}`, cx, cy, 0.85 + rnd() * 0.25, CELL_SIZE * 0.5)
         }
 
+        this.bakeDecorShadows()
         // 4) Vignette d'ambiance : bords assombris (au-dessus du terrain, sous le jeu).
         this.addVignette()
     }
@@ -2055,9 +2125,7 @@ export class GameScene extends Phaser.Scene {
             !blocks(x, y - 1) && !blocks(x - 1, y) && !blocks(x + 1, y)
 
         const place = (key: string, cx: number, cy: number, span: number, shadowW: number, byHeight = false) => {
-            const sh = this.add.graphics().setDepth(-16)
-            sh.fillStyle(0x14202a, 0.20)
-            sh.fillEllipse(cx, cy, shadowW, shadowW * 0.4)
+            this.decorShadow(cx, cy, shadowW, 0x14202a, 0.20)
             const img = this.add.image(cx, cy, key).setOrigin(0.5, 0.94).setDepth(-15)
             img.setScale((CELL_SIZE * span) / (byHeight ? img.height : img.width))
         }
@@ -2175,11 +2243,40 @@ export class GameScene extends Phaser.Scene {
 
     // ── Dessin de la grille ──────────────────────────────────────────────
 
+    /**
+     * Fige un calque Graphics STATIQUE en texture, affichée comme une simple Image.
+     * En WebGL, Phaser re-tessellise un Graphics à CHAQUE image, même inchangé :
+     * le quadrillage des parcelles (~200 rectangles arrondis, 12 000 commandes)
+     * coûtait à lui seul ~78 % du temps d'une image au banc de charge. Une Image
+     * ne coûte qu'un quad.
+     */
+    private bakeStatic(g: Phaser.GameObjects.Graphics, key: string, depth: number) {
+        if (this.textures.exists(key)) this.textures.remove(key)
+        g.generateTexture(key, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE)
+        g.destroy()
+        return this.add.image(0, 0, key).setOrigin(0, 0).setDepth(depth)
+    }
+
+    /** Ombre portée d'un élément de décor, sur le calque commun (figé ensuite). */
+    private decorShadow(cx: number, cy: number, width: number, color: number, alpha: number) {
+        this.decorShadows ??= this.make.graphics({}, false)
+        this.decorShadows.fillStyle(color, alpha)
+        this.decorShadows.fillEllipse(cx, cy, width, width * 0.4)
+    }
+
+    /** Fige les ombres du décor (sous les éléments de décor, depth -15). */
+    private bakeDecorShadows() {
+        if (!this.decorShadows) return
+        this.bakeStatic(this.decorShadows, 'decor-shadows', -16)
+        this.decorShadows = undefined
+    }
+
     private drawGrid() {
         // On ne quadrille PLUS tout : on marque seulement les cases
         // CONSTRUCTIBLES (hors couloir) d'un liseré clair façon "parcelle" — ça
         // montre où poser des tours et c'est plus joli qu'une grille pleine. Le
-        // couloir (route) reste net.
+        // couloir (route) reste net. Dessiné une fois puis figé (voir bakeStatic).
+        const plots = this.make.graphics({}, false)
         for (let x = 0; x < GRID_WIDTH; x++) {
             for (let y = 0; y < GRID_HEIGHT; y++) {
                 // Parcelle affichée UNIQUEMENT sur les cases constructibles (bande au
@@ -2188,12 +2285,16 @@ export class GameScene extends Phaser.Scene {
                 if (!mapIsBuildable(this.mapDef, x, y) || y < TOP_RESERVED_ROWS) continue
                 const px = x * CELL_SIZE
                 const py = y * CELL_SIZE
-                this.gridGraphics.fillStyle(0xffffff, 0.06)
-                this.gridGraphics.fillRoundedRect(px + 3, py + 3, CELL_SIZE - 6, CELL_SIZE - 6, 4)
-                this.gridGraphics.lineStyle(1, 0xf0e2c4, 0.20)
-                this.gridGraphics.strokeRoundedRect(px + 3, py + 3, CELL_SIZE - 6, CELL_SIZE - 6, 4)
+                plots.fillStyle(0xffffff, 0.06)
+                plots.fillRoundedRect(px + 3, py + 3, CELL_SIZE - 6, CELL_SIZE - 6, 4)
+                plots.lineStyle(1, 0xf0e2c4, 0.20)
+                // +0.5 : le trait de 1 px tombe pile sur la grille de pixels du canvas
+                // 2D (sinon il s'étale sur 2 pixels à demi-opacité et pâlit).
+                plots.strokeRoundedRect(px + 3.5, py + 3.5, CELL_SIZE - 7, CELL_SIZE - 7, 4)
             }
         }
+        // Juste sous les calques de jeu (depth 0), au-dessus du terrain et de la vignette.
+        this.bakeStatic(plots, 'build-plots', -1)
     }
 
     private drawPath() {

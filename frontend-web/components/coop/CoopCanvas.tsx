@@ -38,6 +38,8 @@ const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCa
 
         const scene = new GameScene()
         if (mapId) scene.setActiveMap(mapId)   // AVANT le boot : bon terrain/décor
+        // Outil de dev : ?perf=1 dans l'URL affiche fps / temps CPU par image.
+        if (new URLSearchParams(window.location.search).has('perf')) scene.enablePerfOverlay()
         sceneRef.current = scene
 
         // Branché avant le boot : appelé en fin de create() (ou tout de suite si

@@ -51,6 +51,8 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
 
         const scene = new GameScene()
         if (mapId) scene.setActiveMap(mapId)   // AVANT le boot : create() rend la bonne map
+        // Outil de dev : ?perf=1 dans l'URL affiche fps / temps CPU par image.
+        if (new URLSearchParams(window.location.search).has('perf')) scene.enablePerfOverlay()
         sceneRef.current = scene
 
         gameRef.current = new Phaser.Game({
