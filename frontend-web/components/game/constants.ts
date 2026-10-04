@@ -49,7 +49,7 @@ export type PathData = {
  * Bande constructible = anneau de BUILD_BAND cases autour du couloir (hors couloir),
  * SAUF autour des entrées ennemies `starts` (voir SPAWN_NOBUILD).
  */
-function computeBuildable(corridorSet: Set<string>, starts: Cell[], castle: Cell, gridW: number, gridH: number): Set<string> {
+function computeBuildable(corridorSet: Set<string>, starts: Cell[], castle: Cell, gridW: number, gridH: number, blocked: Set<string> = new Set()): Set<string> {
   const nearStart = (x: number, y: number) =>
     starts.some((s) => Math.max(Math.abs(x - s.x), Math.abs(y - s.y)) <= SPAWN_NOBUILD)
   const nearCastle = (x: number, y: number) =>
@@ -62,7 +62,7 @@ function computeBuildable(corridorSet: Set<string>, starts: Cell[], castle: Cell
         const nx = cx + dx
         const ny = cy + dy
         const nk = key(nx, ny)
-        if (nx >= 0 && nx < gridW && ny >= 0 && ny < gridH && !corridorSet.has(nk) && !nearStart(nx, ny) && !nearCastle(nx, ny)) {
+        if (nx >= 0 && nx < gridW && ny >= 0 && ny < gridH && !corridorSet.has(nk) && !blocked.has(nk) && !nearStart(nx, ny) && !nearCastle(nx, ny)) {
           buildable.add(nk)
         }
       }
@@ -130,7 +130,7 @@ export function buildPathData(waypoints: Cell[], gridW = GRID_W, gridH = GRID_H)
  * = voies fines d'1 case (plus de terrain constructible entre les voies). Doit rester
  * synchronisé avec le backend (MapCatalog + PathfindingService.corridorCells).
  */
-export function buildLanesData(lanes: Cell[][], halfWidth = 1, wideSpots: Cell[] = [], gridW = GRID_W, gridH = GRID_H): PathData {
+export function buildLanesData(lanes: Cell[][], halfWidth = 1, wideSpots: Cell[] = [], blocked: Cell[] = [], gridW = GRID_W, gridH = GRID_H): PathData {
   const lanePaths = lanes.map((wp) => buildPathData(wp, gridW, gridH))
 
   // Union des cases de chemin de toutes les voies.
@@ -173,7 +173,10 @@ export function buildLanesData(lanes: Cell[][], halfWidth = 1, wideSpots: Cell[]
     }
   }
 
-  const buildableSet = computeBuildable(corridorSet, lanes.map((l) => l[0]), lanes[0][lanes[0].length - 1], gridW, gridH)
+  // Cases bloquées (eau du lac au printemps, voir seasons.ts WATER_CELLS) : jamais
+  // constructibles — miroir de PathfindingService.buildableCells.
+  const blockedSet = new Set(blocked.map((c) => key(c.x, c.y)))
+  const buildableSet = computeBuildable(corridorSet, lanes.map((l) => l[0]), lanes[0][lanes[0].length - 1], gridW, gridH, blockedSet)
   return { waypoints: lanes[0], pathCells, corridorSet, corridorCells, buildableSet, pathDir }
 }
 

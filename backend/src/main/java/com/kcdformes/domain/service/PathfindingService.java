@@ -2,6 +2,7 @@ package com.kcdformes.domain.service;
 
 import com.kcdformes.domain.model.GameMap;
 import com.kcdformes.domain.model.Position;
+import com.kcdformes.domain.model.SeasonalTerrain;
 
 import java.util.*;
 
@@ -153,6 +154,8 @@ public class PathfindingService {
             starts.add(lane.get(0));
         }
         Position castle = map.getPathEnd();
+        // Eau permanente (lac du printemps) : jamais constructible.
+        Set<Position> water = Set.copyOf(SeasonalTerrain.waterCells(map.getTerrain()));
         Set<Position> buildable = new HashSet<>();
         for (Position c : corridor) {
             for (int dx = -BUILD_BAND; dx <= BUILD_BAND; dx++) {
@@ -161,7 +164,7 @@ public class PathfindingService {
                     int ny = c.y() + dy;
                     Position p = new Position(nx, ny);
                     boolean nearCastle = Math.max(Math.abs(nx - castle.x()), Math.abs(ny - castle.y())) <= CASTLE_NOBUILD;
-                    if (map.isValidPosition(nx, ny) && !corridor.contains(p)
+                    if (map.isValidPosition(nx, ny) && !corridor.contains(p) && !water.contains(p)
                             && !nearAnyStart(p, starts) && !nearCastle) {
                         buildable.add(p);
                     }

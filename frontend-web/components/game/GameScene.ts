@@ -1,6 +1,6 @@
-import { paintSeasonalTerrain } from './seasonalTerrain'
+import { paintSeasonalTerrain, roadTreeSpots, castleTreeSpots, recolorFoliage, TREES, FOLIAGE_TINTS } from './seasonalTerrain'
 import { paintCastle } from './castles'
-import { FLOOD_CELLS, LEAF_CELLS, type TerrainSnapshot, type TerrainForecast } from './seasons'
+import { BANK_CELLS, LAKE, FOG_RANGE_PENALTY, type TerrainSnapshot, type TerrainForecast } from './seasons'
 import Phaser from 'phaser'
 import type { Cell } from './constants'
 import { TOP_RESERVED_ROWS, MAX_WALLS, towerRangeAt } from './constants'
@@ -150,6 +150,11 @@ const DEPTH_UNITS = 1    // + pieds (en cases) / 100 → 1.00 … 1.17
 const DEPTH_FOCUS = 4.5  // cadre de survol / coins de sélection, au-dessus des unités
 const DEPTH_BARS = 5     // barres de vie (tours + ennemis), toujours lisibles
 const DEPTH_LABEL = 7     // étiquette de l'aperçu de pose (coût / raison du refus)
+const DEPTH_WATER = 0.35 // eau de crue (printemps), sous les tours qui y ont les pieds
+const DEPTH_FOG = 3      // brume (automne), au-dessus des tours qu'elle pénalise
+const DEPTH_RAIN = 58    // pluie (printemps), sous la neige (60)
+const DEPTH_PUDDLES = -1.5 // flaques de pluie : sur le sol et la route, sous les parcelles (-1)
+const RAIN_ANGLE = 12    // inclinaison des gouttes (vent), en degrés
 const unitDepth = (footCellY: number) => DEPTH_UNITS + footCellY / 100
 
 // Mirage (biome désert) : longueur d'onde de la texture tuilée (~2π/0.035, la
@@ -288,9 +293,41 @@ export class GameScene extends Phaser.Scene {
     private buildPreviewType: string | null = null
     private terrainForecast?: TerrainForecast
     private terrainLayer?: Phaser.GameObjects.Image
-    private terrainLabel?: Phaser.GameObjects.Text
     private terrainKey = ''
     private seasonalCombat = false
+    // Brume (automne) : cases de la vague affichée (portées), nappe et sa signature.
+    private currentFog = new Set<string>()
+    private fogImages: Phaser.GameObjects.Image[] = []
+    private fogSignature = ''
+    private fogSerial = 0
+    // Boue (automne) : flaques de la vague affichée ; une averse accompagne chaque déplacement.
+    private mudImage?: Phaser.GameObjects.Image
+    private mudSignature = ''
+    private mudSerial = 0
+    private rainShowerTimer?: Phaser.Time.TimerEvent
+    // Crue (printemps) : eau sur les berges, gouttes de pluie et voile d'averse.
+    private floodLayers: { water: Phaser.GameObjects.Image; glints: Phaser.GameObjects.Image; glintX: number; axis: 'x' | 'y' }[] = []
+    private floodSignature = ''
+    private bankAlertLayer?: Phaser.GameObjects.Image
+    private rippleCells: Cell[] = []
+    // Grêle (printemps) : grêlons réutilisés, rebonds au sol, voile froid.
+    private hailStones: { img: Phaser.GameObjects.Image; x: number; y: number; v: number; land: number }[] = []
+    private hailVisible = 0
+    private hailLevel: 'none' | 'light' | 'storm' = 'none'
+    private hailShade?: Phaser.GameObjects.Image
+    private hailBounces: Phaser.GameObjects.Image[] = []
+    private hailBounceNext = 0
+    private floodWakes = new Map<string, Phaser.GameObjects.Image>()
+    private rainDrops: { img: Phaser.GameObjects.Image; x: number; y: number; v: number }[] = []
+    private rainLevel: 'none' | 'drizzle' | 'storm' = 'none'
+    private rainVisible = 0
+    private rainShade?: Phaser.GameObjects.Image
+    private rippleTimer?: Phaser.Time.TimerEvent
+    private ripples: Phaser.GameObjects.Image[] = []
+    private puddles?: Phaser.GameObjects.Image
+    private puddleSpots: { x: number; y: number; rw: number; rh: number }[] = []
+    private puddleRippleTimer?: Phaser.Time.TimerEvent
+    private puddleRipples: Phaser.GameObjects.Image[] = []
     private hoverCell: { x: number; y: number } | null = null
     // Repères de la tour survolée / sélectionnée (voir refreshFocus) : cercle de
     // portée SOUS les unités, cadre et coins dorés AU-DESSUS.
@@ -720,6 +757,8 @@ export class GameScene extends Phaser.Scene {
     update(_time: number, delta: number) {
         // Effet d'ambiance (neige qui tombe) — avant tout return, sinon coupé en solo.
         this.updateWeather(delta)
+        this.updateRain(delta)
+        this.updateHail(delta)
 
         // Solo : playWave() fournit un tick toutes les TICK_DELAY_MS ; on interpole
         // les ennemis entre les deux derniers pour un mouvement continu à 60 fps.
@@ -850,8 +889,10 @@ export class GameScene extends Phaser.Scene {
         this.previewGraphics.lineStyle(2, color, 0.9)
         this.previewGraphics.strokeRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2)
 
-        // Cercle de portée (tours à tir uniquement), atténué si la pose est refusée.
-        const range = towerRangeAt(type)
+        // Cercle de portée (tours à tir uniquement), atténué si la pose est refusée ;
+        // réduit si la case sera dans la brume à la prochaine vague.
+        const baseRange = towerRangeAt(type)
+        const range = baseRange > 0 ? baseRange - this.fogPenaltyAt(cell.x, cell.y) : 0
         if (range > 0) {
             const cx = px + CELL_SIZE / 2, cy = py + CELL_SIZE / 2
             this.previewGraphics.fillStyle(0xffe066, ok ? 0.06 : 0.03)
@@ -873,7 +914,9 @@ export class GameScene extends Phaser.Scene {
 
         // Étiquette : coût si la pose est possible, sinon la raison du refus.
         const text = ok
-            ? (verdict.cost != null ? `${verdict.cost} or` : '') + (this.activeMapId === 'spring' && FLOOD_CELLS.some(p => p.x === cell.x && p.y === cell.y) ? ' · berge inondable (v. 3, 6, 9…)' : '')
+            ? (verdict.cost != null ? `${verdict.cost} or` : '')
+                + (this.activeMapId === 'spring' && BANK_CELLS.some(p => p.x === cell.x && p.y === cell.y) ? ' · berge inondable (crues v. 3, 6, 9…)' : '')
+                + (baseRange > 0 && this.fogPenaltyAt(cell.x, cell.y) > 0 ? ' · brume : −1 portée' : '')
             : (verdict.reason ?? 'Pose impossible')
         const label = this.ensureGhostLabel()
         label.setVisible(text !== '')
@@ -987,8 +1030,9 @@ export class GameScene extends Phaser.Scene {
 
     /** Cercle de portée RÉELLE d'une tour (niveau compris, miroir du backend). */
     private drawTowerRange(tower: TowerData, color: number, fillAlpha: number, strokeAlpha: number) {
-        const radius = towerRangeAt(tower.type, tower.level ?? 1) * CELL_SIZE
-        if (radius <= 0) return
+        const base = towerRangeAt(tower.type, tower.level ?? 1)
+        if (base <= 0) return
+        const radius = (base - this.fogPenaltyAt(tower.x, tower.y)) * CELL_SIZE // brume : portée réduite
         const cx = tower.x * CELL_SIZE + CELL_SIZE / 2
         const cy = tower.y * CELL_SIZE + CELL_SIZE / 2
         this.rangeGraphics.fillStyle(color, fillAlpha)
@@ -1055,56 +1099,684 @@ export class GameScene extends Phaser.Scene {
         if (!this.seasonalCombat && !this.coopActive) this.renderTerrainState()
     }
 
-    /** Le serveur décide des effets ; ce calque ne fait que représenter son état. */
+    /**
+     * Terrain saisonnier. Le serveur décide des effets ; ces calques représentent
+     * seulement son état (snapshot de la vague en cours, sinon l'annonce de la
+     * prochaine). Chaque calque est redessiné quand cet état change, jamais à
+     * chaque image (voir bakeStatic).
+     */
     private renderTerrainState(state?: TerrainSnapshot) {
         if (!this.towersGraphics || !['spring', 'autumn'].includes(this.activeMapId)) return
         const key = JSON.stringify([state, this.terrainForecast, this.seasonalCombat])
         if (key === this.terrainKey) return
         this.terrainKey = key
-        const g = this.make.graphics({ x: 0, y: 0 })
-        const burning = new Set(state?.burning.map(p => `${p.x},${p.y}`))
-        const burned = new Set(state?.burned.map(p => `${p.x},${p.y}`))
+        const spring = this.activeMapId === 'spring'
         const flooded = state?.flooded ?? false
-        const forecast = !this.seasonalCombat && this.terrainForecast?.flooded
-        for (const p of this.activeMapId === 'spring' ? FLOOD_CELLS : LEAF_CELLS) {
-            const x = p.x * CELL_SIZE, y = p.y * CELL_SIZE
-            if (this.activeMapId === 'spring') {
-                g.fillStyle(flooded ? 0x538fae : 0x7ca8a2, flooded ? 0.72 : 0.18)
-                g.fillRect(x + 2, y + 2, 36, 36)
-                g.lineStyle(forecast ? 2 : 1, forecast ? 0xe5f6ff : 0x91c5d1, 0.85)
-                g.strokeRect(x + 3, y + 3, 34, 34)
-                g.lineStyle(2, 0xc2e4e8, 0.65)
-                g.lineBetween(x + 10, y + 28, x + 18, y + 30); g.lineBetween(x + 18, y + 30, x + 28, y + 27)
-            } else {
-                const id = `${p.x},${p.y}`, fire = burning.has(id), ash = burned.has(id)
-                g.fillStyle(ash ? 0x302b28 : fire ? 0xad492b : 0xa75c32, 0.85)
-                g.fillRoundedRect(x + 4, y + 5, 32, 30, 5)
-                for (let i = 0; i < 6; i++) {
-                    g.fillStyle(ash ? 0x72665b : fire ? (i % 2 ? 0xffdb83 : 0xf79346) : (i % 2 ? 0xd7a452 : 0xcb7940), 0.95)
-                    g.fillRect(x + 8 + (i * 7) % 25, y + 9 + (i * 11) % 23, 4, fire ? 7 : 3)
+        const forecastFlood = !this.seasonalCombat && !!this.terrainForecast?.flooded
+
+        // Printemps : berges noyées de cette vague (le sens change à chaque crue), berges
+        // annoncées pour la prochaine, grêle en cours ou annoncée.
+        const floodCells = state?.flood ?? (flooded ? BANK_CELLS : [])
+        const alertCells = forecastFlood ? this.terrainForecast?.affectedCells ?? [] : []
+        const hail = !!state?.hail
+        const forecastHail = !this.seasonalCombat && !!this.terrainForecast?.hail
+        if (spring) {
+            const underWater = new Set(floodCells.map((c) => `${c.x},${c.y}`))
+            // Berges : terre humide, roseaux et vaguelette (le symbole de la crue).
+            const g = this.make.graphics({ x: 0, y: 0 }, false)
+            for (const p of BANK_CELLS) {
+                const x = p.x * CELL_SIZE, y = p.y * CELL_SIZE
+                g.fillStyle(0x5f9792, 0.22)
+                g.fillRoundedRect(x + 2, y + 2, 36, 36, 5)
+                if (underWater.has(`${p.x},${p.y}`)) continue // sous l'eau : pas de repère qui transparaîtrait
+                g.lineStyle(1, 0x9fd3dc, 0.6)
+                g.strokeRoundedRect(x + 3.5, y + 3.5, 33, 33, 5)
+                let seed = p.x * 31 + p.y * 17
+                const r = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+                for (let i = 0; i < 3; i++) {
+                    const rx = Math.round(x + 8 + r() * 22), ry = Math.round(y + 14 + r() * 18)
+                    g.lineStyle(1, 0x9cb85e, 0.95)
+                    g.lineBetween(rx, ry, rx - 1, ry - 7); g.lineBetween(rx + 2, ry, rx + 3, ry - 6); g.lineBetween(rx + 4, ry, rx + 4, ry - 5)
+                    g.fillStyle(0x6b4a2b, 1); g.fillRect(rx - 2, ry - 10, 2, 4)
+                }
+                g.lineStyle(1.5, 0xd2eef2, 0.85)
+                g.beginPath(); g.moveTo(x + 22, y + 32); g.lineTo(x + 25, y + 30); g.lineTo(x + 28, y + 32); g.lineTo(x + 31, y + 30); g.lineTo(x + 34, y + 32); g.strokePath()
+            }
+            const textureKey = `season-overlay-${this.activeMapId}`
+            if (this.textures.exists(textureKey)) (this.textures.get(textureKey) as Phaser.Textures.CanvasTexture).getContext().clearRect(0, 0, 800, 640)
+            g.generateTexture(textureKey, 800, 640)
+            g.destroy()
+            if (!this.terrainLayer) this.terrainLayer = this.add.image(0, 0, textureKey).setOrigin(0, 0).setDepth(0.3)
+
+            // Berges que la prochaine crue noiera : surbrillance qui pulse.
+            const a = this.make.graphics({ x: 0, y: 0 }, false)
+            for (const p of alertCells) {
+                const x = p.x * CELL_SIZE, y = p.y * CELL_SIZE
+                a.fillStyle(0x9fd8e8, 0.22)
+                a.fillRoundedRect(x + 2, y + 2, 36, 36, 5)
+                a.lineStyle(2, 0xe8f8ff, 0.95)
+                a.strokeRoundedRect(x + 3, y + 3, 34, 34, 5)
+            }
+            const alertKey = 'season-bank-alert'
+            if (this.textures.exists(alertKey)) (this.textures.get(alertKey) as Phaser.Textures.CanvasTexture).getContext().clearRect(0, 0, 800, 640)
+            a.generateTexture(alertKey, 800, 640)
+            a.destroy()
+            if (!this.bankAlertLayer) this.bankAlertLayer = this.add.image(0, 0, alertKey).setOrigin(0, 0).setDepth(0.31)
+            this.tweens.killTweensOf(this.bankAlertLayer)
+            this.bankAlertLayer.setAlpha(1)
+            if (alertCells.length > 0) this.tweens.add({ targets: this.bankAlertLayer, alpha: 0.25, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+
+            // Crue : l'eau monte sur les berges noyées sous une averse ; la vague qui la
+            // précède, une bruine l'annonce. Retour au calme à la décrue. Grêle : quelques
+            // grêlons l'annoncent, puis une vraie averse de grêle pendant la vague.
+            this.setFloodWater(floodCells)
+            this.setRain(flooded ? 'storm' : forecastFlood ? 'drizzle' : 'none')
+            this.setHail(hail ? 'storm' : forecastHail ? 'light' : 'none')
+        } else {
+            // Boue et brume : celles de la vague en cours, sinon celles annoncées pour la prochaine.
+            this.setMud(state ? state.mud ?? [] : this.terrainForecast?.affectedCells ?? [])
+            this.setFog(state ? state.fog : this.terrainForecast?.fogCells ?? [])
+        }
+
+        // Tours suspendues par la crue : pieds dans l'eau (ronds qui ondulent), un peu
+        // estompées ; restaurées à la décrue.
+        const disabled = new Set(state?.disabledTowers ?? [])
+        for (const [id, sprite] of this.towerSprites) {
+            sprite.setAlpha(disabled.has(id) ? 0.72 : 1)
+            this.towerWeapons.get(id)?.setAlpha(disabled.has(id) ? 0.72 : 1)
+        }
+        this.syncFloodWakes(disabled)
+        // Pas de bandeau d'avertissement : le plateau montre tout (berges qui clignotent,
+        // bruine, grêlons, boue, brume) et les règles passent par les bulles de conseils.
+    }
+
+    /**
+     * Flaques de boue : une flaque organique par groupe de cases de boue voisines —
+     * bord détrempé plus sombre, creux humides, reflets, empreintes et feuilles mortes
+     * collées. Pseudo-aléatoire à graine fixe : même dessin à chaque fois.
+     */
+    private paintMud(g: Phaser.GameObjects.Graphics, cells: Cell[]) {
+        const left = new Set(cells.map((c) => `${c.x},${c.y}`))
+        const patches: Cell[][] = []
+        for (const c of cells) {
+            if (!left.delete(`${c.x},${c.y}`)) continue
+            const patch = [c], queue = [c]
+            while (queue.length > 0) {
+                const p = queue.pop()!
+                for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                    if (left.delete(`${p.x + dx},${p.y + dy}`)) {
+                        const n = { x: p.x + dx, y: p.y + dy }
+                        patch.push(n); queue.push(n)
+                    }
+                }
+            }
+            patches.push(patch)
+        }
+        for (const patch of patches) {
+            const xs = patch.map((c) => c.x), ys = patch.map((c) => c.y)
+            const x0 = Math.min(...xs) * CELL_SIZE + 6, x1 = (Math.max(...xs) + 1) * CELL_SIZE - 6
+            const y0 = Math.min(...ys) * CELL_SIZE + 6, y1 = (Math.max(...ys) + 1) * CELL_SIZE - 6
+            const w = x1 - x0, h = y1 - y0, area = w * h
+            let seed = (x0 * 7919 + y0 * 104729) | 0
+            const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+            const at = (margin: number) => ({ x: x0 + margin + rnd() * (w - 2 * margin), y: y0 + margin + rnd() * (h - 2 * margin) })
+            const blobs: { x: number; y: number; w: number; h: number }[] = []
+            for (let y = y0 + 10; y <= y1 - 10; y += 9) {
+                for (let x = x0 + 10; x <= x1 - 10; x += 9) blobs.push({ x: x + (rnd() - 0.5) * 4, y: y + (rnd() - 0.5) * 4, w: 20 + rnd() * 12, h: 18 + rnd() * 10 })
+            }
+            g.fillStyle(0x3a2718, 0.85)                                   // bord : terre détrempée
+            for (const b of blobs) g.fillEllipse(b.x, b.y, b.w + 7, b.h + 6)
+            g.fillStyle(0x573c25, 1)                                      // boue
+            for (const b of blobs) g.fillEllipse(b.x, b.y, b.w, b.h)
+            g.fillStyle(0x432d1b, 1)                                      // creux humides
+            for (let i = 0; i < 2 + area / 900; i++) { const p = at(12); g.fillEllipse(p.x, p.y, 12 + rnd() * 16, 7 + rnd() * 6) }
+            g.fillStyle(0xc2aa86, 0.45)                                   // reflets d'eau stagnante
+            for (let i = 0; i < 2 + area / 1300; i++) { const p = at(12); g.fillEllipse(p.x, p.y, 5 + rnd() * 7, 1.6) }
+            g.fillStyle(0x2c1d12, 0.8)                                    // empreintes des ennemis
+            for (let i = 0; i < 3 + area / 700; i++) { const p = at(8); g.fillEllipse(p.x, p.y, 5, 3.5); g.fillEllipse(p.x + 7, p.y + 4, 5, 3.5) }
+            for (let i = 0; i < 2 + area / 1000; i++) {                   // feuilles mortes collées
+                const p = at(6)
+                g.fillStyle([0xc8642a, 0xe2a548, 0x9a3b1d][Math.floor(rnd() * 3)], 0.9)
+                g.fillRect(Math.round(p.x), Math.round(p.y), 3, 2)
+            }
+        }
+    }
+
+    /**
+     * Boue de la vague : quand ses flaques changent de place, une averse passe quelques
+     * secondes ; l'ancienne boue s'efface pendant que la nouvelle se forme. Au premier
+     * affichage de la carte, elle est simplement posée (pas d'averse).
+     */
+    private setMud(cells: Cell[]) {
+        const signature = cells.map((c) => `${c.x},${c.y}`).sort().join(';')
+        if (signature === this.mudSignature) return
+        const first = this.mudSignature === '' && !this.mudImage
+        this.mudSignature = signature
+        const old = this.mudImage
+        this.mudImage = undefined
+        if (cells.length > 0) {
+            const g = this.make.graphics({ x: 0, y: 0 }, false)
+            this.paintMud(g, cells)
+            const key = `mud-${this.mudSerial++}`
+            g.generateTexture(key, GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE)
+            g.destroy()
+            const img = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(0.3).setAlpha(first ? 1 : 0)
+            if (!first) this.tweens.add({ targets: img, alpha: 1, delay: 900, duration: 1800, ease: 'Sine.easeInOut' })
+            this.mudImage = img
+        }
+        if (old) {
+            this.tweens.killTweensOf(old)
+            this.tweens.add({
+                targets: old, alpha: 0, duration: 1800, ease: 'Sine.easeInOut',
+                onComplete: () => {
+                    const k = old.texture.key
+                    old.destroy()
+                    if (this.textures.exists(k)) this.textures.remove(k)
+                },
+            })
+        }
+        if (!first) this.rainShower()
+    }
+
+    /** Averse passagère (automne) : pluie forte quelques secondes, puis éclaircie. */
+    private rainShower() {
+        this.setRain('storm')
+        this.rainShowerTimer?.remove()
+        this.rainShowerTimer = this.time.delayedCall(4200, () => {
+            this.rainShowerTimer = undefined
+            this.setRain('none')
+        })
+    }
+
+    /**
+     * Brume : voile blanc sur les cases qu'elle couvre, au-dessus des tours qu'elle
+     * pénalise ; le chemin n'en garde qu'un léger voile pour rester lisible. Dessinée
+     * en basse résolution puis agrandie avec lissage (bords naturellement flous), en
+     * deux couches qui dérivent en sens contraires. Quand les bancs se déplacent,
+     * l'ancienne nappe s'efface pendant que la nouvelle apparaît.
+     */
+    private setFog(cells: Cell[]) {
+        this.currentFog = new Set(cells.map((c) => `${c.x},${c.y}`))
+        const visible = cells.filter((c) => !mapIsCorridor(this.mapDef, c.x, c.y))
+        const signature = visible.map((c) => `${c.x},${c.y}`).join(';')
+        if (signature === this.fogSignature) return
+        this.fogSignature = signature
+
+        const old = this.fogImages
+        this.fogImages = []
+        if (visible.length > 0) {
+            const S = 4, cs = CELL_SIZE / S
+            const key = `fog-${this.fogSerial++}`
+            const tex = this.textures.createCanvas(key, (GRID_WIDTH * CELL_SIZE) / S, (GRID_HEIGHT * CELL_SIZE) / S)
+            const ctx = tex?.getContext()
+            if (tex && ctx) {
+                const blob = (x: number, y: number, r: number, a: number) => {
+                    const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
+                    grad.addColorStop(0, `rgba(236, 240, 240, ${a})`)
+                    grad.addColorStop(0.55, `rgba(236, 240, 240, ${a})`)
+                    grad.addColorStop(1, 'rgba(236, 240, 240, 0)')
+                    ctx.fillStyle = grad
+                    ctx.fillRect(x - r, y - r, r * 2, r * 2)
+                }
+                for (const c of visible) blob((c.x + 0.5) * cs, (c.y + 0.5) * cs, cs * 0.95, 1)
+                ctx.globalCompositeOperation = 'destination-out'
+                for (const c of visible) {                                  // trouées : nappe irrégulière
+                    if (Math.random() < 0.45) blob((c.x + Math.random()) * cs, (c.y + Math.random()) * cs, cs * (0.4 + Math.random() * 0.4), 0.5)
+                }
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'                       // chemin : léger voile seulement
+                for (let y = 0; y < GRID_HEIGHT; y++) for (let x = 0; x < GRID_WIDTH; x++) {
+                    if (mapIsCorridor(this.mapDef, x, y)) ctx.fillRect(x * cs, y * cs, cs, cs)
+                }
+                ctx.globalCompositeOperation = 'source-over'
+                tex.refresh()
+                tex.setFilter(Phaser.Textures.FilterMode.LINEAR)
+                for (const layer of [
+                    { alpha: 0.42, x: [-6, 6], y: [0, 0], duration: 7000 },
+                    { alpha: 0.26, x: [6, -6], y: [-4, 4], duration: 9500 },
+                ]) {
+                    const img = this.add.image(0, 0, key).setOrigin(0, 0).setScale(S).setDepth(DEPTH_FOG).setAlpha(0)
+                    this.tweens.add({ targets: img, alpha: layer.alpha, duration: 1400, ease: 'Sine.easeInOut' })
+                    this.tweens.add({
+                        targets: img, x: { from: layer.x[0], to: layer.x[1] }, y: { from: layer.y[0], to: layer.y[1] },
+                        duration: layer.duration, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+                    })
+                    this.fogImages.push(img)
                 }
             }
         }
-        // Un seul quad entre deux changements d’état : aucun tracé statique par image.
-        const textureKey = `season-overlay-${this.activeMapId}`
-        const texture = this.textures.get(textureKey) as Phaser.Textures.CanvasTexture
-        if (this.textures.exists(textureKey)) texture.getContext().clearRect(0, 0, 800, 640)
-        g.generateTexture(textureKey, 800, 640)
-        g.destroy()
-        if (!this.terrainLayer) this.terrainLayer = this.add.image(0, 0, textureKey).setOrigin(0, 0).setDepth(0.3)
-        // Baisse d'opacité explicite des tours suspendues ; restaurée à la décrue.
-        const disabled = new Set(state?.disabledTowers ?? [])
-        for (const [id, sprite] of this.towerSprites) {
-            sprite.setAlpha(disabled.has(id) ? 0.48 : 1)
-            this.towerWeapons.get(id)?.setAlpha(disabled.has(id) ? 0.48 : 1)
+        if (old.length > 0) {
+            for (const img of old) this.tweens.killTweensOf(img)
+            this.tweens.add({
+                targets: old, alpha: 0, duration: 1400, ease: 'Sine.easeInOut',
+                onComplete: () => {
+                    const k = old[0].texture.key
+                    for (const img of old) img.destroy()
+                    if (this.textures.exists(k)) this.textures.remove(k)
+                },
+            })
         }
-        const label = this.activeMapId === 'spring'
-            ? flooded ? 'CRUE · tours des berges suspendues' : forecast ? 'PROCHAINE VAGUE : CRUE · berges bleues' : 'BERGES BLEUES · crue aux vagues 3, 6, 9…'
-            : 'FEUILLES · catapulte → feu → cendres (jusqu’à la prochaine vague)'
-        if (!this.terrainLabel) this.terrainLabel = this.add.text(400, 8, '', {
-            fontFamily: 'sans-serif', fontSize: '12px', color: '#f9edd0', backgroundColor: '#26382b', padding: { x: 9, y: 5 },
-        }).setOrigin(0.5, 0).setDepth(DEPTH_LABEL)
-        this.terrainLabel.setText(label)
+        // Les portées affichées dépendent de la brume.
+        this.refreshFocus()
+        if (this.buildPreviewType) this.drawBuildPreview()
+    }
+
+    /** Portée perdue par une tour posée sur cette case (brume de la vague affichée). */
+    private fogPenaltyAt(x: number, y: number) {
+        return this.currentFog.has(`${x},${y}`) ? FOG_RANGE_PENALTY : 0
+    }
+
+    /**
+     * Crue : le lac déborde sur les berges noyées de cette crue (le sens change d'une
+     * crue à l'autre). Une nappe par groupe de berges, peinte une fois par sens —
+     * profonde côté lac (même bleu que lui, la jonction disparaît), claire côté terre,
+     * rive festonnée d'écume sur une bande de terre mouillée — et un calque de reflets
+     * qui scintille par-dessus. À la montée, l'eau s'étale depuis le lac ; à la décrue,
+     * elle s'y retire.
+     */
+    private setFloodWater(cells: Cell[]) {
+        const on = cells.length > 0
+        const signature = cells.map((c) => `${c.x},${c.y}`).sort().join(';')
+        if (on && signature !== this.floodSignature) {
+            // Nouveau sens : les nappes de la crue précédente (déjà retirées) sont remplacées.
+            for (const l of this.floodLayers) { this.tweens.killTweensOf([l.water, l.glints]); l.water.destroy(); l.glints.destroy() }
+            this.floodLayers = []
+            this.floodSignature = signature
+            this.buildFloodLayers(cells)
+        }
+        for (const layer of this.floodLayers) {
+            this.tweens.killTweensOf([layer.water, layer.glints])
+            const grow = layer.axis === 'x' ? { scaleX: 1 } : { scaleY: 1 }
+            const shrink = layer.axis === 'x' ? { scaleX: 0.12 } : { scaleY: 0.12 }
+            if (on) {
+                this.tweens.add({ targets: layer.water, ...grow, alpha: 1, duration: 2200, ease: 'Cubic.easeOut' })
+                this.tweens.add({
+                    targets: layer.glints, ...grow, alpha: 0.9, duration: 2200, ease: 'Cubic.easeOut',
+                    onComplete: () => {
+                        // Reflets : scintillent et glissent doucement, comme sur une eau qui bouge.
+                        this.tweens.add({ targets: layer.glints, alpha: 0.3, duration: 1300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+                        this.tweens.add({ targets: layer.glints, x: { from: layer.glintX - 3, to: layer.glintX + 3 }, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+                    },
+                })
+            } else {
+                this.tweens.add({ targets: [layer.water, layer.glints], ...shrink, alpha: 0, duration: 1600, ease: 'Sine.easeIn' })
+            }
+        }
+        this.setRipples(cells)
+    }
+
+    /** Peint les nappes de crue (une par groupe de berges voisines), cachées au départ. */
+    private buildFloodLayers(cells: Cell[]) {
+        const key = (x: number, y: number) => `${x},${y}`
+        const lake = new Set(this.mapDef.water.map((c) => key(c.x, c.y)))
+        const left = new Set(cells.map((c) => key(c.x, c.y)))
+        const groups: Cell[][] = []
+        for (const c of cells) {
+            if (!left.delete(key(c.x, c.y))) continue
+            const group = [c], queue = [c]
+            while (queue.length > 0) {
+                const p = queue.pop()!
+                for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                    if (left.delete(key(p.x + dx, p.y + dy))) { const n = { x: p.x + dx, y: p.y + dy }; group.push(n); queue.push(n) }
+                }
+            }
+            groups.push(group)
+        }
+        let seed = 5309
+        const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+        groups.forEach((group, gi) => {
+            const xs = group.map((c) => c.x), ys = group.map((c) => c.y)
+            const M = 12
+            const ox = Math.min(...xs) * CELL_SIZE - M, oy = Math.min(...ys) * CELL_SIZE - M
+            const rw = (Math.max(...xs) - Math.min(...xs) + 1) * CELL_SIZE, rh = (Math.max(...ys) - Math.min(...ys) + 1) * CELL_SIZE
+            const w = rw + 2 * M, h = rh + 2 * M
+            // De quel côté est le lac ? L'eau s'étale depuis ce bord.
+            const lakeRight = group.some((c) => lake.has(key(c.x + 1, c.y)))
+            const lakeLeft = group.some((c) => lake.has(key(c.x - 1, c.y)))
+            const lakeBelow = !lakeLeft && !lakeRight && group.some((c) => lake.has(key(c.x, c.y + 1)))
+            const lakeAbove = !lakeLeft && !lakeRight && !lakeBelow && group.some((c) => lake.has(key(c.x, c.y - 1)))
+            const wkey = `flood-water-${gi}`, gkey = `flood-glints-${gi}`
+            for (const k of [wkey, gkey]) if (this.textures.exists(k)) this.textures.remove(k)
+            const wtex = this.textures.createCanvas(wkey, w, h), gtex = this.textures.createCanvas(gkey, w, h)
+            const ctx = wtex?.getContext(), gctx = gtex?.getContext()
+            if (!wtex || !gtex || !ctx || !gctx) return
+            // Bord du rectangle d'eau (coordonnées locales) : déborde sur la rive du lac.
+            const x0 = M - (lakeLeft ? 8 : 0), x1 = M + rw + (lakeRight ? 8 : 0)
+            const y0 = M - (lakeAbove ? 8 : 0), y1 = M + rh + (lakeBelow ? 8 : 0)
+            // Bords côté terre, pour festonner la rive.
+            const edges: [number, number, number, number][] = []
+            if (!lakeAbove) edges.push([x0, y0, x1, y0])
+            if (!lakeBelow) edges.push([x0, y1, x1, y1])
+            if (!lakeLeft) edges.push([x0, y0, x0, y1])
+            if (!lakeRight) edges.push([x1, y0, x1, y1])
+            const along = (draw: (x: number, y: number) => void, step: number) => {
+                for (const [ax, ay, bx, by] of edges) {
+                    const len = Math.hypot(bx - ax, by - ay)
+                    for (let d = 0; d <= len; d += step) draw(ax + (bx - ax) * d / len, ay + (by - ay) * d / len)
+                }
+            }
+            const inward = (x: number, y: number, d: number) => [
+                x <= x0 + 0.5 ? d : x >= x1 - 0.5 ? -d : 0,
+                y <= y0 + 0.5 ? d : y >= y1 - 0.5 ? -d : 0,
+            ]
+            const disc = (c: CanvasRenderingContext2D, x: number, y: number, r: number) => { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill() }
+            // 1) Terre mouillée, un peu au-delà de l'eau.
+            ctx.fillStyle = 'rgba(44, 64, 52, 0.42)'
+            ctx.fillRect(x0, y0, x1 - x0, y1 - y0)
+            along((x, y) => disc(ctx, x, y, 6 + rnd() * 5), 7)
+            // 2) Eau : bleu du lac côté lac, plus claire côté terre.
+            const grad = lakeLeft ? ctx.createLinearGradient(x0, 0, x1, 0)
+                : lakeRight ? ctx.createLinearGradient(x1, 0, x0, 0)
+                : lakeAbove ? ctx.createLinearGradient(0, y0, 0, y1)
+                : ctx.createLinearGradient(0, y1, 0, y0)
+            grad.addColorStop(0, 'rgba(82, 127, 135, 0.97)')
+            grad.addColorStop(0.6, 'rgba(92, 140, 150, 0.95)')
+            grad.addColorStop(1, 'rgba(110, 160, 168, 0.93)')
+            ctx.fillStyle = grad
+            const ix0 = x0 + (lakeLeft ? 0 : 3), ix1 = x1 - (lakeRight ? 0 : 3), iy0 = y0 + (lakeAbove ? 0 : 3), iy1 = y1 - (lakeBelow ? 0 : 3)
+            ctx.fillRect(ix0, iy0, ix1 - ix0, iy1 - iy0)
+            along((x, y) => { const [dx, dy] = inward(x, y, 3); disc(ctx, x + dx, y + dy, 3 + rnd() * 4) }, 6)
+            // 3) Zones plus profondes, côté lac.
+            ctx.fillStyle = 'rgba(46, 92, 108, 0.28)'
+            for (let i = 0; i < group.length; i++) {
+                const ex = lakeLeft ? x0 + 6 + rnd() * 14 : lakeRight ? x1 - 6 - rnd() * 14 : x0 + 10 + rnd() * (x1 - x0 - 20)
+                const ey = lakeAbove ? y0 + 6 + rnd() * 12 : lakeBelow ? y1 - 6 - rnd() * 12 : y0 + 10 + rnd() * (y1 - y0 - 20)
+                ctx.beginPath(); ctx.ellipse(ex, ey, 8 + rnd() * 6, 5 + rnd() * 4, 0, 0, Math.PI * 2); ctx.fill()
+            }
+            // 4) Vaguelettes en arc.
+            ctx.strokeStyle = 'rgba(214, 238, 244, 0.4)'; ctx.lineWidth = 1.5
+            for (let y = y0 + 14; y < y1 - 8; y += 15) {
+                for (let x = x0 + 8 + rnd() * 10; x < x1 - 12; x += 20 + rnd() * 8) {
+                    ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + 4, y - 3, x + 8, y); ctx.stroke()
+                }
+            }
+            // 5) Écume le long de la rive.
+            along((x, y) => {
+                if (rnd() < 0.35) return                                     // écume irrégulière
+                ctx.fillStyle = rnd() < 0.5 ? 'rgba(240, 248, 250, 0.8)' : 'rgba(220, 238, 242, 0.5)'
+                const [dx, dy] = inward(x, y, 4)
+                ctx.fillRect(x + dx + (rnd() - 0.5) * 2, y + dy + (rnd() - 0.5) * 2, 2 + Math.round(rnd()), 1 + Math.round(rnd()))
+            }, 6)
+            wtex.refresh()
+            // Reflets (calque séparé, scintillant).
+            for (let i = 0; i < group.length * 4; i++) {
+                gctx.fillStyle = rnd() < 0.3 ? 'rgba(255, 255, 255, 0.95)' : 'rgba(225, 244, 250, 0.75)'
+                gctx.fillRect(x0 + 6 + rnd() * (x1 - x0 - 12), y0 + 6 + rnd() * (y1 - y0 - 12), 2 + Math.round(rnd() * 3), 1)
+            }
+            gtex.refresh()
+            // Origine sur le bord du lac : l'eau s'étale depuis lui (scaleX ou scaleY).
+            const axis: 'x' | 'y' = lakeAbove || lakeBelow ? 'y' : 'x'
+            const originX = lakeLeft ? 0 : lakeRight ? 1 : 0.5, originY = lakeAbove ? 0 : lakeBelow ? 1 : 0
+            const px = ox + w * originX, py = oy + h * originY
+            const scale = axis === 'x' ? [0.12, 1] : [1, 0.12]
+            const water = this.add.image(px, py, wkey).setOrigin(originX, originY).setDepth(DEPTH_WATER).setAlpha(0).setScale(scale[0], scale[1])
+            const glints = this.add.image(px, py, gkey).setOrigin(originX, originY).setDepth(DEPTH_WATER + 0.005).setAlpha(0).setScale(scale[0], scale[1])
+            this.floodLayers.push({ water, glints, glintX: px, axis })
+        })
+    }
+
+    /** Tours des berges sous l'eau : ronds d'eau qui ondulent autour de leur pied. */
+    private syncFloodWakes(ids: Set<string>) {
+        for (const [id, wake] of this.floodWakes) {
+            if (ids.has(id) && this.towerSprites.has(id)) continue
+            this.tweens.killTweensOf(wake)
+            wake.destroy()
+            this.floodWakes.delete(id)
+        }
+        if (ids.size === 0) return
+        if (!this.textures.exists('fx-wake')) {
+            const tex = this.textures.createCanvas('fx-wake', 52, 20)
+            const ctx = tex?.getContext()
+            if (tex && ctx) {
+                ctx.fillStyle = 'rgba(120, 176, 190, 0.35)'
+                ctx.beginPath(); ctx.ellipse(26, 10, 24, 8, 0, 0, Math.PI * 2); ctx.fill()
+                ctx.strokeStyle = 'rgba(236, 248, 252, 0.9)'; ctx.lineWidth = 1.5
+                ctx.beginPath(); ctx.ellipse(26, 10, 23, 7.5, 0, 0, Math.PI * 2); ctx.stroke()
+                ctx.strokeStyle = 'rgba(236, 248, 252, 0.5)'; ctx.lineWidth = 1
+                ctx.beginPath(); ctx.ellipse(26, 10, 16, 5, 0, 0, Math.PI * 2); ctx.stroke()
+                tex.refresh()
+            }
+        }
+        for (const id of ids) {
+            const sprite = this.towerSprites.get(id)
+            if (!sprite || this.floodWakes.has(id)) continue
+            const wake = this.add.image(sprite.x, sprite.y - 5, 'fx-wake').setDepth(sprite.depth - 0.0005).setAlpha(0)
+            this.tweens.add({ targets: wake, alpha: 0.9, duration: 1200 })
+            this.tweens.add({ targets: wake, scaleX: 1.12, scaleY: 1.15, duration: 1300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
+            this.floodWakes.set(id, wake)
+        }
+    }
+
+    /**
+     * Grêle (printemps) : grêlons qui tombent droit et rebondissent au sol. Quelques-uns
+     * la vague qui l'annonce, une vraie averse de grêle pendant la vague (ennemis +25 %
+     * de dégâts subis). Images réutilisées, comme la pluie.
+     */
+    private setHail(level: 'none' | 'light' | 'storm') {
+        if (level === this.hailLevel) return
+        this.hailLevel = level
+        const count = level === 'storm' ? 110 : level === 'light' ? 16 : 0
+        if (count > 0 && !this.textures.exists('fx-hail')) {
+            // Grêlon qui tombe vite : bille blanche avec une courte traînée (≠ flocon).
+            const tex = this.textures.createCanvas('fx-hail', 4, 10)
+            const ctx = tex?.getContext()
+            if (tex && ctx) {
+                const grad = ctx.createLinearGradient(0, 0, 0, 7)
+                grad.addColorStop(0, 'rgba(220, 236, 246, 0)')
+                grad.addColorStop(1, 'rgba(220, 236, 246, 0.7)')
+                ctx.fillStyle = grad; ctx.fillRect(1, 0, 2, 7)
+                ctx.fillStyle = 'rgba(200, 222, 236, 0.95)'; ctx.fillRect(0, 7, 4, 2); ctx.fillRect(1, 6, 2, 4)
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(1, 7, 2, 2)
+                tex.refresh()
+            }
+            const dot = this.textures.createCanvas('fx-hail-dot', 3, 3)
+            const dctx = dot?.getContext()
+            if (dot && dctx) { dctx.fillStyle = '#ffffff'; dctx.fillRect(1, 0, 1, 3); dctx.fillRect(0, 1, 3, 1); dot.refresh() }
+        }
+        const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
+        while (this.hailStones.length < count) {
+            const img = this.add.image(0, 0, 'fx-hail').setDepth(DEPTH_RAIN).setScale(0.8 + Math.random() * 0.6)
+            this.hailStones.push({ img, x: Math.random() * w, y: Math.random() * h, v: 650 + Math.random() * 250, land: 40 + Math.random() * (h - 40) })
+        }
+        this.hailStones.forEach((s, i) => s.img.setVisible(i < count))
+        this.hailVisible = count
+        if (!this.hailShade) {
+            if (!this.textures.exists('fx-px')) {
+                const tex = this.textures.createCanvas('fx-px', 4, 4)
+                const ctx = tex?.getContext()
+                if (tex && ctx) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 4, 4); tex.refresh() }
+            }
+            this.hailShade = this.add.image(0, 0, 'fx-px').setOrigin(0, 0).setDisplaySize(w, h)
+                .setTint(0x2c3a4a).setAlpha(0).setDepth(DEPTH_RAIN - 1)
+        }
+        this.tweens.killTweensOf(this.hailShade)
+        this.tweens.add({ targets: this.hailShade, alpha: level === 'storm' ? 0.16 : 0, duration: 1200 })
+    }
+
+    /** Fait tomber les grêlons ; une partie rebondit en touchant le sol. */
+    private updateHail(delta: number) {
+        if (this.hailVisible === 0) return
+        const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
+        const dt = Math.min(delta, 50) / 1000
+        for (let i = 0; i < this.hailVisible; i++) {
+            const s = this.hailStones[i]
+            s.y += s.v * dt
+            if (s.y >= s.land) {
+                if (Math.random() < 0.3) this.hailBounce(s.x, s.land)
+                s.y = -10 - Math.random() * 80; s.x = Math.random() * w; s.land = 40 + Math.random() * (h - 40)
+            }
+            s.img.setPosition(s.x, s.y)
+        }
+    }
+
+    /** Petit rebond blanc là où un grêlon touche le sol. */
+    private hailBounce(x: number, y: number) {
+        if (this.hailBounces.length < 24) this.hailBounces.push(this.add.image(0, 0, 'fx-hail-dot').setDepth(DEPTH_PUDDLES + 0.02))
+        const b = this.hailBounces[this.hailBounceNext++ % this.hailBounces.length]
+        this.tweens.killTweensOf(b)
+        b.setPosition(x, y).setAlpha(1).setScale(1)
+        this.tweens.add({ targets: b, y: y - 7, alpha: 0, scale: 0.6, duration: 280, ease: 'Quad.easeOut' })
+    }
+
+    /** Impacts de pluie sur l'eau de crue : petits cercles qui s'élargissent pendant l'averse. */
+    private setRipples(cells: Cell[]) {
+        this.rippleCells = cells
+        if (cells.length === 0) { this.rippleTimer?.remove(); this.rippleTimer = undefined; return }
+        if (this.rippleTimer) return
+        this.ensureRippleTexture()
+        let next = 0
+        this.rippleTimer = this.time.addEvent({
+            delay: 90, loop: true, callback: () => {
+                if (this.ripples.length < 16) this.ripples.push(this.add.image(0, 0, 'fx-ripple').setDepth(DEPTH_WATER + 0.01))
+                const ripple = this.ripples[next++ % this.ripples.length]
+                const cell = this.rippleCells[Math.floor(Math.random() * this.rippleCells.length)]
+                if (!cell) return
+                ripple.setPosition(cell.x * CELL_SIZE + 6 + Math.random() * (CELL_SIZE - 12), cell.y * CELL_SIZE + 9 + Math.random() * (CELL_SIZE - 18))
+                    .setScale(0.3).setAlpha(0.9)
+                this.tweens.killTweensOf(ripple)
+                this.tweens.add({ targets: ripple, scale: 1.5, alpha: 0, duration: 650, ease: 'Quad.easeOut' })
+            },
+        })
+    }
+
+    /** Rond de pluie (ellipse claire), partagé par l'eau de crue et les flaques. */
+    private ensureRippleTexture() {
+        if (this.textures.exists('fx-ripple')) return
+        const tex = this.textures.createCanvas('fx-ripple', 16, 8)
+        const ctx = tex?.getContext()
+        if (tex && ctx) {
+            ctx.strokeStyle = 'rgba(225, 242, 250, 0.9)'
+            ctx.lineWidth = 1
+            ctx.beginPath(); ctx.ellipse(8, 4, 7, 3, 0, 0, Math.PI * 2); ctx.stroke()
+            tex.refresh()
+        }
+    }
+
+    /**
+     * Flaques (printemps) : parsèment la route et les abords quand il pleut — à moitié
+     * marquées sous la bruine, franches sous l'averse — puis sèchent lentement. Dessinées
+     * une seule fois (canvas), jamais sur le lac, les berges ou les arbres ; ronds de
+     * pluie dessus tant qu'il pleut.
+     */
+    private setPuddles(level: 'none' | 'drizzle' | 'storm') {
+        if (!this.puddles) {
+            if (level === 'none') return
+            const key = `rain-puddles-${this.activeMapId}`
+            const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
+            const tex = this.textures.exists(key) ? undefined : this.textures.createCanvas(key, w, h)
+            const ctx = tex?.getContext()
+            this.puddleSpots = []
+            let seed = 7331
+            const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+            const flood = new Set(BANK_CELLS.map((c) => `${c.x},${c.y}`))
+            const gates = [...mapLaneStarts(this.mapDef), mapCastle(this.mapDef)]
+            const cells: Cell[] = []
+            for (let tries = 0; cells.length < 34 && tries < 600; tries++) {
+                const x = Math.floor(rnd() * GRID_WIDTH), y = TOP_RESERVED_ROWS + Math.floor(rnd() * (GRID_HEIGHT - TOP_RESERVED_ROWS))
+                const road = mapIsCorridor(this.mapDef, x, y)
+                if (!road && !mapIsBuildable(this.mapDef, x, y)) continue          // zones mortes : arbres
+                if (!road && rnd() < 0.6) continue                                 // surtout dans les ornières
+                const lake = this.mapDef.water.length > 0 && x >= LAKE.x0 && x <= LAKE.x1 && y >= LAKE.y0 && y <= LAKE.y1
+                if (lake || (this.activeMapId === 'spring' && flood.has(`${x},${y}`))) continue
+                if (gates.some((g) => Math.max(Math.abs(g.x - x), Math.abs(g.y - y)) <= 1)) continue
+                if (cells.some((c) => Math.abs(c.x - x) + Math.abs(c.y - y) < 2)) continue
+                cells.push({ x, y })
+            }
+            for (const c of cells) {
+                const px = c.x * CELL_SIZE + 10 + rnd() * 20, py = c.y * CELL_SIZE + 12 + rnd() * 16
+                const rw = 9 + rnd() * 10, rh = 4 + rnd() * 3
+                const lobes = [[0, 0, 1], [rw * 0.55, rh * 0.4, 0.6], [-rw * 0.5, -rh * 0.3, 0.55]]
+                this.puddleSpots.push({ x: px, y: py, rw, rh })
+                if (!ctx) continue
+                ctx.fillStyle = 'rgba(46, 58, 52, 0.5)'                             // terre mouillée
+                for (const [dx, dy, k] of lobes) { ctx.beginPath(); ctx.ellipse(px + dx, py + dy, rw * k + 3, rh * k + 2, 0, 0, Math.PI * 2); ctx.fill() }
+                ctx.fillStyle = this.activeMapId === 'autumn' ? 'rgba(122, 136, 130, 0.78)' : 'rgba(112, 152, 170, 0.8)' // eau : reflet du ciel (troublée en automne)
+                for (const [dx, dy, k] of lobes) { ctx.beginPath(); ctx.ellipse(px + dx, py + dy, rw * k, rh * k, 0, 0, Math.PI * 2); ctx.fill() }
+                ctx.fillStyle = 'rgba(214, 236, 244, 0.65)'                         // éclat
+                ctx.fillRect(px - rw * 0.45, py - rh * 0.4, rw * 0.5, 1.5)
+            }
+            tex?.refresh()
+            this.puddles = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(DEPTH_PUDDLES).setAlpha(0)
+        }
+        this.tweens.killTweensOf(this.puddles)
+        this.tweens.add({
+            targets: this.puddles, alpha: level === 'storm' ? 1 : level === 'drizzle' ? 0.55 : 0,
+            duration: level === 'none' ? 6000 : 3000, ease: 'Sine.easeInOut',
+        })
+        this.puddleRippleTimer?.remove()
+        this.puddleRippleTimer = undefined
+        if (level === 'none' || this.puddleSpots.length === 0) return
+        this.ensureRippleTexture()
+        let next = 0
+        this.puddleRippleTimer = this.time.addEvent({
+            delay: level === 'storm' ? 110 : 320, loop: true, callback: () => {
+                if (this.puddleRipples.length < 12) this.puddleRipples.push(this.add.image(0, 0, 'fx-ripple').setDepth(DEPTH_PUDDLES + 0.01))
+                const ripple = this.puddleRipples[next++ % this.puddleRipples.length]
+                const spot = this.puddleSpots[Math.floor(Math.random() * this.puddleSpots.length)]
+                ripple.setPosition(spot.x + (Math.random() - 0.5) * spot.rw, spot.y + (Math.random() - 0.5) * spot.rh).setScale(0.2).setAlpha(0.8)
+                this.tweens.killTweensOf(ripple)
+                this.tweens.add({ targets: ripple, scale: 0.9, alpha: 0, duration: 520, ease: 'Quad.easeOut' })
+            },
+        })
+    }
+
+    /**
+     * Pluie (printemps) : gouttes = petites Images inclinées, réutilisées (même système
+     * que le sable et la neige) ; un voile sombre accompagne l'averse.
+     */
+    private setRain(level: 'none' | 'drizzle' | 'storm') {
+        if (level === this.rainLevel) return
+        this.rainLevel = level
+        const count = level === 'storm' ? 170 : level === 'drizzle' ? 45 : 0
+        if (count > 0 && !this.textures.exists('fx-rain')) {
+            const tex = this.textures.createCanvas('fx-rain', 2, 14)
+            const ctx = tex?.getContext()
+            if (tex && ctx) {
+                const grad = ctx.createLinearGradient(0, 0, 0, 14)
+                grad.addColorStop(0, 'rgba(210, 228, 255, 0)')
+                grad.addColorStop(1, 'rgba(210, 228, 255, 0.95)')
+                ctx.fillStyle = grad
+                ctx.fillRect(0, 0, 2, 14)
+                tex.refresh()
+            }
+        }
+        const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
+        while (this.rainDrops.length < count) {
+            const x = Math.random() * (w + 40) - 20, y = Math.random() * h
+            const img = this.add.image(x, y, 'fx-rain').setDepth(DEPTH_RAIN).setAngle(RAIN_ANGLE)
+                .setAlpha(0.35 + Math.random() * 0.4).setScale(1, 0.8 + Math.random() * 0.6)
+            this.rainDrops.push({ img, x, y, v: 520 + Math.random() * 260 })
+        }
+        this.rainDrops.forEach((d, i) => d.img.setVisible(i < count))
+        this.rainVisible = count
+
+        if (!this.rainShade) {
+            if (!this.textures.exists('fx-px')) {
+                const tex = this.textures.createCanvas('fx-px', 4, 4)
+                const ctx = tex?.getContext()
+                if (tex && ctx) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 4, 4); tex.refresh() }
+            }
+            this.rainShade = this.add.image(0, 0, 'fx-px').setOrigin(0, 0).setDisplaySize(w, h)
+                .setTint(0x18263a).setAlpha(0).setDepth(DEPTH_RAIN - 1)
+        }
+        this.tweens.killTweensOf(this.rainShade)
+        this.tweens.add({ targets: this.rainShade, alpha: level === 'storm' ? 0.22 : level === 'drizzle' ? 0.07 : 0, duration: 1500 })
+        this.setPuddles(level)
+    }
+
+    /** Fait tomber les gouttes visibles (appelé chaque frame par update()). */
+    private updateRain(delta: number) {
+        if (this.rainVisible === 0) return
+        const w = GRID_WIDTH * CELL_SIZE, h = GRID_HEIGHT * CELL_SIZE
+        const dt = Math.min(delta, 50) / 1000
+        const drift = Math.tan(Phaser.Math.DegToRad(RAIN_ANGLE))
+        for (let i = 0; i < this.rainVisible; i++) {
+            const d = this.rainDrops[i]
+            d.y += d.v * dt
+            d.x -= d.v * dt * drift
+            if (d.y > h + 14) { d.y = -14; d.x = Math.random() * (w + 40) - 20 }
+            if (d.x < -20) d.x += w + 40
+            d.img.setPosition(d.x, d.y)
+        }
     }
 
     startCoop() {
@@ -2298,6 +2970,7 @@ export class GameScene extends Phaser.Scene {
                 }
             }
             this.add.image(0, 0, key).setOrigin(0, 0).setDepth(-20)
+            this.addRoadTrees()
             return
         }
         this.add.image(0, 0, `map-${this.mapDef.id}`).setOrigin(0, 0).setDepth(-20).setDisplaySize(w, h)
@@ -2305,6 +2978,39 @@ export class GameScene extends Phaser.Scene {
         // route au runtime, exactement sur les cases des voies (union du couloir),
         // pour qu'elle colle au déplacement réel des ennemis (calculé serveur).
         if (this.mapDef.proceduralRoad) this.drawProceduralRoad()
+    }
+
+    /**
+     * Arbres debout, en sprites triés en profondeur comme les unités (un ennemi passe
+     * devant ou derrière le tronc) : bords de route en automne, coins de l'île du
+     * château au printemps. Feuillage recoloré une fois, une texture par teinte.
+     */
+    private addRoadTrees() {
+        const spots = [...roadTreeSpots(this.mapDef), ...castleTreeSpots(this.mapDef)]
+        if (spots.length === 0 || !this.textures.exists('season-plants')) return
+        const plants = this.textures.get('season-plants').getSourceImage() as HTMLImageElement
+        const withFrames = (key: string) => {
+            const tex = this.textures.get(key)
+            TREES.forEach((t, i) => { if (!tex.has(`tree${i}`)) tex.add(`tree${i}`, 0, t.sx, t.sy, t.w, t.h) })
+            return key
+        }
+        const keys = (FOLIAGE_TINTS[this.activeMapId] ?? []).map((tint, i) => {
+            const key = `season-foliage-${this.activeMapId}-${i}`
+            if (!this.textures.exists(key)) {
+                // Atlas illisible (autre origine) : arbres d'origine plutôt que rien.
+                try { this.textures.addCanvas(key, recolorFoliage(plants, tint)) } catch { return withFrames('season-plants') }
+            }
+            return withFrames(key)
+        })
+        const shadows = this.make.graphics({}, false)
+        for (const s of spots) {
+            const t = TREES[s.tree]
+            shadows.fillStyle(0x1c140c, 0.3)
+            shadows.fillEllipse(s.x, s.y - 2, t.w * s.scale * 0.8, t.w * s.scale * 0.3)
+            this.add.image(s.x, s.y, keys[s.hue], `tree${s.tree}`).setOrigin(0.5, 1).setFlipX(s.flip)
+                .setScale(s.scale).setDepth(unitDepth(s.y / CELL_SIZE))
+        }
+        this.bakeStatic(shadows, 'road-tree-shadows', -16)
     }
 
     private drawProceduralRoad() {
@@ -2436,7 +3142,7 @@ export class GameScene extends Phaser.Scene {
             (s, i, arr) => arr.findIndex(o => o.x === s.x && o.y === s.y) === i,
         )
         for (const start of uniqueStarts) {
-            this.add.image(Math.max(32, start.x * CELL_SIZE + 20), start.y * CELL_SIZE + 37, keyFor(true))
+            this.add.image(Math.min(768, Math.max(32, start.x * CELL_SIZE + 20)), start.y * CELL_SIZE + 37, keyFor(true))
                 .setOrigin(0.5, 1).setDisplaySize(68, 76).setDepth(-15)
         }
         const end = mapCastle(this.mapDef)

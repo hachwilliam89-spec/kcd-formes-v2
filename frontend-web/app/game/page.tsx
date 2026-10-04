@@ -299,11 +299,23 @@ export default function GamePage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [gameId, waveNumber, isGameOver])
 
-    // Astuce « Construire » à l'arrivée sur le plateau (une seule fois par compte).
+    // Astuce « Construire » à l'arrivée sur le plateau (une seule fois par compte),
+    // puis la règle de la carte saisonnière s'il y a lieu.
     useEffect(() => {
-        if (gameId && map && !isGameOver) maybeShowTutorial('tip', 'build')
+        if (!gameId || !map || isGameOver) return
+        maybeShowTutorial('tip', 'build')
+        if (mapId === 'spring' || mapId === 'autumn') maybeShowTutorial('tip', mapId)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [gameId, Boolean(map)])
+    }, [gameId, Boolean(map), mapId])
+
+    // 1re crue / 1re grêle annoncées : bulle de conseil (rien si les conseils sont coupés).
+    useEffect(() => {
+        const terrain = wavePreview?.terrain
+        if (!terrain || terrain.type !== 'SPRING' || isGameOver || combatRunning) return
+        if (terrain.flooded) maybeShowTutorial('tip', 'flood')
+        if (terrain.hail) maybeShowTutorial('tip', 'hail')
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [wavePreview, combatRunning])
 
     /**
      * Règles de pose côté client (le backend reste l'arbitre final), filtrées ici
@@ -673,16 +685,6 @@ export default function GamePage() {
                         />
                     </div>
 
-                            {wavePreview?.terrain?.type === 'SPRING' && !isGameOver && !combatRunning && (
-                                <p className="shrink-0 font-read text-xs px-3 py-1 rounded border border-cyan-700/30 bg-cyan-100 text-slate-800">
-                                    {wavePreview.terrain.flooded ? `Vague ${wavePreview.waveNumber} : crue. Les tours des cases bleues ne tireront pas pendant cette vague.` : `Vague ${wavePreview.waveNumber} : eaux basses. Prochaine crue à la vague ${Math.ceil((wavePreview.waveNumber + 1) / 3) * 3}.`}
-                                </p>
-                            )}
-                            {wavePreview?.terrain?.type === 'AUTUMN' && !isGameOver && (
-                                <p className="shrink-0 font-read text-xs px-3 py-1 rounded border border-orange-800/30 bg-orange-100 text-amber-950">
-                                    Catapulte → feuilles en feu → cendres. Renouvellement à chaque vague ; les ennemis à armure magique résistent.
-                                </p>
-                            )}
 
                     {/* Barre d'action : tours en tuiles + actions (JUSTE sous la grille en étroit) */}
                     <div className="kcd-panel-wood shrink-0 flex items-center gap-3 flex-wrap py-1">

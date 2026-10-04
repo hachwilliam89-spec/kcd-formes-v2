@@ -46,14 +46,26 @@ public final class MapCatalog {
                     List.of(
                             new Position(9, 1), new Position(10, 1), new Position(11, 1), new Position(12, 1),
                             new Position(9, 15), new Position(10, 15), new Position(11, 15), new Position(12, 15))),
+            // Les Jardins : le château (10,8) sur son île au centre du lac, un fort
+            // ennemi de chaque côté. Chaque route se divise (nord / sud) et toutes
+            // finissent sur les deux ponts (x=10). Eau du lac : SeasonalTerrain.waterCells.
             "spring", new Def(List.of(
-                    List.of(new Position(0, 4), new Position(7, 4), new Position(7, 7),
-                            new Position(16, 7), new Position(16, 9), new Position(19, 9)),
-                    List.of(new Position(0, 12), new Position(7, 12), new Position(7, 9), new Position(19, 9))),
-                    0, List.of()),
-            "autumn", new Def(List.of(List.of(
-                    new Position(0, 3), new Position(15, 3), new Position(15, 7),
-                    new Position(4, 7), new Position(4, 12), new Position(19, 12))), 0, List.of()));
+                    List.of(new Position(0, 8), new Position(4, 8), new Position(4, 3),
+                            new Position(10, 3), new Position(10, 8)),
+                    List.of(new Position(0, 8), new Position(4, 8), new Position(4, 13),
+                            new Position(10, 13), new Position(10, 8)),
+                    List.of(new Position(19, 8), new Position(16, 8), new Position(16, 3),
+                            new Position(10, 3), new Position(10, 8)),
+                    List.of(new Position(19, 8), new Position(16, 8), new Position(16, 13),
+                            new Position(10, 13), new Position(10, 8))),
+                    1, List.of()),
+            // Le Val : le grand serpentin, plus un raccourci boueux par le milieu
+            // (x=9) emprunté par une moitié de la vague. Couloir large.
+            "autumn", new Def(List.of(
+                    List.of(new Position(0, 3), new Position(16, 3), new Position(16, 8),
+                            new Position(3, 8), new Position(3, 13), new Position(19, 13)),
+                    List.of(new Position(0, 3), new Position(9, 3), new Position(9, 13), new Position(19, 13))),
+                    1, List.of()));
 
     public static TerrainType terrain(String mapId) {
         return switch (normalize(mapId)) {

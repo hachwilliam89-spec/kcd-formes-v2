@@ -3,6 +3,7 @@
 // changent d'une map à l'autre. Doit rester synchronisé avec le catalogue backend
 // (MapCatalog) — mêmes id, mêmes voies, même halfWidth.
 import { Cell, PathData, buildLanesData, corridorHas, buildableHas, pathDirectionAtIn } from './constants'
+import { WATER_CELLS } from './seasons'
 
 export type Biome = 'desert' | 'prairie' | 'snow' | 'spring' | 'autumn'
 
@@ -16,6 +17,7 @@ export type MapDef = {
   halfWidth: number      // demi-largeur du couloir (1 = large, 0 = voies fines)
   wideSpots: Cell[]      // aires d'élargissement local du couloir (aires de croisement)
   proceduralRoad: boolean // route dessinée au runtime (multi-voies) plutôt que peinte dans l'image
+  water: Cell[]          // eau infranchissable et inconstructible (lac du printemps)
   path: PathData         // dérivé (couloir union, cases de chemin, directions)
 }
 
@@ -23,18 +25,18 @@ export type MapDef = {
 function def(id: string, name: string, biome: Biome, image: string, waypoints: Cell[]): MapDef {
   return {
     id, name, biome, image,
-    lanes: [waypoints], waypoints, halfWidth: 1, wideSpots: [], proceduralRoad: false,
+    lanes: [waypoints], waypoints, halfWidth: 1, wideSpots: [], proceduralRoad: false, water: [],
     path: buildLanesData([waypoints], 1),
   }
 }
 
 /** Carte multi-voies (voies fines). La route est bakée dans l'image (comme le désert),
  *  donc proceduralRoad = false. wideSpots = aires larges. */
-function defLanes(id: string, name: string, biome: Biome, image: string, lanes: Cell[][], wideSpots: Cell[] = [], halfWidth = 0): MapDef {
+function defLanes(id: string, name: string, biome: Biome, image: string, lanes: Cell[][], wideSpots: Cell[] = [], halfWidth = 0, water: Cell[] = []): MapDef {
   return {
     id, name, biome, image,
-    lanes, waypoints: lanes[0], halfWidth, wideSpots, proceduralRoad: false,
-    path: buildLanesData(lanes, halfWidth, wideSpots),
+    lanes, waypoints: lanes[0], halfWidth, wideSpots, proceduralRoad: false, water,
+    path: buildLanesData(lanes, halfWidth, wideSpots, water),
   }
 }
 
@@ -56,13 +58,19 @@ export const GAME_MAPS: MapDef[] = [
     { x: 9, y: 1 }, { x: 10, y: 1 }, { x: 11, y: 1 }, { x: 12, y: 1 },
     { x: 9, y: 15 }, { x: 10, y: 15 }, { x: 11, y: 15 }, { x: 12, y: 15 },
   ]),
+  // Les Jardins : le château sur son île, au centre du lac ; un fort ennemi de chaque
+  // côté. Chaque route se divise (nord / sud) et toutes finissent sur les deux ponts.
   defLanes('spring', 'Les Jardins éveillés', 'spring', '', [
-    [{ x: 0, y: 4 }, { x: 7, y: 4 }, { x: 7, y: 7 }, { x: 16, y: 7 }, { x: 16, y: 9 }, { x: 19, y: 9 }],
-    [{ x: 0, y: 12 }, { x: 7, y: 12 }, { x: 7, y: 9 }, { x: 19, y: 9 }],
-  ]),
+    [{ x: 0, y: 8 }, { x: 4, y: 8 }, { x: 4, y: 3 }, { x: 10, y: 3 }, { x: 10, y: 8 }],
+    [{ x: 0, y: 8 }, { x: 4, y: 8 }, { x: 4, y: 13 }, { x: 10, y: 13 }, { x: 10, y: 8 }],
+    [{ x: 19, y: 8 }, { x: 16, y: 8 }, { x: 16, y: 3 }, { x: 10, y: 3 }, { x: 10, y: 8 }],
+    [{ x: 19, y: 8 }, { x: 16, y: 8 }, { x: 16, y: 13 }, { x: 10, y: 13 }, { x: 10, y: 8 }],
+  ], [], 1, WATER_CELLS),
+  // Le Val : le grand serpentin, plus un raccourci boueux par le milieu (couloir large).
   defLanes('autumn', 'Le Val des feuilles', 'autumn', '', [
-    [{ x: 0, y: 3 }, { x: 15, y: 3 }, { x: 15, y: 7 }, { x: 4, y: 7 }, { x: 4, y: 12 }, { x: 19, y: 12 }],
-  ]),
+    [{ x: 0, y: 3 }, { x: 16, y: 3 }, { x: 16, y: 8 }, { x: 3, y: 8 }, { x: 3, y: 13 }, { x: 19, y: 13 }],
+    [{ x: 0, y: 3 }, { x: 9, y: 3 }, { x: 9, y: 13 }, { x: 19, y: 13 }],
+  ], [], 1),
 ]
 
 export const DEFAULT_MAP_ID = 'desert'

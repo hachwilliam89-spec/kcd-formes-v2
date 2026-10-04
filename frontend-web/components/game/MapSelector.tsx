@@ -1,9 +1,9 @@
 'use client'
 
 // Le tracé et les zones saisonnières sont lisibles avant de commencer une partie.
-import { GAME_MAPS, type MapDef } from './maps'
+import { GAME_MAPS, type MapDef, mapIsCorridor } from './maps'
 import { GRID_W, GRID_H } from './constants'
-import { MAP_THEMES, FLOOD_CELLS, LEAF_CELLS } from './seasons'
+import { MAP_THEMES, BANK_CELLS, LAKE, fogCellsFor, mudCellsFor } from './seasons'
 
 function PathPreview({ map }: { map: MapDef }) {
     const theme = MAP_THEMES[map.id]
@@ -11,6 +11,9 @@ function PathPreview({ map }: { map: MapDef }) {
     return (
         <svg viewBox={`0 0 ${GRID_W} ${GRID_H}`} className="w-full h-auto block" preserveAspectRatio="none">
             <rect x={0} y={0} width={GRID_W} height={GRID_H} fill={theme.ground} />
+            {map.id === 'spring' && (
+                <rect x={LAKE.x0} y={LAKE.y0} width={LAKE.x1 - LAKE.x0 + 1} height={LAKE.y1 - LAKE.y0 + 1} fill="#527f87" />
+            )}
             {/* Chaque voie tracée + son entrée (vert). Château commun (or). */}
             {map.lanes.map((lane, i) => (
                 <polyline
@@ -18,13 +21,20 @@ function PathPreview({ map }: { map: MapDef }) {
                     points={lane.map((w) => `${w.x + 0.5},${w.y + 0.5}`).join(' ')}
                     fill="none"
                     stroke={theme.road}
-                    strokeWidth={1.2}
+                    strokeWidth={1.2 + map.halfWidth * 1.6}
                     strokeLinejoin="round"
                     strokeLinecap="round"
                 />
             ))}
-            {(map.id === 'spring' ? FLOOD_CELLS : map.id === 'autumn' ? LEAF_CELLS : []).map(p => (
-                <rect key={`${p.x},${p.y}`} x={p.x + 0.12} y={p.y + 0.12} width={0.76} height={0.76} fill={map.id === 'spring' ? '#92c9db' : '#e79d48'} />
+            {map.id === 'spring' && BANK_CELLS.map(p => (
+                <rect key={`${p.x},${p.y}`} x={p.x + 0.12} y={p.y + 0.12} width={0.76} height={0.76} fill="#92c9db" />
+            ))}
+            {map.id === 'autumn' && mudCellsFor(1).map(p => (
+                <rect key={`m${p.x},${p.y}`} x={p.x + 0.08} y={p.y + 0.08} width={0.84} height={0.84} rx={0.3} fill="#4a3220" />
+            ))}
+            {/* Boue et brume de la vague 1 (elles se déplacent ensuite à chaque vague). */}
+            {map.id === 'autumn' && fogCellsFor(1).filter(p => !mapIsCorridor(map, p.x, p.y)).map(p => (
+                <rect key={`f${p.x},${p.y}`} x={p.x} y={p.y} width={1} height={1} fill="#e6e8ec" opacity={0.42} />
             ))}
             {map.lanes.map((lane, i) => (
                 <circle key={i} cx={lane[0].x + 0.5} cy={lane[0].y + 0.5} r={0.9} fill="#5bbd3a" />

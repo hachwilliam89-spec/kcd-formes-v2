@@ -12,6 +12,8 @@ export type TutorialEntry = {
   icon?: string // chemin d'icône pixel optionnel (public/sprites/ui)
 }
 
+import { HAIL_DAMAGE_BONUS } from './seasons'
+
 export type TutorialKind = 'enemy' | 'tower' | 'tip'
 
 // clé = type d'ennemi (voir EnemyType backend / SPRITE_ENEMY_TYPES).
@@ -86,6 +88,24 @@ export const FEATURE_TUTORIAL: Record<string, TutorialEntry> = {
   upgrade: {
     title: 'Améliorer et cibler',
     body: 'Chaque niveau (3 max) augmente dégâts, portée et solidité. La priorité de tir choisit l’ennemi visé : le plus proche, le plus avancé ou le plus solide. Échap ferme la fiche.',
+  },
+  // Cartes saisonnières : à l'arrivée sur la carte, puis à la 1re annonce de chaque
+  // phénomène. Pas de bandeau permanent : le joueur attentif lit le plateau.
+  spring: {
+    title: 'Les Jardins éveillés',
+    body: 'Le château est au cœur du lac : tous les ennemis finissent sur ses deux ponts. Les berges (roseaux, vaguelette) se construisent mais sont inondables : aux vagues 3, 6, 9…, la crue en noie une partie, et leurs tours ne tirent plus pendant la vague. Le côté noyé change à chaque crue.',
+  },
+  flood: {
+    title: 'Crue annoncée',
+    body: 'La bruine annonce la crue : les berges qui clignotent seront sous l’eau à la prochaine vague, et leurs tours ne tireront pas. Ne compte pas sur elles cette fois-ci.',
+  },
+  hail: {
+    title: 'Grêle annoncée',
+    body: `Des grêlons tombent : la prochaine vague sera grêlée. Armures cabossées, les ennemis subiront +${HAIL_DAMAGE_BONUS} % de dégâts. C’est le moment d’être agressif.`,
+  },
+  autumn: {
+    title: 'Le Val des feuilles',
+    body: 'Un raccourci coupe le serpentin. La boue brune ralentit les ennemis (pas les Trolls ni les boss) : couvre-la bien. La brume blanche coûte 1 case de portée aux tours qu’elle recouvre. Les deux changent de place à chaque vague — une averse annonce le changement : regarde le plateau avant de lancer la vague.',
   },
   // À la fin de la 1re vague.
   combat: {

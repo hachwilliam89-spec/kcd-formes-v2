@@ -6,31 +6,84 @@ les états `terrain` envoyés avec les ticks solo et les snapshots multijoueurs.
 
 ## Printemps : Les Jardins éveillés
 
-Deux entrées rejoignent un château commun. Les 21 cases de berge (x=8..14,
-y=6,8,10) sont constructibles et marquées en bleu en permanence. Aux vagues 3, 6,
-9…, leurs tours ne tirent plus pendant toute la vague. La crue elle-même ne retire
-aucun PV ; les ennemis peuvent toujours attaquer ces tours. Les positions hautes
-restent actives. Les murs sont passifs et ne sont pas suspendus.
+Le château (10,8) est sur une île, au centre d’un lac ; un fort ennemi de chaque
+côté, (0,8) et (19,8). Chaque route se divise en deux (nord / sud, couloir large
+de 3 cases, 22-23 cases) et les quatre voies finissent sur les deux ponts (x=9..11)
+qui traversent le lac. L’eau (x=7..8 et 12..13, y=6..10 :
+`SeasonalTerrain.waterCells`) n’est ni route ni case de tour, côté serveur
+(`PathfindingService.buildableCells`) comme côté client (`MapDef.water`).
 
-La prochaine crue est indiquée dans l’aperçu solo, la légende du plateau et la
-sélection de carte. En live, le changement suit le numéro de la vague courante.
+Les 22 cases de berge (rives ouest x=6 et est x=14, y=5..11 ; rives nord y=5 et
+sud y=11, x=6..8 et 12..14 : `SeasonalTerrain.bankCells`) sont constructibles et
+marquées en permanence. Aux vagues 3, 6, 9…, la crue en noie une partie et leurs
+tours ne tirent plus pendant toute la vague. Le sens change d’une crue à l’autre,
+selon une séquence fixe de 8 (ouest-est, nord, sud, ouest-est, nord-sud, sud, nord,
+nord-sud) : jamais deux fois le même d’affilée (`floodCells`, envoyé dans
+`Forecast.affectedCells` et `Snapshot.flood`). La crue elle-même ne retire aucun
+PV ; les ennemis peuvent toujours attaquer ces tours. Les murs sont passifs et ne
+sont pas suspendus.
+
+**Grêle** (contrepoids des crues) : certaines autres vagues — jamais la 1re ni une
+vague de crue, tirage fixe 4, 11, 14, 16, 19, 26, 29… (`hailAt`) — la grêle
+cabosse les armures : les ennemis subissent ×1,25 de dégâts
+(`HAIL_DAMAGE_FACTOR`, appliqué avant l’armure magique, qui annule toujours les
+dégâts non-Mage). Annoncée dans l’aperçu (`Forecast.hail`) et envoyée avec l’état
+(`Snapshot.hail`). Rendu : quelques grêlons la vague qui l’annonce, une averse de
+grêle (rebonds au sol, voile froid) pendant la vague.
+
+Pas de bandeau d’avertissement : le plateau annonce tout (berges qui clignotent et
+bruine avant une crue, grêlons avant la grêle ; boue et brume de la vague suivante
+en automne). Les règles passent par les bulles de conseils (à l’arrivée sur la
+carte, puis à la 1re crue et à la 1re grêle annoncées), que le joueur peut couper.
+En live, le changement suit le numéro de la vague courante.
+
+Rendu : au repos, les berges sont marquées (terre humide, roseaux, vaguelette) ;
+quand l’aperçu annonce une crue, celles qu’elle noiera sont en surbrillance et
+pulsent, et une bruine tombe. Pendant la vague
+de crue : averse (170 gouttes, léger assombrissement), le lac déborde et s’étale sur
+les berges (nappe du même bleu que le lac, rive festonnée d’écume, reflets qui
+scintillent, ronds de pluie) et les tours suspendues ont les pieds dans l’eau. Des flaques se forment sur la route et ses abords (à moitié
+sous la bruine, franches sous l’averse, ronds de pluie dessus), puis sèchent
+lentement. Tout s’estompe à la décrue.
 
 ## Automne : Le Val des feuilles
 
-Trois nappes de quatre cases sur le chemin : x=6..9/y=3, x=10..13/y=7,
-x=6..9/y=12. Un impact principal de catapulte allume la case de feuilles touchée.
-Le feu se propage aux feuilles orthogonalement voisines tous les 3 ticks (360 ms),
-chaque case brûle 18 ticks (2,16 s) et inflige 3 PV par tick aux ennemis dessus.
-Les coordonnées continues sont arrondies à la case la plus proche.
+Une entrée (0,3), deux voies en couloir large : le grand serpentin (59 cases) et
+un raccourci par le milieu x=9 (31 cases), emprunté par une moitié de la vague.
+Un terrain qui aide **et** qui gêne, pour une carte qui se joue autrement :
 
-Une case brûlée ne peut pas se rallumer pendant la même vague. Les feuilles
-reviennent à la vague suivante. Le feu respecte l’armure magique des ennemis,
-n’endommage pas les tours et crédite l’or des morts une seule fois. Les
-instantanés distinguent feuilles intactes, feu et cendres.
+- **Boue (aide)** : à chaque vague, quatre flaques sur toute la largeur du couloir
+  — une sur le raccourci (x=8..10, au nord ou au sud du croisement) et trois parmi six
+  emplacements du serpentin (`SeasonalTerrain.mudCells`). Tirage fixe sur 40
+  combinaisons (pas de 7) : jamais la même boue deux vagues de suite, et la boue de la
+  vague suivante est annoncée dans l’aperçu (`Forecast.affectedCells`). Les ennemis y
+  avancent à 60 % de leur vitesse (`MUD_SPEED_FACTOR`) et s’y entassent : bonnes
+  cases à couvrir. Les géants (Troll, boss : `SeasonalTerrain.wadesThroughMud`) la
+  traversent sans ralentir ; le Chariot, lui, s’y enlise comme les autres.
+  Coordonnées continues arrondies à la case la plus proche. Rendu : à chaque
+  déplacement, une averse de quelques secondes ; l’ancienne boue s’efface, la
+  nouvelle se forme.
+- **Brume (gêne)** : deux bancs par vague. Une tour couverte perd 1 case de portée
+  (`FOG_RANGE_PENALTY`) ; les murs ne sont pas concernés. Les bancs changent de
+  place à chaque vague selon un cycle fixe de 3 positions (nord-ouest + sud-est,
+  nord-est + sud-ouest, centre + flanc est), jamais deux fois de suite au même
+  endroit ; chacune couvre environ un tiers des cases constructibles. La brume de la vague suivante est envoyée dans l’aperçu
+  (`Forecast.fogCells`) et affichée sur le plateau avant le lancement : le joueur
+  peut placer ses tours en conséquence.
+
+Mêmes règles en solo (ticks précalculés) et en live (`MatchEngine`) : vitesse via
+`speedFactorAt`, portée via `rangeOf` / `inRange`. Les instantanés envoient les
+cases de boue et de brume et les tours couvertes (`mud`, `fog`, `foggedTowers`). Les cercles de
+portée et l’aperçu de pose tiennent compte de la brume.
 
 ## Décors et assets
 
-- Sols et végétation composés une seule fois dans une texture de 800×640.
+- Sols et végétation composés une seule fois dans une texture de 800×640. Feuillages
+  recolorés pixel par pixel au chargement (`ctx.filter` n’est pas pris en charge par
+  Safari) : automne orange, rouge, or ; printemps en cerisiers roses, lilas blancs et
+  arbres verts d’origine, avec des massifs de fleurs. Arbres debout triés en
+  profondeur avec les unités : bords de route en automne, coins de l’île du château
+  au printemps.
 - Calque des dangers régénéré seulement lorsque son état change ; une image
   unique est rendue entre deux changements, sans Graphics statique par frame.
 - Fortifications compactes dessinées en Canvas2D : grès crénelé au désert,
@@ -51,17 +104,15 @@ intégrés dans cette passe : ils nécessitent une sélection/adaptation distinc
 
 ## Validation
 
-- Suite backend : 120 tests, aucun échec ; sept tests dédiés au terrain saisonnier
-  (prévision, propagation, renouvellement, persistance, tir suspendu/rétabli,
-  intégration solo/live, or et armure magique).
+- Neuf tests dédiés au terrain saisonnier (`SeasonalTerrainTest`) : crue prévisible
+  et tir suspendu/rétabli, boue limitée à ses cases et vague retardée, géants
+  insensibles à la boue (solo et live), cycle de
+  brume annoncé, portée réduite en solo, mêmes règles en live, persistance.
 - TypeScript et build Next de production validés ; ESLint sans erreur,
   dix avertissements déjà présents.
-- Aperçu manuel de la vraie scène : repos/crue/retour au repos et feuilles/feu/cendres,
-  sprites, textures, absence d’erreur console observée.
-- Mesure locale Chrome, automne avec quatre cases en feu et une catapulte immobile :
-  480 images en 8 s, moyenne CPU 0,24 ms, p95 0,40 ms. Mesure du rendu de cet état
-  uniquement ; ne préjuge pas du coût d’une grosse vague ou d’une autre machine.
+- Aperçu manuel de la vraie scène (`scripts/perf-bench/seasonal.ts`) : repos,
+  annonce de crue (bruine), crue (averse + eau), brume des vagues 1/2/3.
 
-Les valeurs de dégâts, durées et emplacements constituent un premier réglage.
+Facteur de boue, pénalité de brume et emplacements constituent un premier réglage.
 L’équilibrage sur de longues parties et le test réseau avec deux joueurs restent
 à faire. Le harnais historique de balance ne mesure que son scénario existant.

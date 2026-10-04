@@ -5,6 +5,7 @@ import com.kcdformes.domain.model.EnemyType;
 import com.kcdformes.domain.model.GameMap;
 import com.kcdformes.domain.model.Position;
 import com.kcdformes.domain.model.Tower;
+import com.kcdformes.domain.model.SeasonalTerrain;
 import com.kcdformes.domain.model.TowerType;
 import com.kcdformes.domain.model.match.LiveEnemy;
 import com.kcdformes.domain.model.match.MatchGameState;
@@ -124,7 +125,6 @@ public class MatchEngine {
         }
 
         s.terrain.beginWave(s.wave);
-        s.terrain.advance();
 
         // 2) Déplacement + comportements spéciaux (Sapeur), arrivée au château.
         Iterator<LiveEnemy> it = s.enemies.iterator();
@@ -134,7 +134,8 @@ public class MatchEngine {
             if (e.type.attacksTowers && handleSapper(s, e)) {
                 continue; // tick consommé par le siège / déplacement hors-chemin
             }
-            advance(s, e, e.type.speed * soloTicks); // suit le chemin, bloqué par les murs
+            // Suit le chemin, bloqué par les murs ; la boue (automne) le ralentit, sauf géants.
+            advance(s, e, e.type.speed * soloTicks * s.terrain.speedFactorAt(e.type, e.x, e.y));
             if (e.reachedEnd) {
                 s.castleHp = Math.max(0, s.castleHp - e.type.castleDamage);
                 it.remove();
@@ -155,11 +156,6 @@ public class MatchEngine {
             handleBossPulse(s, e);
         }
 
-        // Même terrain que le solo ; le ramassage des morts crédite l'or une fois.
-        for (LiveEnemy e : s.enemies) {
-            if (e.hp > 0 && !e.type.magicArmor) e.hp -= s.terrain.damageAt(e.x, e.y);
-        }
-
         // 5) Tir des tours (cible selon le mode ; profils de dégâts fidèles au solo).
         for (Tower tower : new ArrayList<>(map.getTowers())) {
             if (tower.isDestroyed()) continue;
@@ -176,7 +172,7 @@ public class MatchEngine {
 
             if (tower.getType().damageType == DamageType.CONTINUOUS) {
                 // Rayon continu (Mage) : pas de cooldown, tape chaque tick.
-                LiveEnemy target = findTarget(tower, s.enemies);
+                LiveEnemy target = findTarget(tower, s.enemies, s.terrain);
                 if (target != null) fireAt(s, tower, target);
                 continue;
             }
@@ -184,7 +180,7 @@ public class MatchEngine {
             double cd = s.towerCooldowns.getOrDefault(tower.getId(), 0.0) - soloTicks;
             if (cd > 0) { s.towerCooldowns.put(tower.getId(), cd); continue; }
 
-            LiveEnemy target = findTarget(tower, s.enemies);
+            LiveEnemy target = findTarget(tower, s.enemies, s.terrain);
             if (target == null) { s.towerCooldowns.put(tower.getId(), 0.0); continue; }
 
             fireAt(s, tower, target);
@@ -194,7 +190,7 @@ public class MatchEngine {
                 for (LiveEnemy other : s.enemies) {
                     if (other == target || other.hp <= 0) continue;
                     if (Math.hypot(other.x - target.x, other.y - target.y) <= tower.getType().splashRadius) {
-                        applyDamage(tower, other, splash);
+                        applyDamage(tower, other, splash, s.terrain);
                     }
                 }
             }
@@ -245,8 +241,7 @@ public class MatchEngine {
 
     /** Résout un tir tour → ennemi : dégâts effectifs + trait pour le rendu. */
     private void fireAt(MatchGameState s, Tower tower, LiveEnemy target) {
-        applyDamage(tower, target, effectiveDamage(tower, target));
-        if (tower.getType() == TowerType.CATAPULT) s.terrain.ignite(target.x, target.y);
+        applyDamage(tower, target, effectiveDamage(tower, target), s.terrain);
         s.shots.add(new double[]{tower.getX(), tower.getY(), target.x, target.y});
     }
 
@@ -260,8 +255,9 @@ public class MatchEngine {
         return damage;
     }
 
-    /** Applique les dégâts : l'armure magique annule tout dégât non-Mage (leurre). */
-    private void applyDamage(Tower tower, LiveEnemy target, int damage) {
+    /** Applique les dégâts : grêle (×1,25) puis armure magique, qui annule tout dégât non-Mage (leurre). */
+    private void applyDamage(Tower tower, LiveEnemy target, int damage, SeasonalTerrain terrain) {
+        damage = (int) Math.round(damage * terrain.damageTakenFactor());
         if (target.type.magicArmor && tower.getType() != TowerType.MAGE) damage = 0;
         target.hp -= damage;
     }
@@ -270,16 +266,17 @@ public class MatchEngine {
      * Sélection de cible : priorité perce-blindage aux cibles massives (Baliste),
      * puis mode de ciblage du joueur (CLOSEST / FIRST / STRONGEST).
      */
-    private LiveEnemy findTarget(Tower tower, List<LiveEnemy> enemies) {
+    private LiveEnemy findTarget(Tower tower, List<LiveEnemy> enemies, SeasonalTerrain terrain) {
         if (tower.getType().heavyTargetMultiplier > 1.0) {
-            LiveEnemy heavy = bestTarget(tower, enemies, true);
+            LiveEnemy heavy = bestTarget(tower, enemies, terrain, true);
             if (heavy != null) return heavy;
         }
-        return bestTarget(tower, enemies, false);
+        return bestTarget(tower, enemies, terrain, false);
     }
 
-    private LiveEnemy bestTarget(Tower tower, List<LiveEnemy> enemies, boolean heavyOnly) {
-        double range = tower.getRange();
+    private LiveEnemy bestTarget(Tower tower, List<LiveEnemy> enemies, SeasonalTerrain terrain, boolean heavyOnly) {
+        // Portée effective : la brume (automne) la réduit, comme en solo.
+        double range = terrain.rangeOf(tower);
         LiveEnemy best = null;
         double bestScore = Double.NEGATIVE_INFINITY;
         for (LiveEnemy e : enemies) {

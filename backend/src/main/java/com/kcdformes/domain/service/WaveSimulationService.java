@@ -161,7 +161,6 @@ public class WaveSimulationService {
         int tick = 0;
         while (tick < MAX_TICKS) {
             tick++;
-            terrain.advance();
             List<DamageEvent> damageEvents = new ArrayList<>();
             List<TowerDamageEvent> towerDamageEvents = new ArrayList<>();
             List<UUID> deaths = new ArrayList<>();
@@ -196,7 +195,8 @@ public class WaveSimulationService {
                 }
 
                 double prevP = progress.get(enemy.getId());
-                double p = prevP + enemy.getType().speed;
+                // Boue (automne) : l'ennemi y avance moins vite, sauf les géants (voir SeasonalTerrain).
+                double p = prevP + enemy.getType().speed * terrain.speedFactorAt(enemy.getType(), enemy.getX(), enemy.getY());
 
                 // Mur-barrage (TowerType.WALL, voir GAME_DESIGN 2.7) : un ennemi
                 // ne traverse JAMAIS une case de mur intacte — il s'arrête juste
@@ -290,16 +290,6 @@ public class WaveSimulationService {
                         destroyedTowers, towerStuns));
             }
 
-            // Le feu respecte l'armure magique et ne touche que les ennemis apparus.
-            for (Enemy enemy : wave.getEnemies()) {
-                if (enemy.isDead() || escaped.contains(enemy.getId()) || tick <= enemy.getSpawnDelayTicks()
-                        || enemy.getType().magicArmor) continue;
-                int damage = terrain.damageAt(enemy.getX(), enemy.getY());
-                if (damage == 0) continue;
-                enemy.takeDamage(damage);
-                if (enemy.isDead()) { deaths.add(enemy.getId()); wave.addGold(enemy.getGoldReward()); }
-            }
-
             // 2. Attaques des tours (cible : ennemi à portée le plus proche)
             for (Tower tower : towers) {
                 if (tower.isDestroyed()) {
@@ -335,9 +325,9 @@ public class WaveSimulationService {
                     // Pas de cooldown : un rayon continu tape chaque tick tant qu'une
                     // cible est en portée (voir TowerType pour le rééquilibrage de
                     // baseDamage qui accompagne ce profil).
-                    Enemy target = findTarget(tower, wave.getEnemies(), escaped, tick, progress);
+                    Enemy target = findTarget(tower, wave.getEnemies(), escaped, tick, progress, terrain);
                     if (target != null) {
-                        applyDamage(tower, target, effectiveDamage(tower, target), wave, damageEvents, deaths);
+                        applyDamage(tower, target, effectiveDamage(tower, target), wave, damageEvents, deaths, terrain);
                     }
                     continue;
                 }
@@ -348,15 +338,13 @@ public class WaveSimulationService {
                     continue;
                 }
 
-                Enemy target = findTarget(tower, wave.getEnemies(), escaped, tick, progress);
+                Enemy target = findTarget(tower, wave.getEnemies(), escaped, tick, progress, terrain);
                 if (target == null) {
                     cooldowns.put(tower.getId(), 0.0);
                     continue;
                 }
 
-                applyDamage(tower, target, effectiveDamage(tower, target), wave, damageEvents, deaths);
-
-                if (tower.getType() == TowerType.CATAPULT) terrain.ignite(target.getX(), target.getY());
+                applyDamage(tower, target, effectiveDamage(tower, target), wave, damageEvents, deaths, terrain);
 
                 if (tower.getType().damageType == DamageType.AOE) {
                     // Dégâts réduits (moitié) aux ennemis proches de la cible principale,
@@ -371,7 +359,7 @@ public class WaveSimulationService {
                         double dx = other.getX() - target.getX();
                         double dy = other.getY() - target.getY();
                         if (Math.sqrt(dx * dx + dy * dy) <= tower.getType().splashRadius) {
-                            applyDamage(tower, other, (int) Math.round(splashDamage), wave, damageEvents, deaths);
+                            applyDamage(tower, other, (int) Math.round(splashDamage), wave, damageEvents, deaths, terrain);
                         }
                     }
                 }
@@ -479,7 +467,10 @@ public class WaveSimulationService {
     }
 
     private void applyDamage(Tower tower, Enemy target, int damage,
-                              Wave wave, List<DamageEvent> damageEvents, List<UUID> deaths) {
+                              Wave wave, List<DamageEvent> damageEvents, List<UUID> deaths,
+                              SeasonalTerrain terrain) {
+        // Grêle (printemps) : armures cabossées, les ennemis prennent plus cher.
+        damage = (int) Math.round(damage * terrain.damageTakenFactor());
         // Armure enchantée (EnemyType.magicArmor) : tout dégât non-Mage ricoche.
         // Le tir PART quand même (l'ennemi aggro les tours et consomme leur
         // cadence — c'est son rôle de leurre) : l'évènement est émis à 0 pour
@@ -506,18 +497,18 @@ public class WaveSimulationService {
      * inerte devant une vague de piétaille serait vécue comme un bug).
      */
     private Enemy findTarget(Tower tower, List<Enemy> enemies, Set<UUID> escaped, int tick,
-                              Map<UUID, Double> progress) {
+                              Map<UUID, Double> progress, SeasonalTerrain terrain) {
         if (tower.getType().heavyTargetMultiplier > 1.0) {
-            Enemy heavy = findBestTarget(tower, enemies, escaped, tick, progress, true);
+            Enemy heavy = findBestTarget(tower, enemies, escaped, tick, progress, terrain, true);
             if (heavy != null) {
                 return heavy;
             }
         }
-        return findBestTarget(tower, enemies, escaped, tick, progress, false);
+        return findBestTarget(tower, enemies, escaped, tick, progress, terrain, false);
     }
 
     private Enemy findBestTarget(Tower tower, List<Enemy> enemies, Set<UUID> escaped, int tick,
-                                  Map<UUID, Double> progress, boolean heavyOnly) {
+                                  Map<UUID, Double> progress, SeasonalTerrain terrain, boolean heavyOnly) {
         Enemy best = null;
         double bestScore = Double.NEGATIVE_INFINITY;
 
@@ -540,7 +531,8 @@ public class WaveSimulationService {
             if (heavyOnly && enemy.getType().magicArmor && tower.getType() != TowerType.MAGE) {
                 continue;
             }
-            if (!tower.canTarget(enemy)) {
+            // Portée effective : la brume (automne) la réduit (voir SeasonalTerrain).
+            if (!terrain.inRange(tower, enemy.getX(), enemy.getY())) {
                 continue;
             }
 

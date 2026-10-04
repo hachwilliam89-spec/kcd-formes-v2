@@ -2,7 +2,7 @@
 // Les règles serveur sont couvertes par SeasonalTerrainTest, pas par cet aperçu.
 import Phaser from 'phaser'
 import { GameScene, type TowerData } from '@/components/game/GameScene'
-import { FLOOD_CELLS, LEAF_CELLS, type TerrainSnapshot } from '@/components/game/seasons'
+import { floodCellsFor, fogCellsFor, mudCellsFor, type TerrainSnapshot } from '@/components/game/seasons'
 import { getMapDef } from '@/components/game/maps'
 
 const map = getMapDef(new URLSearchParams(location.search).get('map') ?? 'spring')
@@ -17,10 +17,15 @@ gameEl.style.width = '800px'; gameEl.style.height = '640px'
 const scene = new GameScene()
 scene.setActiveMap(map.id)
 const towers: TowerData[] = map.id === 'spring' ? [
-    { id: 'bank', type: 'ARCHER', x: 10, y: 6, level: 1, hp: 100, maxHp: 100 },
-    { id: 'high', type: 'MAGE', x: 5, y: 3, level: 1, hp: 100, maxHp: 100 },
-] : [{ id: 'catapult', type: 'CATAPULT', x: 10, y: 4, level: 1, hp: 100, maxHp: 100 }]
-const dry: TerrainSnapshot = { flooded: false, burning: [], burned: [], disabledTowers: [] }
+    { id: 'bank', type: 'ARCHER', x: 6, y: 7, level: 1, hp: 100, maxHp: 100 },
+    { id: 'high', type: 'MAGE', x: 8, y: 5, level: 1, hp: 100, maxHp: 100 },
+] : [
+    { id: 'nw', type: 'ARCHER', x: 6, y: 5, level: 1, hp: 100, maxHp: 100 },  // brume vagues 1 et 3
+    { id: 'ne', type: 'MAGE', x: 12, y: 5, level: 1, hp: 100, maxHp: 100 },   // brume vagues 2 et 3
+]
+const dry: TerrainSnapshot = { flooded: false, fog: [], mud: [], flood: [], hail: false, disabledTowers: [], foggedTowers: [] }
+const foggedAt = (wave: number) => towers.filter(t => fogCellsFor(wave).some(c => c.x === t.x && c.y === t.y)).map(t => t.id)
+const autumnWave = (wave: number): TerrainSnapshot => ({ ...dry, fog: fogCellsFor(wave), mud: mudCellsFor(wave), foggedTowers: foggedAt(wave) })
 let running = false
 const samples: number[] = []
 const originalStep = Phaser.Game.prototype.step
@@ -44,17 +49,26 @@ scene.setOnCoopReady(() => {
     button('Terrain au repos', () => show(dry, 'Terrain au repos'))
     if (map.id === 'spring') {
         button('Annonce de crue', () => {
-            scene.setTerrainForecast({ type: 'SPRING', flooded: true, affectedCells: FLOOD_CELLS })
-            document.getElementById('status')!.textContent = 'Prochaine vague : crue'
+            scene.setTerrainForecast({ type: 'SPRING', flooded: true, affectedCells: floodCellsFor(3), fogCells: [] })
+            document.getElementById('status')!.textContent = 'Prochaine vague : crue (bruine)'
         })
-        button('Crue active', () => show({ ...dry, flooded: true, disabledTowers: ['bank'] }, 'Crue active — archer suspendu, mage actif'))
+        button('Crue active', () => show({ ...dry, flooded: true, flood: floodCellsFor(3), disabledTowers: ['bank'] }, 'Crue ouest-est (vague 3) — archer suspendu, mage actif'))
+        button('Crue nord', () => show({ ...dry, flooded: true, flood: floodCellsFor(6), disabledTowers: ['high'] }, 'Crue nord (vague 6) — mage suspendu, archer actif'))
+        button('Annonce de grêle', () => {
+            scene.setTerrainForecast({ type: 'SPRING', flooded: false, affectedCells: [], fogCells: [], hail: true })
+            show(dry, 'Prochaine vague : grêle (quelques grêlons)')
+        })
+        button('Grêle', () => show({ ...dry, hail: true }, 'Grêle (vague 4) — ennemis +25 % de dégâts'))
     }
     if (map.id === 'autumn') {
-        button('Feu actif', () => show({ ...dry, burning: LEAF_CELLS.slice(0, 4) }, 'Première nappe en feu'))
-        button('Cendres', () => show({ ...dry, burned: LEAF_CELLS.slice(0, 4) }, 'Première nappe consommée'))
+        button('Annonce vague 1', () => {
+            scene.setTerrainForecast({ type: 'AUTUMN', flooded: false, affectedCells: mudCellsFor(1), fogCells: fogCellsFor(1) })
+            document.getElementById('status')!.textContent = 'Aperçu vague 1 : brume nord-ouest + sud-est'
+        })
+        for (const wave of [1, 2, 3]) button(`Vague ${wave}`, () => show(autumnWave(wave), `Vague ${wave} (boue + brume, averse au changement) — tours dans la brume : ${foggedAt(wave).join(', ') || 'aucune'}`))
     }
     button('Tester fin de vague', () => {
-        scene.playWave([{ tick: 1, enemies: [], damageEvents: [], towerDamageEvents: [], deaths: [], reachedCastle: [], destroyedTowers: [], bossAbilityEvents: [], stunnedTowers: [], castleAttacks: [], castleHp: 100, terrain: { ...dry, flooded: map.id === 'spring', burning: map.id === 'autumn' ? LEAF_CELLS : [], disabledTowers: ['bank'] } }], undefined, () => {
+        scene.playWave([{ tick: 1, enemies: [], damageEvents: [], towerDamageEvents: [], deaths: [], reachedCastle: [], destroyedTowers: [], bossAbilityEvents: [], stunnedTowers: [], castleAttacks: [], castleHp: 100, terrain: map.id === 'autumn' ? autumnWave(2) : { ...dry, flooded: map.id === 'spring', flood: floodCellsFor(3), disabledTowers: ['bank'] } }], undefined, () => {
             document.getElementById('status')!.textContent = 'Vague terminée — terrain réinitialisé'
         })
     })
