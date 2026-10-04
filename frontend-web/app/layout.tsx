@@ -6,9 +6,23 @@ import "./globals.css";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const grenze = Grenze({ weight: "800", variable: "--font-hero", subsets: ["latin"] });
 
+const description = "Défends ton royaume en tout temps, en tout lieu. Tower defense médiéval-fantasy sur quatre cartes saisonnières, en solo, en coop ou en duel.";
+
+// Aperçu des liens partagés (LinkedIn, Discord…) : l'image vient de
+// app/opengraph-image.jpg et app/twitter-image.jpg, en URL absolue grâce à metadataBase.
 export const metadata: Metadata = {
+  metadataBase: new URL("https://kcd-formes.fr"),
   title: "War Seasons",
-  description: "Quatre saisons, un royaume à défendre. Tower defense fantasy en solo, coopération et versus.",
+  description,
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "War Seasons",
+    locale: "fr_FR",
+    title: "War Seasons",
+    description,
+  },
+  twitter: { card: "summary_large_image", title: "War Seasons", description },
 };
 
 export default function RootLayout({
