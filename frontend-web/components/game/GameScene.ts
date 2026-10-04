@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import type { Cell } from './constants'
-import { TOP_RESERVED_ROWS, towerRangeAt } from './constants'
+import { TOP_RESERVED_ROWS, MAX_WALLS, towerRangeAt } from './constants'
 import { GAME_MAPS, DEFAULT_MAP_ID, getMapDef, mapIsCorridor, mapIsBuildable, mapPathDir, mapLaneStarts, mapCastle } from './maps'
 import { audio, Sfx } from '@/lib/audio'
 
@@ -53,9 +53,9 @@ export interface TowerData {
     targetingMode?: 'CLOSEST' | 'FIRST' | 'STRONGEST'
 }
 
-// Verdict de pose pour l'aperçu de construction (voir setPlacementValidator) :
-// la page connaît l'or, la limite de murs et les règles de jeu ; sans validateur
-// (coop), la scène applique seulement les règles de terrain (terrainVerdict).
+// Verdict de pose pour l'aperçu de construction : la scène applique les règles
+// de terrain (terrainVerdict : case libre, couloir, bande constructible, limite
+// de murs), puis, si elles passent, le validateur de la page (or disponible…).
 export interface PlacementVerdict {
     ok: boolean
     reason?: string // raison courte d'un refus, affichée au-dessus de la case
@@ -594,6 +594,7 @@ export class GameScene extends Phaser.Scene {
 
         this.drawGrid()
         this.drawPath()
+        this.prewarmShaders()
 
         // Rejoue les tours arrivées pendant l'initialisation de la scène
         // (reprise de partie : la réponse du serveur peut précéder ce create()).
@@ -644,6 +645,32 @@ export class GameScene extends Phaser.Scene {
         // Coop : signale que la scène est prête (textures chargées, calques créés)
         // pour que le canvas commence à pousser les snapshots serveur.
         this.onCoopReady?.()
+    }
+
+    /**
+     * Préchauffage des shaders. Phaser 4 compile un programme WebGL par NOMBRE de
+     * textures distinctes dans un lot de rendu (de 1 à maxTextures), à la première
+     * rencontre. En pleine partie, chaque nouveau compte (nouvel ennemi, texte,
+     * effet…) déclenchait une compilation bloquante : jusqu'à ~150 ms par
+     * programme au banc de charge, 400+ ms cumulés au démarrage d'une vague. On
+     * les compile tous ici : pendant quelques images, des lots de 1 à N textures
+     * minuscules, cachés sous le terrain (depth -30) et séparés par un Graphics
+     * (qui coupe le lot et compile au passage le shader des formes pleines).
+     */
+    private prewarmShaders() {
+        if (!(this.renderer instanceof Phaser.Renderer.WebGL.WebGLRenderer)) return
+        const keys = this.textures.getTextureKeys().filter((k) => !k.startsWith('__'))
+        const max = Math.min(this.renderer.maxTextures, keys.length)
+        const warm: Phaser.GameObjects.GameObject[] = []
+        for (let count = 1; count <= max; count++) {
+            for (let i = 0; i < count; i++) {
+                warm.push(this.add.image(2, 2, keys[i]).setScale(0.01).setAlpha(0.01).setDepth(-30))
+            }
+            warm.push(this.add.graphics().setDepth(-30).fillStyle(0xffffff, 0.01).fillRect(0, 0, 1, 1))
+        }
+        // Quelques images : laisse aussi finir les compilations en parallèle
+        // (KHR_parallel_shader_compile), là où le navigateur les propose.
+        this.time.delayedCall(400, () => warm.forEach((o) => o.destroy()))
     }
 
     /** Active le compteur de performance (à appeler avant le boot de la scène). */
@@ -748,9 +775,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     /**
-     * Validateur de pose fourni par la page (or, limite de murs, règles de terrain)
-     * → l'aperçu affiche le coût ou la raison exacte d'un refus. Sans validateur
-     * (coop), seules les règles de terrain s'appliquent (terrainVerdict).
+     * Validateur de pose fourni par la page, appliqué après les règles de terrain
+     * (voir terrainVerdict) : or disponible, et coût affiché quand la pose passe.
      */
     setPlacementValidator(fn?: (type: string, x: number, y: number) => PlacementVerdict) {
         this.placementValidator = fn
@@ -764,10 +790,10 @@ export class GameScene extends Phaser.Scene {
 
     /**
      * Inspection des tours posées au survol : éclaircie + cadre de la case +
-     * portée réelle (voir refreshFocus). Activée par la page quand un clic sur une
-     * tour la sélectionne vraiment (solo, y compris pendant une vague en lecture
-     * seule) ; coupée sinon pour ne pas suggérer une interaction qui n'existe pas
-     * (fin de partie, coop).
+     * portée réelle (voir refreshFocus). Activée quand un clic sur une tour la
+     * sélectionne vraiment (solo, y compris pendant une vague en lecture seule ;
+     * coop et versus) ; coupée sinon pour ne pas suggérer une interaction qui
+     * n'existe pas (fin de partie).
      */
     setTowerInspect(enabled: boolean) {
         this.inspectEnabled = enabled
@@ -801,7 +827,8 @@ export class GameScene extends Phaser.Scene {
         // avant (refreshFocus) — un clic la sélectionne, il ne pose rien.
         if (!type || !cell || !inGrid || this.hoveredTowerId) { this.hideGhost(); return }
 
-        const verdict = this.placementValidator?.(type, cell.x, cell.y) ?? this.terrainVerdict(type, cell.x, cell.y)
+        const terrain = this.terrainVerdict(type, cell.x, cell.y)
+        const verdict = terrain.ok && this.placementValidator ? this.placementValidator(type, cell.x, cell.y) : terrain
         const ok = verdict.ok
 
         const px = cell.x * CELL_SIZE, py = cell.y * CELL_SIZE
@@ -847,13 +874,17 @@ export class GameScene extends Phaser.Scene {
         )
     }
 
-    /** Règles de terrain seules (repli quand la page ne fournit pas de validateur, ex. coop). */
+    /** Règles de terrain, valables en solo comme en multi (le serveur reste l'arbitre). */
     private terrainVerdict(type: string, x: number, y: number): PlacementVerdict {
-        if (this.towerAt(x, y)) return { ok: false, reason: 'Case occupée' }
+        if (this.getTowerAt(x, y)) return { ok: false, reason: 'Case occupée' }
         if (y < TOP_RESERVED_ROWS) return { ok: false, reason: 'Rangée réservée' }
         const corridor = mapIsCorridor(this.mapDef, x, y)
-        // Mur : sur le couloir ; tours : bande constructible (bord des routes).
-        if (type === 'WALL') return corridor ? { ok: true } : { ok: false, reason: 'Mur : sur le couloir' }
+        // Mur : sur le couloir, dans la limite de MAX_WALLS ; tours : bande constructible.
+        if (type === 'WALL') {
+            if (!corridor) return { ok: false, reason: 'Mur : sur le couloir' }
+            const walls = [...this.towersById.values()].filter((t) => t.type === 'WALL').length
+            return walls >= MAX_WALLS ? { ok: false, reason: `Limite de ${MAX_WALLS} murs` } : { ok: true }
+        }
         if (corridor) return { ok: false, reason: 'Pas sur le couloir' }
         return mapIsBuildable(this.mapDef, x, y) ? { ok: true } : { ok: false, reason: 'Trop loin des routes' }
     }
@@ -889,7 +920,8 @@ export class GameScene extends Phaser.Scene {
 
     // ── Survol / sélection des tours posées ──────────────────────────────
 
-    private towerAt(x: number, y: number): TowerData | undefined {
+    /** Tour (ou mur) posée sur une case, d'après le dernier état affiché. */
+    getTowerAt(x: number, y: number): TowerData | undefined {
         for (const t of this.towersById.values()) if (t.x === x && t.y === y) return t
         return undefined
     }
@@ -901,7 +933,7 @@ export class GameScene extends Phaser.Scene {
      */
     private syncHoveredTower(): boolean {
         const cell = this.hoverCell
-        const tower = this.inspectEnabled && cell ? this.towerAt(cell.x, cell.y) : undefined
+        const tower = this.inspectEnabled && cell ? this.getTowerAt(cell.x, cell.y) : undefined
         const id = tower && tower.type !== 'WALL' ? tower.id : null
         if (id === this.hoveredTowerId) return false
         this.hoveredTowerId = id

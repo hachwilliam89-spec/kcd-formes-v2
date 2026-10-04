@@ -3,9 +3,9 @@
 // Plateau du multi coop rendu avec la MÊME scène Phaser que le solo (vrais
 // sprites d'ennemis animés, tours, projectiles, impacts) — piloté par le flux de
 // snapshots serveur au lieu d'une vague pré-calculée. Voir GameScene.pushCoopSnapshot.
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import Phaser from 'phaser'
-import { GameScene } from '@/components/game/GameScene'
+import { GameScene, type PlacementVerdict } from '@/components/game/GameScene'
 import type { Snapshot } from '@/hooks/useCoop'
 
 export interface CoopCanvasHandle {
@@ -18,10 +18,13 @@ interface CoopCanvasProps {
     selectedTower?: string | null
     // Map active de la partie (tracé + biome) — fixée avant le boot de la scène.
     mapId?: string | null
+    // Règle de pose de la page (or disponible) → l'aperçu affiche le coût ou
+    // « Or insuffisant », en plus des règles de terrain de la scène.
+    placementValidator?: (type: string, x: number, y: number) => PlacementVerdict
 }
 
 const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCanvas(
-    { onCellClick, selectedTower = null, mapId = null },
+    { onCellClick, selectedTower = null, mapId = null, placementValidator },
     ref,
 ) {
     const gameRef = useRef<Phaser.Game | null>(null)
@@ -32,12 +35,16 @@ const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCa
     // Sélection courante, appliquée dès que la scène est prête (ordre de montage).
     const selectedRef = useRef(selectedTower)
     selectedRef.current = selectedTower
+    // Tour posée sélectionnée (clic) : coins dorés + portée réelle sur le plateau.
+    const [selectedTowerId, setSelectedTowerId] = useState<string | null>(null)
 
     useEffect(() => {
         if (gameRef.current) return
 
         const scene = new GameScene()
         if (mapId) scene.setActiveMap(mapId)   // AVANT le boot : bon terrain/décor
+        // Survol d'une tour posée : éclaircie, cadre, portée (comme en solo).
+        scene.setTowerInspect(true)
         // Outil de dev : ?perf=1 dans l'URL affiche fps / temps CPU par image.
         if (new URLSearchParams(window.location.search).has('perf')) scene.enablePerfOverlay()
         sceneRef.current = scene
@@ -78,9 +85,27 @@ const CoopCanvas = forwardRef<CoopCanvasHandle, CoopCanvasProps>(function CoopCa
         }
     }, [])
 
+    // Clic sur une tour posée : la sélectionne (re-clic = désélection) au lieu de
+    // tenter une pose sur une case occupée ; ailleurs, désélectionne puis pose.
     useEffect(() => {
-        sceneRef.current?.setOnCellClick(onCellClick)
+        sceneRef.current?.setOnCellClick((x, y) => {
+            const tower = sceneRef.current?.getTowerAt(x, y)
+            if (tower) {
+                setSelectedTowerId((current) => (tower.type === 'WALL' || current === tower.id ? null : tower.id))
+                return
+            }
+            setSelectedTowerId(null)
+            onCellClick(x, y)
+        })
     }, [onCellClick])
+
+    useEffect(() => {
+        sceneRef.current?.setSelectedTower(selectedTowerId)
+    }, [selectedTowerId])
+
+    useEffect(() => {
+        sceneRef.current?.setPlacementValidator(placementValidator)
+    }, [placementValidator])
 
     useEffect(() => {
         if (readyRef.current) sceneRef.current?.setBuildPreview(selectedTower)

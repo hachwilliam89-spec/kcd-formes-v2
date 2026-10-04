@@ -216,6 +216,10 @@ export const CORRIDOR_CELLS = DEFAULT_PATH.corridorCells
 export const isCorridorCell = (x: number, y: number) => corridorHas(DEFAULT_PATH, x, y)
 export const pathDirectionAt = (x: number, y: number) => pathDirectionAtIn(DEFAULT_PATH, x, y)
 
+// Limite de murs par partie — DOIT rester synchronisé avec le backend
+// (PlaceTowerService.MAX_WALLS) : anti-donjon, le mur est un point de blocage.
+export const MAX_WALLS = 6
+
 // ── Portée des tours (cases) ─────────────────────────────────────────────────
 // Miroir de TowerType.baseRange + Tower.getRange() côté backend (bonus de palier :
 // +0 / +0.35 / +0.9). Partagé par la page (carte de tour) et la scène (cercles de

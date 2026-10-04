@@ -21,6 +21,7 @@ import { TOP_RESERVED_ROWS } from '@/components/game/constants'
 import { getMapDef, mapIsCorridor, mapIsBuildable } from '@/components/game/maps'
 import MapSelector from '@/components/game/MapSelector'
 import { audio } from '@/lib/audio'
+import type { PlacementVerdict } from '@/components/game/GameScene'
 
 const CoopCanvas = dynamic(() => import('@/components/coop/CoopCanvas'), {
     ssr: false,
@@ -147,7 +148,16 @@ export default function VersusPage() {
         if (selectedTower === 'WALL' && !inCorridor) { setNotice('Le mur se pose sur le couloir.'); return }
         if (selectedTower !== 'WALL' && inCorridor) { setNotice('Pas de tour sur le couloir.'); return }
         if (selectedTower !== 'WALL' && !inCorridor && !mapIsBuildable(mapDef, x, y)) { setNotice('Trop loin des routes (décor).'); return }
+        const cost = TOWERS.find((t) => t.type === selectedTower)?.cost ?? 0
+        if ((myHud?.gold ?? 0) < cost) { setNotice(`Or insuffisant : il faut ${cost} or.`); return }
         actions.placeTower(selectedTower, x, y)
+    }
+
+    // Aperçu de pose : coût, ou « Or insuffisant » (les règles de terrain et la
+    // limite de murs sont vérifiées par la scène).
+    function placementValidator(type: string): PlacementVerdict {
+        const cost = TOWERS.find((t) => t.type === type)?.cost ?? 0
+        return (myHud?.gold ?? 0) < cost ? { ok: false, cost, reason: `Or insuffisant (${cost})` } : { ok: true, cost }
     }
 
     if (!hasHydrated || !isAuthenticated) return null
@@ -346,7 +356,7 @@ export default function VersusPage() {
                         </div>
                     )}
                     <div className={`relative min-h-0 rounded-lg overflow-hidden ${showChat ? 'h-full aspect-[5/4] shrink-0' : 'flex-1'} ${hlTarget === 'board' ? 'ring-4 ring-inset ring-yellow-400' : ''}`} style={{ border: '2px solid #2f1c0d' }}>
-                        <CoopCanvas key={match?.mapId ?? 'desert'} mapId={match?.mapId ?? null} ref={canvasRef} onCellClick={place} selectedTower={selectedTower} />
+                        <CoopCanvas key={match?.mapId ?? 'desert'} mapId={match?.mapId ?? null} ref={canvasRef} onCellClick={place} selectedTower={selectedTower} placementValidator={placementValidator} />
                         {/* Toast messages, flottant sur le plateau. */}
                         {(notice || error) && (
                             <div className="absolute left-1/2 -translate-x-1/2 bottom-2 z-20 kcd-panel text-xs px-3 py-1 whitespace-nowrap">

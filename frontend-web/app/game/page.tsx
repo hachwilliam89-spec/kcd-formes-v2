@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useGame, type WavePreview } from '@/hooks/useGame'
 import { useAuth } from '@/hooks/useAuth'
 import type { TowerData, PlacementVerdict } from '@/components/game/GameScene'
-import { TOP_RESERVED_ROWS, TOWER_BASE_RANGE, towerRangeAt } from '@/components/game/constants'
+import { TOP_RESERVED_ROWS, TOWER_BASE_RANGE, MAX_WALLS, towerRangeAt } from '@/components/game/constants'
 import { getMapDef, mapIsCorridor, mapIsBuildable, GAME_MAPS } from '@/components/game/maps'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
 import MapSelector from '@/components/game/MapSelector'
@@ -323,11 +323,11 @@ export default function GamePage() {
         if (type === 'WALL' && !inCorridor) {
             return fail('Mur : sur le couloir', 'Le mur se pose sur le couloir des ennemis (pour leur barrer la route)')
         }
-        // 6 = PlaceTowerService.MAX_WALLS côté backend (anti-donjon : paver le
-        // couloir de murs entassait toute la vague sous le feu de la défense
+        // MAX_WALLS = PlaceTowerService.MAX_WALLS côté backend (anti-donjon : paver
+        // le couloir de murs entassait toute la vague sous le feu de la défense
         // entière, victoire garantie).
-        if (type === 'WALL' && placed.filter((t) => t.type === 'WALL').length >= 6) {
-            return fail('Limite de 6 murs', 'Limite de 6 murs atteinte — le mur est un point de blocage, pas une forteresse')
+        if (type === 'WALL' && placed.filter((t) => t.type === 'WALL').length >= MAX_WALLS) {
+            return fail(`Limite de ${MAX_WALLS} murs`, `Limite de ${MAX_WALLS} murs atteinte — le mur est un point de blocage, pas une forteresse`)
         }
         if (type !== 'WALL' && inCorridor) {
             return fail('Pas sur le couloir', 'Impossible de construire une tour sur le couloir des ennemis')
@@ -889,7 +889,7 @@ export default function GamePage() {
                                     <div className="flex flex-col gap-1 text-sm text-[#43310f]">
                                         <div className="flex justify-between"><span className="text-[#8a6a2c]">Meilleure vague</span><span className="font-read font-semibold">{bestWave}</span></div>
                                         <div className="flex justify-between"><span className="text-[#8a6a2c]">Tours posées</span><span className="font-read font-semibold">{totalTowers}</span></div>
-                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Murs</span><span className="font-read font-semibold">{wallCount}/6</span></div>
+                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Murs</span><span className="font-read font-semibold">{wallCount}/{MAX_WALLS}</span></div>
                                     </div>
                                 </div>
 
