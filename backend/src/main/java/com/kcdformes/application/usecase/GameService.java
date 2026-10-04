@@ -11,6 +11,7 @@ import com.kcdformes.domain.port.in.command.SetTargetingModeUseCase;
 import com.kcdformes.domain.port.in.command.StartWaveUseCase;
 import com.kcdformes.domain.port.in.command.UpgradeTowerUseCase;
 import com.kcdformes.domain.port.in.query.GetGameStateUseCase;
+import com.kcdformes.domain.port.in.query.GetWavePreviewUseCase;
 import com.kcdformes.domain.service.PathfindingService;
 import com.kcdformes.domain.service.PlaceTowerService;
 import com.kcdformes.domain.service.UpgradeTowerService;
@@ -37,7 +38,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGameStateUseCase,
-        UpgradeTowerUseCase, ChooseBonusUseCase, SetTargetingModeUseCase {
+        GetWavePreviewUseCase, UpgradeTowerUseCase, ChooseBonusUseCase, SetTargetingModeUseCase {
 
     /**
      * Or accordé à chaque nouvelle partie. Pas de report d'une partie à l'autre.
@@ -381,6 +382,15 @@ public class GameService implements PlaceTowerUseCase, StartWaveUseCase, GetGame
         castleJpaRepository.save(castleEntity);
 
         return new ChooseBonusResult(command.bonusType(), game.getGold(), castleEntity.getHp(), 100);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public WavePreview getNextWavePreview(UUID gameId, UUID playerId) {
+        GameEntity game = loadOwnedGame(gameId, playerId);
+        // Même numéro et même seed que startWave : l'aperçu décrit exactement la
+        // vague qui sera jouée.
+        return waveFactory.previewWave(game.getWaveNumber() + 1, game.getSeed());
     }
 
     @Override

@@ -3,6 +3,15 @@ import { useGameStore } from '@/store/gameStore'
 import { useAuthStore } from '@/store/authStore'
 import api from '@/lib/api'
 
+// Aperçu de la prochaine vague (voir backend WavePreview) : types présents, ceux
+// jamais croisés dans cette partie, et arrivée d'un Boss. Pas les effectifs.
+export interface WavePreview {
+    waveNumber: number
+    enemyTypes: string[]
+    newEnemyTypes: string[]
+    bossWave: boolean
+}
+
 export function useGame() {
     const router = useRouter()
     const { player } = useAuthStore()
@@ -70,6 +79,12 @@ export function useGame() {
             awaitingBonusChoice: data.awaitingBonusChoice,
             availableBonuses: data.availableBonuses,
         })
+        return data
+    }
+
+    async function getNextWavePreview(): Promise<WavePreview> {
+        if (!gameId) throw new Error('Aucune partie en cours')
+        const { data } = await api.get<WavePreview>(`/api/v1/games/${gameId}/waves/next`)
         return data
     }
 
@@ -144,6 +159,7 @@ export function useGame() {
         upgradeTower,
         setTargetingMode,
         startWave,
+        getNextWavePreview,
         chooseBonus,
         refreshGame,
         resumeGame,

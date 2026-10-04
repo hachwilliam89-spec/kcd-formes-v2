@@ -2,6 +2,8 @@ package com.kcdformes.application.usecase;
 
 import com.kcdformes.domain.exception.GameAlreadyFinishedException;
 import com.kcdformes.domain.model.BonusType;
+import com.kcdformes.domain.model.EnemyType;
+import com.kcdformes.domain.model.WavePreview;
 import com.kcdformes.domain.model.TowerType;
 import com.kcdformes.domain.port.in.command.ChooseBonusUseCase.ChooseBonusCommand;
 import com.kcdformes.domain.port.in.command.PlaceTowerUseCase.PlaceTowerCommand;
@@ -27,9 +29,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
@@ -116,6 +120,29 @@ class GameServiceTest {
         assertThatThrownBy(() -> gameService.getGameState(gameId, intruderId))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Game not found");
+    }
+
+    @Test
+    @DisplayName("Un joueur ne peut pas voir l'aperçu de vague de la partie d'un autre")
+    void getNextWavePreview_notOwner_rejectedAsNotFound() {
+        when(gameJpaRepository.findById(gameId)).thenReturn(Optional.of(game));
+
+        assertThatThrownBy(() -> gameService.getNextWavePreview(gameId, intruderId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Game not found");
+    }
+
+    @Test
+    @DisplayName("L'aperçu décrit la vague SUIVANTE, avec le seed de la partie")
+    void getNextWavePreview_usesNextWaveNumberAndGameSeed() {
+        game.setWaveNumber(4);
+        game.setSeed(99L);
+        WavePreview expected = new WavePreview(5, List.of(EnemyType.GOBLIN, EnemyType.CHARIOT),
+                List.of(EnemyType.CHARIOT), false);
+        when(gameJpaRepository.findById(gameId)).thenReturn(Optional.of(game));
+        when(waveFactory.previewWave(5, 99L)).thenReturn(expected);
+
+        assertThat(gameService.getNextWavePreview(gameId, ownerId)).isEqualTo(expected);
     }
 
     // --- Statut de la partie ---

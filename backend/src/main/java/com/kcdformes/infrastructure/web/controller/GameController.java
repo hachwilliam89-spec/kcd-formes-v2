@@ -83,6 +83,13 @@ public class GameController {
         return ResponseEntity.ok(WaveResponse.from(result));
     }
 
+    // Aperçu de la prochaine vague (types, nouveautés, Boss) — voir WavePreview.
+    @GetMapping("/{gameId}/waves/next")
+    public ResponseEntity<WavePreviewResponse> getNextWavePreview(@PathVariable UUID gameId, Authentication auth) {
+        return ResponseEntity.ok(WavePreviewResponse.from(
+                gameService.getNextWavePreview(gameId, extractPlayerId(auth))));
+    }
+
     @PostMapping("/{gameId}/bonus/choose")
     public ResponseEntity<BonusChoiceResponse> chooseBonus(
             @PathVariable UUID gameId,

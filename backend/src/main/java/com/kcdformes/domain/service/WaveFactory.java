@@ -4,6 +4,7 @@ import com.kcdformes.domain.model.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
@@ -181,9 +182,42 @@ public class WaveFactory {
         return new Wave(waveNumber, enemies);
     }
 
+    /**
+     * Aperçu de la vague {@code waveNumber} d'une partie, sans la générer : types
+     * présents, nouveautés (absents de toutes les vagues précédentes de CETTE
+     * partie) et présence d'un Boss. Même seed + même numéro => exactement la
+     * composition que createWave produira. Les vagues précédentes sont recomposées
+     * (types seulement, arrêt dès que tous les types présents ont été vus) : coût
+     * linéaire en waveNumber, négligeable aux profondeurs atteintes en jeu.
+     */
+    public WavePreview previewWave(int waveNumber, long gameSeed) {
+        EnumSet<EnemyType> present = typesOf(waveNumber, gameSeed);
+        EnumSet<EnemyType> seenBefore = EnumSet.noneOf(EnemyType.class);
+        for (int w = 1; w < waveNumber && !seenBefore.containsAll(present); w++) {
+            seenBefore.addAll(typesOf(w, gameSeed));
+        }
+        EnumSet<EnemyType> fresh = EnumSet.copyOf(present);
+        fresh.removeAll(seenBefore);
+        boolean bossWave = present.stream().anyMatch(type -> type.isBoss);
+        return new WavePreview(waveNumber, List.copyOf(present), List.copyOf(fresh), bossWave);
+    }
+
+    private EnumSet<EnemyType> typesOf(int waveNumber, long gameSeed) {
+        EnumSet<EnemyType> types = EnumSet.noneOf(EnemyType.class);
+        types.addAll(composeOrder(waveNumber, new Random(mixSeed(gameSeed, waveNumber))));
+        return types;
+    }
+
     private List<Enemy> generateEnemies(int waveNumber, List<Position> laneStarts, long gameSeed) {
         Random waveRng = new Random(mixSeed(gameSeed, waveNumber));
+        // Composition puis cadence d'apparition, tirées du MÊME générateur et dans
+        // cet ordre : les séparer (pour previewWave) ne change aucun tirage.
+        List<EnemyType> order = composeOrder(waveNumber, waveRng);
+        return toEnemies(order, waveNumber, laneStarts, waveRng);
+    }
 
+    /** Types de la vague dans leur ordre d'apparition (Boss en tête), sans positions ni cadence. */
+    private List<EnemyType> composeOrder(int waveNumber, Random waveRng) {
         List<EnemyType> order = new ArrayList<>();
 
         // Goblin : toujours présent (chair à canon), léger jitter +-1 autour du
@@ -256,7 +290,7 @@ public class WaveFactory {
             order.addAll(0, bossOrder);
         }
 
-        return toEnemies(order, waveNumber, laneStarts, waveRng);
+        return order;
     }
 
     /** Convertit la liste ordonnée de types en ennemis, avec cadence d'apparition jitterée. */

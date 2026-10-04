@@ -5,7 +5,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.*;
@@ -26,6 +29,53 @@ class WaveFactoryTest {
     void setUp() {
         waveFactory = new WaveFactory();
         spawn = new Position(0, 7);
+    }
+
+    // --- Aperçu de vague (previewWave) ---
+
+    @Test
+    @DisplayName("Aperçu — mêmes types que la vague réellement générée (même seed)")
+    void previewWave_matchesCreatedWaveTypes() {
+        for (long seed : List.of(0L, 1L, 42L, -7L)) {
+            for (int wave = 1; wave <= 25; wave++) {
+                Set<EnemyType> actual = waveFactory.createWave(wave, spawn, seed).getEnemies().stream()
+                        .map(Enemy::getType)
+                        .collect(Collectors.toCollection(() -> EnumSet.noneOf(EnemyType.class)));
+
+                assertThat(waveFactory.previewWave(wave, seed).enemyTypes())
+                        .as("seed %d, vague %d", seed, wave)
+                        .containsExactlyElementsOf(actual);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Aperçu — une nouveauté par vague selon le calendrier (Gobelin v1 … Chevalier noir v6)")
+    void previewWave_flagsNewTypesFromCalendar() {
+        for (long seed : List.of(0L, 42L, -7L)) {
+            assertThat(waveFactory.previewWave(1, seed).newEnemyTypes()).containsExactly(EnemyType.GOBLIN);
+            assertThat(waveFactory.previewWave(2, seed).newEnemyTypes()).containsExactly(EnemyType.ORC);
+            assertThat(waveFactory.previewWave(3, seed).newEnemyTypes()).containsExactly(EnemyType.TROLL);
+            assertThat(waveFactory.previewWave(4, seed).newEnemyTypes()).containsExactly(EnemyType.SAPEUR);
+            assertThat(waveFactory.previewWave(5, seed).newEnemyTypes()).containsExactly(EnemyType.CHARIOT);
+            assertThat(waveFactory.previewWave(6, seed).newEnemyTypes()).containsExactly(EnemyType.DARK_KNIGHT);
+            assertThat(waveFactory.previewWave(7, seed).newEnemyTypes()).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("Aperçu — Boss signalé toutes les 10 vagues, nouveau seulement la première fois")
+    void previewWave_flagsBossWaves() {
+        long seed = 7L;
+        WavePreview wave10 = waveFactory.previewWave(10, seed);
+        assertThat(wave10.bossWave()).isTrue();
+        assertThat(wave10.newEnemyTypes()).containsExactly(EnemyType.BOSS_WARLORD);
+
+        WavePreview wave20 = waveFactory.previewWave(20, seed);
+        assertThat(wave20.bossWave()).isTrue();
+        assertThat(wave20.newEnemyTypes()).isEmpty();
+
+        assertThat(waveFactory.previewWave(11, seed).bossWave()).isFalse();
     }
 
     @Test

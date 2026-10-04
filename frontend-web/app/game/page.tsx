@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
-import { useGame } from '@/hooks/useGame'
+import { useGame, type WavePreview } from '@/hooks/useGame'
 import { useAuth } from '@/hooks/useAuth'
 import type { TowerData, PlacementVerdict } from '@/components/game/GameScene'
 import { TOP_RESERVED_ROWS, TOWER_BASE_RANGE, towerRangeAt } from '@/components/game/constants'
@@ -15,7 +15,7 @@ import ConfirmDialog from '@/components/game/ConfirmDialog'
 import TutorialBubble from '@/components/game/TutorialBubble'
 import AudioControls from '@/components/game/AudioControls'
 import { UnitChip } from '@/components/game/UnitChip'
-import { TowerIcon } from '@/components/game/UnitIcon'
+import { TowerIcon, EnemyIcon } from '@/components/game/UnitIcon'
 import { audio } from '@/lib/audio'
 import {
     ENEMY_TUTORIAL, TOWER_TUTORIAL, FEATURE_TUTORIAL, getSeenTutorials, markTutorialSeen, resetTutorial,
@@ -109,7 +109,8 @@ export default function GamePage() {
     const {
         gameId, map, mapId, waveNumber, gold, castleHp, castleMaxHp, status,
         awaitingBonusChoice, availableBonuses, hasHydrated: gameHydrated,
-        createGame, placeTower, upgradeTower, setTargetingMode, startWave, chooseBonus, refreshGame, resumeGame, newGame,
+        createGame, placeTower, upgradeTower, setTargetingMode, startWave, getNextWavePreview, chooseBonus,
+        refreshGame, resumeGame, newGame,
     } = useGame()
 
     const canvasRef = useRef<GameCanvasHandle>(null)
@@ -133,6 +134,9 @@ export default function GamePage() {
     // PV des tours en direct pendant une vague (siège, destructions), remontés par
     // la scène : la carte de tour reste juste en combat. null = le store fait foi.
     const [liveTowerHp, setLiveTowerHp] = useState<Record<string, number | null> | null>(null)
+    // Aperçu de la prochaine vague (types + nouveautés / Boss). null = indisponible
+    // (backend pas encore à jour, erreur réseau) → simplement masqué.
+    const [wavePreview, setWavePreview] = useState<WavePreview | null>(null)
     const [leaderboard, setLeaderboard] = useState<{
         top: { rank: number; username: string; bestWave: number }[]
         me: { rank: number; username: string; bestWave: number } | null
@@ -279,6 +283,18 @@ export default function GamePage() {
     useEffect(() => {
         setTutorialOn(isTutorialEnabled(player?.username ?? ''))
     }, [player?.username])
+
+    // Aperçu rechargé à chaque nouveau numéro de vague (il passe à N+1 dès que la
+    // vague N est lancée : le serveur l'a déjà résolue).
+    useEffect(() => {
+        if (!gameId || isGameOver) return
+        let cancelled = false
+        getNextWavePreview()
+            .then((preview) => { if (!cancelled) setWavePreview(preview) })
+            .catch(() => { if (!cancelled) setWavePreview(null) })
+        return () => { cancelled = true }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [gameId, waveNumber, isGameOver])
 
     // Astuce « Construire » à l'arrivée sur le plateau (une seule fois par compte).
     useEffect(() => {
@@ -712,6 +728,43 @@ export default function GamePage() {
                                 >
                                     ↻ Nouvelle partie
                                 </button>
+                            )}
+                            {wavePreview && !isGameOver && (
+                                /* Prochaine vague : types présents (pas les effectifs), nouveautés
+                                   cerclées d'or, et alerte texte si nouvelle menace ou Boss. */
+                                <div
+                                    className="flex items-center gap-1.5 px-2 py-0.5 rounded"
+                                    style={{ background: 'rgba(0,0,0,.35)', border: '1px solid #6b4a24' }}
+                                    aria-label={`Prochaine vague (${wavePreview.waveNumber}) : ${wavePreview.enemyTypes.map((t) => ENEMY_TUTORIAL[t]?.title ?? t).join(', ')}`}
+                                >
+                                    <span className="font-read text-[11px] leading-tight text-[#e9d9b0] text-center">
+                                        Vague<br />{wavePreview.waveNumber}
+                                    </span>
+                                    {wavePreview.enemyTypes.map((type) => {
+                                        // Vague 1 : tout est « nouveau », le signaler n'apprend rien.
+                                        const isNew = wavePreview.waveNumber > 1 && wavePreview.newEnemyTypes.includes(type)
+                                        const name = ENEMY_TUTORIAL[type]?.title ?? type
+                                        return (
+                                            <span
+                                                key={type}
+                                                title={isNew ? `${name} — nouveau !` : name}
+                                                className="rounded-full p-px"
+                                                style={{ boxShadow: isNew ? '0 0 0 2px #f2c94c' : undefined }}
+                                            >
+                                                <EnemyIcon type={type} size={type === 'BOSS_WARLORD' ? 32 : 26} />
+                                            </span>
+                                        )
+                                    })}
+                                    {wavePreview.bossWave ? (
+                                        <span className="font-read text-[11px] font-bold px-1.5 py-0.5 rounded-sm text-white" style={{ background: '#b91c1c' }}>
+                                            ☠ Boss !
+                                        </span>
+                                    ) : wavePreview.newEnemyTypes.length > 0 && wavePreview.waveNumber > 1 && (
+                                        <span className="font-read text-[11px] font-bold px-1.5 py-0.5 rounded-sm text-[#3a2a10]" style={{ background: '#f2c94c' }}>
+                                            Nouveau : {wavePreview.newEnemyTypes.map((t) => ENEMY_TUTORIAL[t]?.title ?? t).join(', ')}
+                                        </span>
+                                    )}
+                                </div>
                             )}
                             <button
                                 onClick={handleStartWave}

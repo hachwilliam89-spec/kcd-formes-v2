@@ -340,9 +340,13 @@ export class GameScene extends Phaser.Scene {
     // COPIES des données React (voir drawTowers) : les PV y sont décrémentés en
     // direct pendant l'animation (voir renderTick) sans toucher au store.
     private towersById = new Map<string, TowerData>()
-    // Lettres des tours : GameObjects indépendants de towersGraphics, à détruire
-    // explicitement à chaque redraw (voir drawTowers) sous peine de fuite.
-    private towerTexts: Phaser.GameObjects.Text[] = []
+    // Pastilles de palier (✦) par tour : Text RÉUTILISÉS d'un redraw à l'autre
+    // (seuls le texte et la position sont mis à jour). Les recréer à chaque
+    // drawTowers coûtait une texture par tour améliorée — 15 fois par seconde en
+    // coop. Celles d'une tour disparue ou redescendue sous le niveau 2 sont
+    // détruites en fin de drawTowers (sinon pastille fantôme).
+    private towerPips = new Map<string, Phaser.GameObjects.Text>()
+    private pipsDrawn = new Set<string>()
     // Tours reçues AVANT que la scène soit prête (create() est asynchrone) :
     // rejouées à la fin de create(). Cas typique : reprise de partie persistée
     // (gameId en localStorage) où la réponse du serveur peut arriver avant
@@ -676,6 +680,8 @@ export class GameScene extends Phaser.Scene {
         this.clearEnemySprites()
         for (const sprite of this.towerSprites.values()) sprite.destroy()
         this.towerSprites.clear()
+        for (const pips of this.towerPips.values()) pips.destroy()
+        this.towerPips.clear()
     }
 
     // ── API publique appelée depuis React ────────────────────────────────
@@ -1036,12 +1042,9 @@ export class GameScene extends Phaser.Scene {
         }
         this.towersGraphics.clear()
 
-        // Les textes Phaser sont des GameObjects indépendants du Graphics : sans
-        // destruction explicite, chaque redraw empilait de nouvelles lettres sur
-        // les anciennes (leak), et une tour détruite laissait sa lettre fantôme
-        // à l'écran.
-        this.towerTexts.forEach((text) => text.destroy())
-        this.towerTexts = []
+        // Pastilles : on note celles redessinées ce tour-ci, les autres sont
+        // détruites en fin de méthode.
+        this.pipsDrawn.clear()
 
         this.towersById.clear()
         // Copie défensive : playWave met à jour les PV en direct (voir renderTick)
@@ -1085,6 +1088,12 @@ export class GameScene extends Phaser.Scene {
             this.towersGraphics.fillRect(px + 4, py + 4, CELL_SIZE - 8, CELL_SIZE - 8)
             this.drawTowerMarkers(tower, px, py)
         })
+
+        for (const [id, pips] of this.towerPips) {
+            if (this.pipsDrawn.has(id)) continue
+            pips.destroy()
+            this.towerPips.delete(id)
+        }
 
         // Pose, amélioration (portée), destruction en combat : la tour survolée ou
         // sélectionnée a pu changer → survol, repères et aperçu remis à jour.
@@ -1171,18 +1180,26 @@ export class GameScene extends Phaser.Scene {
     /**
      * Repères au-dessus d'une structure, calés sur le HAUT de son sprite (topY)
      * plutôt que sur sa case : barre de vie si elle est endommagée, puis pastilles
-     * de palier (✦) d'une tour améliorée (niveau ≥ 2). Les pastilles sont des Text
-     * indépendants, poussés dans towerTexts → détruits/reconstruits à chaque redraw.
+     * de palier (✦) d'une tour améliorée (niveau ≥ 2), réutilisées d'un redraw à
+     * l'autre (voir towerPips).
      */
     private drawTowerMarkers(tower: TowerData, px: number, topY: number) {
         const barShown = this.drawStructureHpBar(tower, px, topY - 6)
         const lvl = tower.level ?? 1
         if (lvl < 2 || tower.type === 'WALL') return
-        const pips = this.add.text(px + CELL_SIZE / 2, barShown ? topY - 7 : topY - 1, '✦'.repeat(lvl), {
-            fontFamily: 'monospace', fontSize: '11px', color: '#f2c94c',
-        }).setOrigin(0.5, 1).setDepth(6)
-        pips.setStroke('#3a2a10', 3)
-        this.towerTexts.push(pips)
+        const label = '✦'.repeat(lvl)
+        let pips = this.towerPips.get(tower.id)
+        if (!pips) {
+            pips = this.add.text(0, 0, label, {
+                fontFamily: 'monospace', fontSize: '11px', color: '#f2c94c',
+            }).setOrigin(0.5, 1).setDepth(6)
+            pips.setStroke('#3a2a10', 3)
+            this.towerPips.set(tower.id, pips)
+        } else if (pips.text !== label) {
+            pips.setText(label) // setText retrace la texture : seulement si le niveau change
+        }
+        pips.setPosition(px + CELL_SIZE / 2, barShown ? topY - 7 : topY - 1)
+        this.pipsDrawn.add(tower.id)
     }
 
     /**
