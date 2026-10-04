@@ -3183,8 +3183,11 @@ export class GameScene extends Phaser.Scene {
         const castleWidth = this.activeMapId === 'fourche' ? 104 : 120
         const castleHeight = this.activeMapId === 'fourche' ? 127 : 147
         const halfCastle = castleWidth / 2
-        this.add.image(Phaser.Math.Clamp(end.x * CELL_SIZE + 20, halfCastle, GRID_WIDTH * CELL_SIZE - halfCastle), end.y * CELL_SIZE + 37, keyFor(false))
-            .setOrigin(0.5, 1).setDisplaySize(castleWidth, castleHeight).setDepth(unitDepth(end.y + 0.9))
+        // Automne : château descendu d'une case, il masquait des emplacements de tours
+        // au-dessus de la fin de la route (purement visuel, la route ne change pas).
+        const drop = this.activeMapId === 'autumn' ? 1 : 0
+        this.add.image(Phaser.Math.Clamp(end.x * CELL_SIZE + 20, halfCastle, GRID_WIDTH * CELL_SIZE - halfCastle), (end.y + drop) * CELL_SIZE + 37, keyFor(false))
+            .setOrigin(0.5, 1).setDisplaySize(castleWidth, castleHeight).setDepth(unitDepth(end.y + drop + 0.9))
         if (this.activeMapId === 'autumn') {
             // Brume d'ambiance seulement : discrète, sans effet de portée.
             const mistKey = 'castle-autumn-mist'
@@ -3202,8 +3205,8 @@ export class GameScene extends Phaser.Scene {
                 }
             }
             for (let i = 0; i < 3; i++) {
-                const mist = this.add.image(709 + i * 24, end.y * CELL_SIZE + 23 + i * 9, mistKey)
-                    .setScale(0.65 + i * 0.12).setAlpha(0.6).setDepth(unitDepth(end.y + 1.1))
+                const mist = this.add.image(709 + i * 24, (end.y + drop) * CELL_SIZE + 23 + i * 9, mistKey)
+                    .setScale(0.65 + i * 0.12).setAlpha(0.6).setDepth(unitDepth(end.y + drop + 1.1))
                 this.tweens.add({ targets: mist, x: mist.x - 10, alpha: 0.95, duration: 4200 + i * 1300,
                     delay: i * 600, ease: 'Sine.easeInOut', yoyo: true, repeat: -1 })
             }
