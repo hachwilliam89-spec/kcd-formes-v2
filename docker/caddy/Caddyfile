@@ -27,3 +27,9 @@ kcd-formes.fr, www.kcd-formes.fr {
 		reverse_proxy frontend:3000
 	}
 }
+
+# Equilibre (API recette) — conteneur sur le réseau externe equilibre-proxy.
+equilibre.164-132-246-49.sslip.io {
+	encode gzip
+	reverse_proxy equilibre-api-recette:3000
+}
