@@ -4,6 +4,10 @@ extends Node
 
 const LOGIN: String = "res://ui/login/Login.tscn"
 const HOME: String = "res://ui/home/Home.tscn"
+const GAME: String = "res://game/Game.tscn"
+
+## Carte à ouvrir par l'écran de jeu (posée par goto_game avant le changement de scène).
+var current_map_id: String = "desert"
 
 
 func _ready() -> void:
@@ -16,6 +20,11 @@ func goto_login() -> void:
 
 func goto_home() -> void:
 	_goto(HOME)
+
+
+func goto_game(map_id: String) -> void:
+	current_map_id = map_id
+	_goto(GAME)
 
 
 func _goto(path: String) -> void:
