@@ -7,8 +7,6 @@
 [ext_resource type="Resource" path="res://visuals/visual_catalog.tres" id="5_catalog"]
 [ext_resource type="Script" path="res://game/TickPlayer.gd" id="6_ticks"]
 
-[sub_resource type="ButtonGroup" id="ButtonGroup_towers"]
-
 [node name="Game" type="Panel"]
 layout_mode = 3
 anchors_preset = 15
@@ -58,71 +56,50 @@ theme_type_variation = &"FpsLabel"
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
-[node name="Box" type="VBoxContainer" parent="Layout/Side"]
+[node name="Scroll" type="ScrollContainer" parent="Layout/Side"]
 layout_mode = 2
+horizontal_scroll_mode = 0
 
-[node name="MapTitle" type="Label" parent="Layout/Side/Box"]
+[node name="Box" type="VBoxContainer" parent="Layout/Side/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="MapTitle" type="Label" parent="Layout/Side/Scroll/Box"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"HeadingLabel"
 autowrap_mode = 3
 
-[node name="Stats" type="Label" parent="Layout/Side/Box"]
+[node name="Stats" type="Label" parent="Layout/Side/Scroll/Box"]
 unique_name_in_owner = true
 layout_mode = 2
 autowrap_mode = 3
 
-[node name="TowerBar" type="HBoxContainer" parent="Layout/Side/Box"]
+[node name="TowerBar" type="GridContainer" parent="Layout/Side/Scroll/Box"]
 unique_name_in_owner = true
 layout_mode = 2
+columns = 3
 
-[node name="Archer" type="Button" parent="Layout/Side/Box/TowerBar"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_type_variation = &"SmallButton"
-toggle_mode = true
-button_pressed = true
-button_group = SubResource("ButtonGroup_towers")
-text = "Archer"
-metadata/tower_type = "ARCHER"
-
-[node name="Mage" type="Button" parent="Layout/Side/Box/TowerBar"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_type_variation = &"SmallButton"
-toggle_mode = true
-button_group = SubResource("ButtonGroup_towers")
-text = "Mage"
-metadata/tower_type = "MAGE"
-
-[node name="Catapult" type="Button" parent="Layout/Side/Box/TowerBar"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_type_variation = &"SmallButton"
-toggle_mode = true
-button_group = SubResource("ButtonGroup_towers")
-text = "Catap."
-metadata/tower_type = "CATAPULT"
-
-[node name="WaveButton" type="Button" parent="Layout/Side/Box"]
+[node name="WaveButton" type="Button" parent="Layout/Side/Scroll/Box"]
 unique_name_in_owner = true
 layout_mode = 2
 disabled = true
 text = "Lancer la vague"
 clip_text = true
 
-[node name="BonusBox" type="VBoxContainer" parent="Layout/Side/Box"]
+[node name="BonusBox" type="VBoxContainer" parent="Layout/Side/Scroll/Box"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 
-[node name="Info" type="Label" parent="Layout/Side/Box"]
+[node name="Info" type="Label" parent="Layout/Side/Scroll/Box"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 autowrap_mode = 3
 
-[node name="Back" type="Button" parent="Layout/Side/Box"]
+[node name="Back" type="Button" parent="Layout/Side/Scroll/Box"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"FlatButton"

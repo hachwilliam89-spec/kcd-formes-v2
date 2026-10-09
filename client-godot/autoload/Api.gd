@@ -35,6 +35,11 @@ func get_map_layout(map_id: String) -> ApiResult:
 	return await _request(HTTPClient.METHOD_GET, "/api/v1/maps/%s" % map_id.uri_encode())
 
 
+## Catalogue des tours : coût, déblocage, règle de pose, stats par niveau.
+func get_tower_catalog() -> ApiResult:
+	return await _request(HTTPClient.METHOD_GET, "/api/v1/towers")
+
+
 ## Nouvelle partie solo sur la carte donnée → GameResponse.
 func create_game(castle_name: String, map_id: String) -> ApiResult:
 	return await _request(HTTPClient.METHOD_POST, "/api/v1/games",

@@ -80,8 +80,9 @@ client-godot/
 
 - [x] Exposer la disposition des cartes, cases constructibles comprises : `GET /api/v1/maps/{mapId}` (`GetMapLayoutUseCase` → `MapLayoutService` → `MapController`).
 - [ ] Verdict de pose propre à une partie (tours posées, crue, limite de murs) si l'aperçu client en a besoin au-delà de « constructible + case libre ».
-- [ ] Catalogue des tours (coût, portée, déblocage) exposé par l'API : le client n'affiche pas encore les coûts, l'or est validé par le serveur à la pose.
-- [ ] Le mur (`WALL`) se pose sur la route : le client ne le propose pas encore (il filtre les taps sur les cases constructibles) ; la Baliste non plus (déblocage par compte).
+- [x] Catalogue des tours exposé par l'API : `GET /api/v1/towers` (`GetTowerCatalogUseCase` → `TowerCatalogService` → `TowerController`) : coût, profil de dégâts, déblocage (`unlockWave`, comparé au `bestWave` de `/players/me`), règle de pose (`OFF_CORRIDOR` / `ON_CORRIDOR`), plafond (`maxCount`, 6 murs) et stats par niveau calculées par une vraie `Tower`. La règle « sur le couloir » vit dans `TowerType.placedOnCorridor()`, lue par `PlaceTowerService` et par le catalogue.
+- [x] Client Godot : barre de construction construite depuis le catalogue (coût, verrou « vague N », compteur de murs, grisée si l'or manque), Mur posé sur la route, Baliste proposée une fois débloquée, annonce des déblocages en fin de vague.
+- [ ] Brancher `frontend-web` sur `/api/v1/towers` et supprimer `TOWER_INFO` / `TOWER_STATS` / `upgradeCost` dupliqués dans `app/game/page.tsx`.
 - [ ] Brancher `frontend-web` sur `/api/v1/maps` et supprimer `maps.ts` / les constantes dupliquées de `constants.ts`.
 - [ ] Vérifier l'acceptation des connexions WebSocket des clients natifs (en-tête `Origin`) dans `WebSocketConfig`, et ajouter les origines de dev nécessaires.
 

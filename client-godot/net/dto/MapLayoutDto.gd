@@ -76,6 +76,11 @@ func is_buildable(cell: Vector2i) -> bool:
 	return _buildable.has(cell)
 
 
+## Case du couloir des ennemis : la seule zone où se pose le Mur.
+func is_corridor(cell: Vector2i) -> bool:
+	return _road.has(cell)
+
+
 func size() -> Vector2i:
 	return Vector2i(width, height)
 
