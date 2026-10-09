@@ -5,9 +5,10 @@ import java.util.Map;
 
 /**
  * Catalogue des maps jouables (solo + multi). Grille fixe 20×16 : seuls le TRACÉ
- * (waypoints) change d'une map à l'autre. DOIT rester synchronisé avec le catalogue
- * frontend (components/game/maps.ts) — mêmes id + waypoints, sinon le décor et le
- * rendu client ne colleraient pas au déplacement réel des ennemis (calculé ici).
+ * (waypoints) change d'une map à l'autre. Exposé aux clients par GET /api/v1/maps/{id}
+ * (GetMapLayoutUseCase) : c'est la source de vérité. Le frontend web en garde encore
+ * une copie (components/game/maps.ts) qui DOIT rester synchronisée tant qu'il n'est
+ * pas branché sur l'endpoint — sinon le décor ne collerait plus au déplacement réel.
  */
 public final class MapCatalog {
 
@@ -75,7 +76,23 @@ public final class MapCatalog {
         };
     }
 
+    /**
+     * Ids du catalogue dans l'ordre de présentation (désert, fourche, printemps,
+     * automne). Liste explicite : Map.of n'a pas d'ordre d'itération garanti.
+     */
+    private static final List<String> IDS = List.of(DEFAULT_MAP_ID, "fourche", "spring", "autumn");
+
     private MapCatalog() {}
+
+    /** Ids des maps jouables, dans l'ordre de présentation. */
+    public static List<String> ids() {
+        return IDS;
+    }
+
+    /** L'id désigne-t-il une map du catalogue ? (contrairement à normalize, sans repli). */
+    public static boolean exists(String mapId) {
+        return mapId != null && MAPS.containsKey(mapId);
+    }
 
     /** Id de map valide ? (sinon on retombe sur le désert). */
     public static String normalize(String mapId) {

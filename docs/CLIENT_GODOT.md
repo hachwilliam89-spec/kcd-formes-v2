@@ -51,6 +51,7 @@ client-godot/
 
 **REST** (même API que le web, JWT en `Authorization: Bearer …`) :
 - `POST /api/v1/auth/register`, `POST /api/v1/auth/login`
+- `GET /api/v1/maps` (ids) · `GET /api/v1/maps/{mapId}` (disposition : château, entrées, voies case par case, couloir, cases constructibles, eau) — **source de vérité de la carte**, ne rien recopier de `maps.ts` / `constants.ts`
 - `POST /api/v1/games` · `GET /api/v1/games/{id}`
 - `POST /api/v1/games/{id}/towers` · `…/towers/{towerId}/upgrade` · `…/towers/{towerId}/targeting`
 - `POST /api/v1/games/{id}/waves/start` · `GET /api/v1/games/{id}/waves/next`
@@ -67,7 +68,9 @@ client-godot/
 
 ## 5. Prérequis backend
 
-- [ ] Exposer les règles de pose (cases constructibles par carte et/ou verdict de pose) pour supprimer la duplication côté clients.
+- [x] Exposer la disposition des cartes, cases constructibles comprises : `GET /api/v1/maps/{mapId}` (`GetMapLayoutUseCase` → `MapLayoutService` → `MapController`).
+- [ ] Verdict de pose propre à une partie (tours posées, crue, limite de murs) si l'aperçu client en a besoin au-delà de « constructible + case libre ».
+- [ ] Brancher `frontend-web` sur `/api/v1/maps` et supprimer `maps.ts` / les constantes dupliquées de `constants.ts`.
 - [ ] Vérifier l'acceptation des connexions WebSocket des clients natifs (en-tête `Origin`) dans `WebSocketConfig`, et ajouter les origines de dev nécessaires.
 
 ## 6. Assets et rendu

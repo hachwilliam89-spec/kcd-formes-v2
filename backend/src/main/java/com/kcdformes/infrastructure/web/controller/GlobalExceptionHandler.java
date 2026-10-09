@@ -6,6 +6,7 @@ import com.kcdformes.domain.exception.GameAlreadyFinishedException;
 import com.kcdformes.domain.exception.InsufficientGoldException;
 import com.kcdformes.domain.exception.InvalidPositionException;
 import com.kcdformes.domain.exception.TowerNotUnlockedException;
+import com.kcdformes.domain.exception.UnknownMapException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -43,6 +44,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(TowerNotUnlockedException.class)
     public ResponseEntity<Map<String, String>> handleTowerNotUnlocked(TowerNotUnlockedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(UnknownMapException.class)
+    public ResponseEntity<Map<String, String>> handleUnknownMap(UnknownMapException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
     }
 
     @ExceptionHandler(BonusChoicePendingException.class)
