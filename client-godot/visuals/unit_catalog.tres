@@ -9,6 +9,9 @@ type = "ARCHER"
 color = Color(0.42, 0.62, 0.3, 1)
 size = 0.7
 short_label = "A"
+sheet_path = "res://assets/sprites/towers/ARCHER.png"
+display_cells = 0.9
+anchor = Vector2(0.5, 1)
 
 [sub_resource type="Resource" id="Resource_mage"]
 script = ExtResource("2_visual")
@@ -16,6 +19,9 @@ type = "MAGE"
 color = Color(0.45, 0.4, 0.85, 1)
 size = 0.7
 short_label = "M"
+sheet_path = "res://assets/sprites/towers/MAGE.png"
+display_cells = 0.9
+anchor = Vector2(0.5, 1)
 
 [sub_resource type="Resource" id="Resource_catapult"]
 script = ExtResource("2_visual")
@@ -23,6 +29,9 @@ type = "CATAPULT"
 color = Color(0.62, 0.44, 0.25, 1)
 size = 0.75
 short_label = "C"
+sheet_path = "res://assets/sprites/towers/CATAPULT.png"
+display_cells = 0.9
+anchor = Vector2(0.5, 1)
 
 [sub_resource type="Resource" id="Resource_ballista"]
 script = ExtResource("2_visual")
@@ -30,6 +39,9 @@ type = "BALLISTA"
 color = Color(0.55, 0.55, 0.6, 1)
 size = 0.75
 short_label = "B"
+sheet_path = "res://assets/sprites/towers/BALLISTA.png"
+display_cells = 0.9
+anchor = Vector2(0.5, 1)
 
 [sub_resource type="Resource" id="Resource_wall"]
 script = ExtResource("2_visual")
@@ -37,55 +49,102 @@ type = "WALL"
 color = Color(0.5, 0.48, 0.45, 1)
 size = 0.9
 short_label = "W"
+sheet_path = "res://assets/sprites/towers/WALL.png"
+display_cells = 1.3
+anchor = Vector2(0.5, 0.5)
 
 [sub_resource type="Resource" id="Resource_goblin"]
 script = ExtResource("2_visual")
 type = "GOBLIN"
 color = Color(0.45, 0.75, 0.3, 1)
 size = 0.4
-short_label = ""
+sheet_path = "res://assets/sprites/enemies/GOBLIN.png"
+frame_size = Vector2i(96, 96)
+walk_frames = Vector2i(0, 11)
+die_frames = Vector2i(12, 21)
+display_cells = 1.4
+anchor = Vector2(0.5, 0.5)
 
 [sub_resource type="Resource" id="Resource_orc"]
 script = ExtResource("2_visual")
 type = "ORC"
 color = Color(0.3, 0.55, 0.25, 1)
 size = 0.5
-short_label = ""
+sheet_path = "res://assets/sprites/enemies/ORC.png"
+frame_size = Vector2i(96, 96)
+walk_frames = Vector2i(0, 11)
+die_frames = Vector2i(12, 21)
+display_cells = 1.9
+anchor = Vector2(0.5, 0.5)
 
 [sub_resource type="Resource" id="Resource_troll"]
 script = ExtResource("2_visual")
 type = "TROLL"
 color = Color(0.45, 0.5, 0.42, 1)
 size = 0.65
-short_label = ""
+sheet_path = "res://assets/sprites/enemies/TROLL.png"
+frame_size = Vector2i(96, 96)
+walk_frames = Vector2i(0, 11)
+die_frames = Vector2i(12, 21)
+display_cells = 2.3
+anchor = Vector2(0.5, 0.5)
 
 [sub_resource type="Resource" id="Resource_dark_knight"]
 script = ExtResource("2_visual")
 type = "DARK_KNIGHT"
 color = Color(0.35, 0.2, 0.5, 1)
 size = 0.55
-short_label = ""
+sheet_path = "res://assets/sprites/enemies/DARK_KNIGHT.png"
+frame_size = Vector2i(96, 96)
+walk_frames = Vector2i(0, 11)
+die_frames = Vector2i(12, 21)
+display_cells = 1.9
+anchor = Vector2(0.5, 0.5)
 
 [sub_resource type="Resource" id="Resource_sapeur"]
 script = ExtResource("2_visual")
 type = "SAPEUR"
 color = Color(0.85, 0.55, 0.15, 1)
 size = 0.5
-short_label = ""
+sheet_path = "res://assets/sprites/enemies/SAPEUR.png"
+frame_size = Vector2i(96, 96)
+walk_frames = Vector2i(0, 11)
+die_frames = Vector2i(12, 21)
+display_cells = 1.4
+anchor = Vector2(0.5, 0.5)
 
 [sub_resource type="Resource" id="Resource_chariot"]
 script = ExtResource("2_visual")
 type = "CHARIOT"
 color = Color(0.55, 0.8, 0.95, 1)
 size = 0.7
-short_label = ""
+sheet_path = "res://assets/sprites/enemies/CHARIOT.png"
+frame_size = Vector2i(96, 96)
+walk_frames = Vector2i(0, 11)
+die_frames = Vector2i(12, 21)
+display_cells = 1.9
+anchor = Vector2(0.5, 0.5)
 
 [sub_resource type="Resource" id="Resource_boss_warlord"]
 script = ExtResource("2_visual")
 type = "BOSS_WARLORD"
 color = Color(0.8, 0.15, 0.15, 1)
 size = 0.9
-short_label = ""
+sheet_path = "res://assets/sprites/enemies/BOSS_WARLORD.png"
+frame_size = Vector2i(96, 96)
+walk_frames = Vector2i(0, 11)
+die_frames = Vector2i(12, 21)
+display_cells = 3.8
+anchor = Vector2(0.5, 0.5)
+
+[sub_resource type="Resource" id="Resource_castle"]
+script = ExtResource("2_visual")
+type = "CASTLE"
+color = Color(0.85, 0.7, 0.35, 1)
+size = 0.9
+sheet_path = "res://assets/sprites/castle/castle.png"
+display_cells = 2.2
+anchor = Vector2(0.5, 1)
 
 [sub_resource type="Resource" id="Resource_fallback"]
 script = ExtResource("2_visual")
@@ -96,5 +155,5 @@ short_label = "?"
 
 [resource]
 script = ExtResource("1_catalog")
-visuals = Array[ExtResource("2_visual")]([SubResource("Resource_archer"), SubResource("Resource_mage"), SubResource("Resource_catapult"), SubResource("Resource_ballista"), SubResource("Resource_wall"), SubResource("Resource_goblin"), SubResource("Resource_orc"), SubResource("Resource_troll"), SubResource("Resource_dark_knight"), SubResource("Resource_sapeur"), SubResource("Resource_chariot"), SubResource("Resource_boss_warlord")])
+visuals = Array[ExtResource("2_visual")]([SubResource("Resource_archer"), SubResource("Resource_mage"), SubResource("Resource_catapult"), SubResource("Resource_ballista"), SubResource("Resource_wall"), SubResource("Resource_goblin"), SubResource("Resource_orc"), SubResource("Resource_troll"), SubResource("Resource_dark_knight"), SubResource("Resource_sapeur"), SubResource("Resource_chariot"), SubResource("Resource_boss_warlord"), SubResource("Resource_castle")])
 fallback = SubResource("Resource_fallback")

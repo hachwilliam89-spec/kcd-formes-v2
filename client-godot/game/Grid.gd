@@ -5,7 +5,9 @@ extends RefCounted
 ## L'espace local est celui de la vue de carte (MapView) AVANT sa mise à l'échelle
 ## pour l'écran : changer la taille des cases, c'est changer CELL_SIZE et rien d'autre.
 
-const CELL_SIZE: int = 16
+## Même valeur que le web (GameScene.ts CELL_SIZE) : les tailles et positions en
+## pixels relevées sur le web (décor exporté, sprites) se reprennent telles quelles.
+const CELL_SIZE: int = 40
 
 
 ## Coin haut-gauche de la case.

@@ -9,11 +9,14 @@ extends Node2D
 @export var palette: MapPalette
 
 var _layout: MapLayoutDto
+var _ground: Texture2D
 var _selected: Vector2i = Vector2i(-1, -1)
 
 
-func show_layout(layout: MapLayoutDto) -> void:
+## `ground` : sol exporté du web (voir DecorSet) ; null = cases colorées.
+func show_layout(layout: MapLayoutDto, ground: Texture2D = null) -> void:
 	_layout = layout
+	_ground = ground
 	_selected = Vector2i(-1, -1)
 	queue_redraw()
 
@@ -33,14 +36,17 @@ func local_size() -> Vector2:
 func _draw() -> void:
 	if _layout == null or palette == null:
 		return
-	for y: int in range(_layout.height):
-		for x: int in range(_layout.width):
-			var cell: Vector2i = Vector2i(x, y)
-			draw_rect(Grid.cell_rect(cell), _color_for(_layout.kind_at(cell)))
-	_draw_grid_lines()
-	_draw_lanes()
+	if _ground != null:
+		draw_texture_rect(_ground, Rect2(Vector2.ZERO, local_size()), false)
+	else:
+		for y: int in range(_layout.height):
+			for x: int in range(_layout.width):
+				var cell: Vector2i = Vector2i(x, y)
+				draw_rect(Grid.cell_rect(cell), _color_for(_layout.kind_at(cell)))
+		_draw_grid_lines()
+		_draw_lanes()
 	if _layout.contains(_selected):
-		draw_rect(Grid.cell_rect(_selected).grow(-0.5), palette.selection, false, 1.0)
+		draw_rect(Grid.cell_rect(_selected).grow(-1.0), palette.selection, false, 2.0)
 
 
 func _draw_grid_lines() -> void:

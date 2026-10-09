@@ -9,6 +9,7 @@ var level: int = 1
 var damage: int = 0
 var range_cells: float = 0.0
 var damage_type: String = ""
+var splash_radius: float = 0.0
 var hp: int = 0
 var max_hp: int = 0
 
@@ -25,6 +26,7 @@ static func from_variant(value: Variant) -> TowerDto:
 	dto.damage = int(body.get("damage", 0))
 	dto.range_cells = float(body.get("range", 0.0))
 	dto.damage_type = str(body.get("damageType", ""))
+	dto.splash_radius = float(body.get("splashRadius", 0.0))
 	dto.hp = int(body.get("hp", 0))
 	dto.max_hp = int(body.get("maxHp", 0))
 	return dto

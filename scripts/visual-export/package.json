@@ -1,0 +1,13 @@
+{
+  "name": "kcd-visual-export",
+  "private": true,
+  "type": "module",
+  "description": "Exporte les visuels du vrai GameScene web vers le client Godot (voir README.md)",
+  "scripts": {
+    "export": "node export.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "playwright-core": "^1.55.0"
+  }
+}

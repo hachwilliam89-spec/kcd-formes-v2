@@ -7,6 +7,8 @@ extends RefCounted
 var tick: int = 0
 var enemies: Array[EnemyStateDto] = []
 var hits: Array[HitDto] = []
+## Ennemis qui frappent une tour ce tick (siège) : animation d'attaque.
+var attackers: Array[String] = []
 var deaths: Array[String] = []
 var reached_castle: Array[String] = []
 var destroyed_towers: Array[String] = []
@@ -24,6 +26,8 @@ static func from_variant(value: Variant) -> TickDto:
 		if enemy != null:
 			dto.enemies.append(enemy)
 	dto.hits = HitDto.list_from(body.get("damageEvents"))
+	for item: Variant in DtoParse.array(body.get("towerDamageEvents")):
+		dto.attackers.append(str(DtoParse.dict(item).get("enemyId", "")))
 	dto.deaths = DtoParse.strings(body.get("deaths"))
 	dto.reached_castle = DtoParse.strings(body.get("reachedCastle"))
 	dto.destroyed_towers = DtoParse.strings(body.get("destroyedTowers"))
