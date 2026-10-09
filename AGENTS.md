@@ -9,6 +9,9 @@
 - Code, commentaires, commits et docs en **français**.
 - Commits : `type(portée): description` — types utilisés : `feat`, `fix`, `balance`, `refactor`, `test`, `docs`, `chore`.
 - Merges Git **uniquement en terminal**, jamais via l'interface web GitHub (pertes de fichiers constatées).
+- **`main` = production** : chaque push sur `main` déploie automatiquement sur le serveur (`deploy.yml`). On n'y travaille jamais directement.
+- **Une branche par étape**, créée depuis `main`, préfixe `feature/` (ou `fix/`, `docs/`) : ex. `feature/maps-endpoint`, `feature/godot-map-render`, `feature/godot-wave-replay`. Push de la branche pour la sauvegarder.
+- Étape terminée et tests verts → merge **en terminal** avec `git merge --no-ff` (le commit de merge garde l'étape lisible dans l'historique), puis push de `main`.
 - Projet **personnel** : le code est poussé sur **GitHub uniquement** (pas sur le GitLab UHA, réservé aux projets d'école).
 
 ## Le projet
