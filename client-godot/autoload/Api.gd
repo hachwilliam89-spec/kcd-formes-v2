@@ -25,6 +25,16 @@ func me() -> ApiResult:
 	return await _request(HTTPClient.METHOD_GET, "/api/v1/players/me")
 
 
+## Ids des cartes jouables, dans l'ordre de présentation.
+func list_maps() -> ApiResult:
+	return await _request(HTTPClient.METHOD_GET, "/api/v1/maps")
+
+
+## Disposition statique d'une carte (château, voies, cases constructibles…).
+func get_map_layout(map_id: String) -> ApiResult:
+	return await _request(HTTPClient.METHOD_GET, "/api/v1/maps/%s" % map_id.uri_encode())
+
+
 func _request(method: HTTPClient.Method, path: String, body: Variant = null,
 		authenticated: bool = true) -> ApiResult:
 	var http: HTTPRequest = HTTPRequest.new()

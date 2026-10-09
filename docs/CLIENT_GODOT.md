@@ -23,13 +23,16 @@ client-godot/
     ApiResult.gd          résultat d'un appel : ok / status (0 = réseau) / data / error (message du backend)
     dto/                  classes typées des DTO, miroir des records Java (AuthResponseDto…)
   game/
-    TickPlayer.gd         rejoue les ticks et émet des signaux (aucun accès aux nœuds visuels)
-    Grid.gd               seule conversion case ↔ écran (cell_to_world / world_to_cell)
-    entities/             scènes Tower, Enemy, Projectile, Castle (.tscn)
-    maps/                 cartes saisonnières en TileMapLayer
+    Game.tscn / Game.gd   écran de jeu (contrôleur) : charge la carte, adapte l'échelle, gère les taps
+    Grid.gd               seule conversion case ↔ espace local de la carte (CELL_SIZE = 16)
+    map/MapView.gd        vue provisoire de la carte (cases colorées) — remplaçable par une vue à tuiles
+    TickPlayer.gd         rejoue les ticks et émet des signaux (aucun accès aux nœuds visuels) — à venir
+    entities/             scènes Tower, Enemy, Projectile, Castle (.tscn) — à venir
   visuals/
-    catalog.tres          type d'unité → UnitVisual
-    units/*.tres          une ressource UnitVisual par type (animations, échelle, décalages, sons, effets)
+    MapPalette.gd + map_palette_default.tres   couleurs de la vue de carte provisoire
+    MapNames.gd           libellés affichés des cartes (les ids viennent de l'API)
+    catalog.tres          type d'unité → UnitVisual — à venir
+    units/*.tres          une ressource UnitVisual par type (animations, échelle, décalages, sons, effets) — à venir
   ui/
     theme.tres            LE thème unique de l'UI (déclaré dans project.godot → gui/theme/custom)
     boot/ login/ home/    puis MapSelect, Hud, Coop, Versus, Leaderboard
@@ -98,7 +101,8 @@ client-godot/
 
 - [ ] **Spike** (≤ 1 semaine) : connexion REST, une carte, replay d'une vague solo, export Android + web, mesures sur téléphone. Critères d'arrêt : ADR 0001.
   - [x] Ossature + connexion / inscription / session persistée (2026-10-09)
-  - [ ] Une carte + replay d'une vague solo
+  - [x] Carte : disposition chargée depuis `GET /api/v1/maps/{id}`, affichée à l'échelle de l'écran, tap → nature de la case, choix parmi les 4 cartes (2026-10-09)
+  - [ ] Partie : création, pose de tours au tap, replay d'une vague solo
   - [ ] Exports Android + web, mesures sur téléphone
 - [ ] Prérequis backend (§5).
 - [ ] Solo complet : HUD, tutoriel, son, quatre saisons.

@@ -38,13 +38,27 @@ unique_name_in_owner = true
 layout_mode = 2
 horizontal_alignment = 1
 
-[node name="Next" type="Label" parent="Center/Card/Box"]
+[node name="MapPicker" type="OptionButton" parent="Center/Card/Box"]
+unique_name_in_owner = true
 layout_mode = 2
-text = "Spike : prochaine étape = rejouer une vague solo."
+disabled = true
+
+[node name="Play" type="Button" parent="Center/Card/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Voir la carte"
+
+[node name="Error" type="Label" parent="Center/Card/Box"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"ErrorLabel"
 horizontal_alignment = 1
 autowrap_mode = 3
 
 [node name="Logout" type="Button" parent="Center/Card/Box"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"FlatButton"
 text = "Se déconnecter"
