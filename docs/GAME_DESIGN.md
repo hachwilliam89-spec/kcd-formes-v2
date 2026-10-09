@@ -2,7 +2,7 @@
 
 > Document vivant : à mettre à jour à chaque décision de gameplay qui change ou affine ce qui suit. Versionné avec le code (git), pas un artefact figé.
 
-Dernière mise à jour : 2026-08-09 (chemin serpentin, habillage v2 : pixel-art / son / tuto, cap sur le multi coop temps réel)
+Dernière mise à jour : 2026-10-09 (portage mobile : client de jeu unique Godot, voir ADR 0001)
 
 ## 1. Vision et piliers
 
@@ -118,11 +118,13 @@ Ces éléments sont **purement de présentation** : la simulation reste autorita
 
 ## 5. Portage mobile
 
-- **Web responsive d'abord** : Phaser fonctionne nativement dans les navigateurs mobiles (canvas/WebGL, tactile pris en charge) — pas de réécriture du moteur de jeu.
-- Contraintes UI à respecter **dès le développement du solo** (coût quasi nul maintenant, coûteux à refaire après coup) :
-  - Zones cliquables assez grandes pour un doigt (pas de boutons pensés souris uniquement).
-  - Aucune interaction qui dépend du survol (hover) — tout doit fonctionner au tap simple.
-- **App native (optionnel, plus tard)** : empaquetage via Capacitor du même frontend web, sans toucher à Phaser ni au backend. Le WebSocket du multi fonctionne identiquement dans ce cas.
+> Décision : [ADR 0001](adr/0001-client-de-jeu-godot.md) — remplace l'ancien plan « web responsive puis Capacitor ».
+
+- **Client de jeu unique en Godot 4 (GDScript)**, exporté vers Android, iOS, web et desktop. Il remplace à terme le jeu Phaser du web : un seul code de rendu et d'UI de jeu pour toutes les plateformes.
+- **Next.js reste le site vitrine** (accueil, SEO, classement, compte) et sert l'export web Godot sur `/jouer`.
+- **Backend inchangé** : la simulation reste autoritaire côté serveur, le client ne fait que rejouer l'état reçu. Seul ajout : exposer les règles de pose pour qu'aucun client ne les duplique.
+- Contraintes UI conservées : cibles tactiles assez grandes, aucune interaction dépendant du survol.
+- Architecture et règles du client : `docs/CLIENT_GODOT.md`.
 
 ## 6. Séquencement de développement
 
@@ -131,7 +133,7 @@ Ces éléments sont **purement de présentation** : la simulation reste autorita
 3. Leaderboard + défi ghost asynchrone.
 4. Multi **temps réel** : coop → versus rush → asymétrique (WebSocket/STOMP, boucle autoritaire) — voir `docs/MULTIPLAYER.md`.
 5. Matchmaking + ELO (partagé avec le défi async).
-6. Portage mobile (web responsive déjà en place, puis app native si pertinent).
+6. Portage mobile : client de jeu unique Godot (voir §5 et ADR 0001).
 
 ## 7. Principes de maintenabilité et d'évolutivité
 
