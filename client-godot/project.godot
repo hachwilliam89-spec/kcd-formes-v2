@@ -1,4 +1,10 @@
-; War Seasons — client de jeu Godot (voir docs/CLIENT_GODOT.md et docs/adr/0001).
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -42,12 +48,13 @@ pointing/emulate_touch_from_mouse=true
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0
+textures/vram_compression/import_etc2_astc=true
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 
 [war_seasons]
 
 debug/show_fps=true
-
 network/api_base_url="http://localhost:8080"
 network/api_base_url.web=""
+network/api_base_url.android="https://kcd-formes.fr"

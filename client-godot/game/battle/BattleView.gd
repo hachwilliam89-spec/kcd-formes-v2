@@ -39,6 +39,9 @@ var _projectiles: Array[Dictionary] = []
 var _impacts: Array[Dictionary] = []
 var _tick_index: int = 0
 var _time: float = 0.0
+## Temps CPU passé dans cette vue (rejeu + animation + dessin), en µs, cumulé
+## depuis la dernière lecture (banc de perf : take_cpu_usec).
+var _cpu_usec: int = 0
 
 
 func bind(player: TickPlayer) -> void:
@@ -66,6 +69,13 @@ func show_towers(towers: Array[TowerDto]) -> void:
 	queue_redraw()
 
 
+## Renvoie le temps CPU cumulé de la vue depuis le dernier appel, puis le remet à zéro.
+func take_cpu_usec() -> int:
+	var value: int = _cpu_usec
+	_cpu_usec = 0
+	return value
+
+
 ## Nombre d'ennemis affichés (compteur de perf).
 func enemy_count() -> int:
 	return _player.current.enemies.size() if _player != null and _player.current != null and _player.playing else 0
@@ -74,6 +84,12 @@ func enemy_count() -> int:
 # --- Rejeu d'un tick (GameScene.playWave → drawEnemies + drawEffects) --------
 
 func _on_tick(tick: TickDto) -> void:
+	var started: int = Time.get_ticks_usec()
+	_replay_tick(tick)
+	_cpu_usec += Time.get_ticks_usec() - started
+
+
+func _replay_tick(tick: TickDto) -> void:
 	_tick_index += 1
 	var attacking: Dictionary = {}
 	for enemy_id: String in tick.attackers:
@@ -183,6 +199,12 @@ func _spawn_impact(key: String, cell_pos: Vector2, scale_cells: float, angle_deg
 # --- Animation -----------------------------------------------------------------
 
 func _process(delta: float) -> void:
+	var started: int = Time.get_ticks_usec()
+	_animate(delta)
+	_cpu_usec += Time.get_ticks_usec() - started
+
+
+func _animate(delta: float) -> void:
 	_time += delta
 	var arrived: Array[Dictionary] = []
 	for p: Dictionary in _projectiles:
@@ -202,6 +224,12 @@ func _process(delta: float) -> void:
 # --- Rendu (un seul _draw, trié par profondeur comme les GameObjects Phaser) ---
 
 func _draw() -> void:
+	var started: int = Time.get_ticks_usec()
+	_render()
+	_cpu_usec += Time.get_ticks_usec() - started
+
+
+func _render() -> void:
 	if catalog == null:
 		return
 	var items: Array[Dictionary] = []

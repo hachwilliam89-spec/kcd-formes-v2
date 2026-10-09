@@ -70,3 +70,10 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"FlatButton"
 text = "Pas de compte ? S'inscrire"
+
+[node name="Bench" type="Button" parent="Center/Card/Form"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"FlatButton"
+text = "Banc de perf"

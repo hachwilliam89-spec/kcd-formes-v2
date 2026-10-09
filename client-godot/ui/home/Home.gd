@@ -11,6 +11,9 @@ var _map_ids: Array[String] = []
 
 
 func _ready() -> void:
+	var bench: Button = %Bench
+	bench.visible = bool(ProjectSettings.get_setting("war_seasons/debug/show_fps", false))
+	bench.pressed.connect(Router.goto_bench)
 	_welcome.text = "Connecté en tant que %s" % Session.username
 	_logout.pressed.connect(_on_logout)
 	_play.pressed.connect(_on_play)

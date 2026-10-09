@@ -19,6 +19,9 @@ var _busy: bool = false
 
 
 func _ready() -> void:
+	var bench: Button = %Bench
+	bench.visible = bool(ProjectSettings.get_setting("war_seasons/debug/show_fps", false))
+	bench.pressed.connect(Router.goto_bench)
 	_submit.pressed.connect(_on_submit)
 	_mode_switch.pressed.connect(_toggle_mode)
 	_password.text_submitted.connect(_on_text_submitted)
