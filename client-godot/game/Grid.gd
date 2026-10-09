@@ -21,6 +21,11 @@ static func cell_rect(cell: Vector2i) -> Rect2:
 	return Rect2(cell_origin(cell), Vector2(CELL_SIZE, CELL_SIZE))
 
 
+## Position continue en cases (ennemis : un entier = centre de la case, comme côté serveur).
+static func grid_to_local(pos: Vector2) -> Vector2:
+	return (pos + Vector2(0.5, 0.5)) * CELL_SIZE
+
+
 ## Case contenant un point de l'espace local (peut être hors carte : à vérifier par l'appelant).
 static func local_to_cell(point: Vector2) -> Vector2i:
 	return Vector2i(floori(point.x / CELL_SIZE), floori(point.y / CELL_SIZE))

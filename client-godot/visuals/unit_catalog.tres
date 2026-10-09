@@ -1,0 +1,100 @@
+[gd_resource type="Resource" script_class="UnitCatalog" format=3]
+
+[ext_resource type="Script" path="res://visuals/UnitCatalog.gd" id="1_catalog"]
+[ext_resource type="Script" path="res://visuals/UnitVisual.gd" id="2_visual"]
+
+[sub_resource type="Resource" id="Resource_archer"]
+script = ExtResource("2_visual")
+type = "ARCHER"
+color = Color(0.42, 0.62, 0.3, 1)
+size = 0.7
+short_label = "A"
+
+[sub_resource type="Resource" id="Resource_mage"]
+script = ExtResource("2_visual")
+type = "MAGE"
+color = Color(0.45, 0.4, 0.85, 1)
+size = 0.7
+short_label = "M"
+
+[sub_resource type="Resource" id="Resource_catapult"]
+script = ExtResource("2_visual")
+type = "CATAPULT"
+color = Color(0.62, 0.44, 0.25, 1)
+size = 0.75
+short_label = "C"
+
+[sub_resource type="Resource" id="Resource_ballista"]
+script = ExtResource("2_visual")
+type = "BALLISTA"
+color = Color(0.55, 0.55, 0.6, 1)
+size = 0.75
+short_label = "B"
+
+[sub_resource type="Resource" id="Resource_wall"]
+script = ExtResource("2_visual")
+type = "WALL"
+color = Color(0.5, 0.48, 0.45, 1)
+size = 0.9
+short_label = "W"
+
+[sub_resource type="Resource" id="Resource_goblin"]
+script = ExtResource("2_visual")
+type = "GOBLIN"
+color = Color(0.45, 0.75, 0.3, 1)
+size = 0.4
+short_label = ""
+
+[sub_resource type="Resource" id="Resource_orc"]
+script = ExtResource("2_visual")
+type = "ORC"
+color = Color(0.3, 0.55, 0.25, 1)
+size = 0.5
+short_label = ""
+
+[sub_resource type="Resource" id="Resource_troll"]
+script = ExtResource("2_visual")
+type = "TROLL"
+color = Color(0.45, 0.5, 0.42, 1)
+size = 0.65
+short_label = ""
+
+[sub_resource type="Resource" id="Resource_dark_knight"]
+script = ExtResource("2_visual")
+type = "DARK_KNIGHT"
+color = Color(0.35, 0.2, 0.5, 1)
+size = 0.55
+short_label = ""
+
+[sub_resource type="Resource" id="Resource_sapeur"]
+script = ExtResource("2_visual")
+type = "SAPEUR"
+color = Color(0.85, 0.55, 0.15, 1)
+size = 0.5
+short_label = ""
+
+[sub_resource type="Resource" id="Resource_chariot"]
+script = ExtResource("2_visual")
+type = "CHARIOT"
+color = Color(0.55, 0.8, 0.95, 1)
+size = 0.7
+short_label = ""
+
+[sub_resource type="Resource" id="Resource_boss_warlord"]
+script = ExtResource("2_visual")
+type = "BOSS_WARLORD"
+color = Color(0.8, 0.15, 0.15, 1)
+size = 0.9
+short_label = ""
+
+[sub_resource type="Resource" id="Resource_fallback"]
+script = ExtResource("2_visual")
+type = "?"
+color = Color(1, 0, 1, 1)
+size = 0.5
+short_label = "?"
+
+[resource]
+script = ExtResource("1_catalog")
+visuals = Array[ExtResource("2_visual")]([SubResource("Resource_archer"), SubResource("Resource_mage"), SubResource("Resource_catapult"), SubResource("Resource_ballista"), SubResource("Resource_wall"), SubResource("Resource_goblin"), SubResource("Resource_orc"), SubResource("Resource_troll"), SubResource("Resource_dark_knight"), SubResource("Resource_sapeur"), SubResource("Resource_chariot"), SubResource("Resource_boss_warlord")])
+fallback = SubResource("Resource_fallback")

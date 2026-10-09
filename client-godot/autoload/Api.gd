@@ -35,6 +35,32 @@ func get_map_layout(map_id: String) -> ApiResult:
 	return await _request(HTTPClient.METHOD_GET, "/api/v1/maps/%s" % map_id.uri_encode())
 
 
+## Nouvelle partie solo sur la carte donnée → GameResponse.
+func create_game(castle_name: String, map_id: String) -> ApiResult:
+	return await _request(HTTPClient.METHOD_POST, "/api/v1/games",
+		{"castleName": castle_name, "mapId": map_id})
+
+
+func get_game(game_id: String) -> ApiResult:
+	return await _request(HTTPClient.METHOD_GET, "/api/v1/games/%s" % game_id)
+
+
+## Intention de pose : le serveur valide (case, or, déblocage) et renvoie la tour créée.
+func place_tower(game_id: String, tower_type: String, cell: Vector2i) -> ApiResult:
+	return await _request(HTTPClient.METHOD_POST, "/api/v1/games/%s/towers" % game_id,
+		{"towerType": tower_type, "x": cell.x, "y": cell.y})
+
+
+## Lance la vague suivante : le serveur la simule entièrement et renvoie tous ses ticks.
+func start_wave(game_id: String) -> ApiResult:
+	return await _request(HTTPClient.METHOD_POST, "/api/v1/games/%s/waves/start" % game_id, {})
+
+
+func choose_bonus(game_id: String, bonus_type: String) -> ApiResult:
+	return await _request(HTTPClient.METHOD_POST, "/api/v1/games/%s/bonus/choose" % game_id,
+		{"bonusType": bonus_type})
+
+
 func _request(method: HTTPClient.Method, path: String, body: Variant = null,
 		authenticated: bool = true) -> ApiResult:
 	var http: HTTPRequest = HTTPRequest.new()

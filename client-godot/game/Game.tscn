@@ -3,6 +3,11 @@
 [ext_resource type="Script" path="res://game/Game.gd" id="1_game"]
 [ext_resource type="Script" path="res://game/map/MapView.gd" id="2_mapview"]
 [ext_resource type="Resource" path="res://visuals/map_palette_default.tres" id="3_palette"]
+[ext_resource type="Script" path="res://game/battle/BattleView.gd" id="4_battle"]
+[ext_resource type="Resource" path="res://visuals/unit_catalog.tres" id="5_catalog"]
+[ext_resource type="Script" path="res://game/TickPlayer.gd" id="6_ticks"]
+
+[sub_resource type="ButtonGroup" id="ButtonGroup_towers"]
 
 [node name="Game" type="Panel"]
 layout_mode = 3
@@ -13,6 +18,10 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_type_variation = &"Screen"
 script = ExtResource("1_game")
+
+[node name="TickPlayer" type="Node" parent="."]
+unique_name_in_owner = true
+script = ExtResource("6_ticks")
 
 [node name="Layout" type="HBoxContainer" parent="."]
 layout_mode = 1
@@ -27,15 +36,19 @@ unique_name_in_owner = true
 clip_contents = true
 layout_mode = 2
 size_flags_horizontal = 3
-mouse_filter = 0
 
 [node name="MapView" type="Node2D" parent="Layout/MapArea"]
 unique_name_in_owner = true
 script = ExtResource("2_mapview")
 palette = ExtResource("3_palette")
 
+[node name="BattleView" type="Node2D" parent="Layout/MapArea/MapView"]
+unique_name_in_owner = true
+script = ExtResource("4_battle")
+catalog = ExtResource("5_catalog")
+
 [node name="Side" type="PanelContainer" parent="Layout"]
-custom_minimum_size = Vector2(170, 0)
+custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
 [node name="Box" type="VBoxContainer" parent="Layout/Side"]
@@ -47,7 +60,56 @@ layout_mode = 2
 theme_type_variation = &"HeadingLabel"
 autowrap_mode = 3
 
-[node name="CellInfo" type="Label" parent="Layout/Side/Box"]
+[node name="Stats" type="Label" parent="Layout/Side/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="TowerBar" type="HBoxContainer" parent="Layout/Side/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Archer" type="Button" parent="Layout/Side/Box/TowerBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SmallButton"
+toggle_mode = true
+button_pressed = true
+button_group = SubResource("ButtonGroup_towers")
+text = "Archer"
+metadata/tower_type = "ARCHER"
+
+[node name="Mage" type="Button" parent="Layout/Side/Box/TowerBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SmallButton"
+toggle_mode = true
+button_group = SubResource("ButtonGroup_towers")
+text = "Mage"
+metadata/tower_type = "MAGE"
+
+[node name="Catapult" type="Button" parent="Layout/Side/Box/TowerBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SmallButton"
+toggle_mode = true
+button_group = SubResource("ButtonGroup_towers")
+text = "Catap."
+metadata/tower_type = "CATAPULT"
+
+[node name="WaveButton" type="Button" parent="Layout/Side/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Lancer la vague"
+clip_text = true
+
+[node name="BonusBox" type="VBoxContainer" parent="Layout/Side/Box"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="Info" type="Label" parent="Layout/Side/Box"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
@@ -56,4 +118,5 @@ autowrap_mode = 3
 [node name="Back" type="Button" parent="Layout/Side/Box"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Retour"
+theme_type_variation = &"FlatButton"
+text = "Quitter"

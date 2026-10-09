@@ -23,16 +23,16 @@ client-godot/
     ApiResult.gd          résultat d'un appel : ok / status (0 = réseau) / data / error (message du backend)
     dto/                  classes typées des DTO, miroir des records Java (AuthResponseDto…)
   game/
-    Game.tscn / Game.gd   écran de jeu (contrôleur) : charge la carte, adapte l'échelle, gère les taps
-    Grid.gd               seule conversion case ↔ espace local de la carte (CELL_SIZE = 16)
+    Game.tscn / Game.gd   écran de jeu (contrôleur) : carte, création de partie, pose au tap, vagues, bonus
+    Grid.gd               seule conversion case ↔ espace local (CELL_SIZE = 16 ; ennemis : entier = centre de case)
+    TickPlayer.gd         rejoue les ticks à 120 ms, interpole les ennemis, signaux tick_played / finished
     map/MapView.gd        vue provisoire de la carte (cases colorées) — remplaçable par une vue à tuiles
-    TickPlayer.gd         rejoue les ticks et émet des signaux (aucun accès aux nœuds visuels) — à venir
-    entities/             scènes Tower, Enemy, Projectile, Castle (.tscn) — à venir
+    battle/BattleView.gd  vue provisoire du combat (formes colorées) : tours, ennemis, tirs, morts
+    entities/             scènes Tower, Enemy, Projectile, Castle avec sprites — à venir
   visuals/
     MapPalette.gd + map_palette_default.tres   couleurs de la vue de carte provisoire
     MapNames.gd           libellés affichés des cartes (les ids viennent de l'API)
-    catalog.tres          type d'unité → UnitVisual — à venir
-    units/*.tres          une ressource UnitVisual par type (animations, échelle, décalages, sons, effets) — à venir
+    UnitVisual.gd / UnitCatalog.gd / unit_catalog.tres   type d'unité → apparence (couleur, taille, lettre pour l'instant ; sprites ensuite)
   ui/
     theme.tres            LE thème unique de l'UI (déclaré dans project.godot → gui/theme/custom)
     boot/ login/ home/    puis MapSelect, Hud, Coop, Versus, Leaderboard
@@ -73,6 +73,8 @@ client-godot/
 
 - [x] Exposer la disposition des cartes, cases constructibles comprises : `GET /api/v1/maps/{mapId}` (`GetMapLayoutUseCase` → `MapLayoutService` → `MapController`).
 - [ ] Verdict de pose propre à une partie (tours posées, crue, limite de murs) si l'aperçu client en a besoin au-delà de « constructible + case libre ».
+- [ ] Catalogue des tours (coût, portée, déblocage) exposé par l'API : le client n'affiche pas encore les coûts, l'or est validé par le serveur à la pose.
+- [ ] Le mur (`WALL`) se pose sur la route : le client ne le propose pas encore (il filtre les taps sur les cases constructibles) ; la Baliste non plus (déblocage par compte).
 - [ ] Brancher `frontend-web` sur `/api/v1/maps` et supprimer `maps.ts` / les constantes dupliquées de `constants.ts`.
 - [ ] Vérifier l'acceptation des connexions WebSocket des clients natifs (en-tête `Origin`) dans `WebSocketConfig`, et ajouter les origines de dev nécessaires.
 
@@ -102,7 +104,8 @@ client-godot/
 - [ ] **Spike** (≤ 1 semaine) : connexion REST, une carte, replay d'une vague solo, export Android + web, mesures sur téléphone. Critères d'arrêt : ADR 0001.
   - [x] Ossature + connexion / inscription / session persistée (2026-10-09)
   - [x] Carte : disposition chargée depuis `GET /api/v1/maps/{id}`, affichée à l'échelle de l'écran, tap → nature de la case, choix parmi les 4 cartes (2026-10-09)
-  - [ ] Partie : création, pose de tours au tap, replay d'une vague solo
+  - [x] Partie : création, pose de tours au tap (Archer, Mage, Catapulte), replay des vagues à 120 ms avec interpolation, tirs et morts, palier de bonus, défaite et nouvelle partie (2026-10-09)
+  - [ ] Visuels réels (sprites du web) pour mesurer la perf de façon représentative
   - [ ] Exports Android + web, mesures sur téléphone
 - [ ] Prérequis backend (§5).
 - [ ] Solo complet : HUD, tutoriel, son, quatre saisons.
