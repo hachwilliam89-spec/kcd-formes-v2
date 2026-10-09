@@ -114,7 +114,16 @@ client-godot/
 - Lancer en local (backend sur `localhost:8080`) : `godot --path client-godot` (ou ouvrir `client-godot/project.godot` dans l'éditeur, F5).
 - Vérifier que tout compile sans erreur : `godot --headless --path client-godot --import`.
 - Test sur téléphone en dev : surcharger l'URL dans `project.godot` (`network/api_base_url.android="http://<IP-du-Mac>:8080"`). Android bloque le HTTP en clair par défaut : à vérifier au premier export.
-- Commandes de tests (gdUnit4) et d'export : à consigner ici quand elles seront en place.
+- **Exports** (préréglages dans `client-godot/export_presets.cfg`, sans secret ; à lancer sur une machine qui a les assets) :
+  ```bash
+  mkdir -p client-godot/build/android client-godot/build/web && touch client-godot/build/.gdignore
+  godot --headless --path client-godot --export-debug "Android" build/android/war-seasons.apk
+  godot --headless --path client-godot --export-release "Web" build/web/index.html
+  ```
+  Android : arm64, permission INTERNET, API de prod (`network/api_base_url.android`). Web : sans threads (pas d'en-têtes COOP/COEP), `index.wasm` ≈ 40 Mo non compressé (≈ 10 Mo gzip), `index.pck` ≈ 11 Mo avec les assets.
+- **Banc de perf** (`game/bench/`, bouton « Banc de perf » visible si `war_seasons/debug/show_fps`, ou `-- --bench` / `?bench`) : rejoue hors ligne la vague du banc web (`scripts/perf-bench/wave.ts`, partagé : 200 ennemis, 32 tours, graine 1, jusqu'à 129 à l'écran) avec les vraies vues du jeu. Mesure : durée des images (ce que voit le joueur), CPU du jeu (rejeu + dessin, chronométré dans `BattleView`), CPU et GPU de rendu. Résultat à l'écran, dans la console (`BENCH {...}`) et dans `user://bench_*.json`. Durée = somme des images (une mise en arrière-plan ne fausse plus le FPS) ; les sorties de l'appli pendant la mesure sont comptées (`interruptions`) : une mesure valable en a 0.
+- **Tester l'export web sur un téléphone** : Godot web exige un contexte sécurisé (HTTPS ou `localhost`), une IP locale en HTTP est refusée. Servir `build/web` (`python3 -m http.server 8060 -d client-godot/build/web`) et l'exposer en HTTPS par un tunnel temporaire (`cloudflared tunnel --url http://localhost:8060`), puis ouvrir `https://<tunnel>/?bench`, téléphone en paysage, sans quitter le navigateur pendant la mesure.
+- Tests unitaires gdUnit4 : pas encore en place (les vérifications du spike sont faites par des scènes de test jetables).
 
 ## 8. Jalons
 
@@ -123,7 +132,21 @@ client-godot/
   - [x] Carte : disposition chargée depuis `GET /api/v1/maps/{id}`, affichée à l'échelle de l'écran, tap → nature de la case, choix parmi les 4 cartes (2026-10-09)
   - [x] Partie : création, pose de tours au tap (Archer, Mage, Catapulte), replay des vagues à 120 ms avec interpolation, tirs et morts, palier de bonus, défaite et nouvelle partie (2026-10-09)
   - [x] Visuels identiques au web : sol et décor exportés du vrai GameScene, tours (socle + arme qui vise, Mage animé), ennemis, tirs et impacts, vérifiés par comparaison d'images ; compteur FPS en jeu (`war_seasons/debug/show_fps`) (2026-10-09)
-  - [ ] Exports Android + web, mesures sur téléphone
+  - [x] Exports Android + web configurés, banc de perf identique au banc web (2026-10-09)
+  - [ ] Mesures sur téléphone → conclusion dans l'ADR 0001
+
+### Mesures du banc (même vague : 200 ennemis, 32 tours, graine 1)
+
+| Date | Client | Machine | Images (moy / p95) | FPS moy | CPU jeu moy | CPU rendu moy | Remarque |
+|---|---|---|---|---|---|---|---|
+| 2026-10-09 | Web (Phaser), `perf-bench` | conteneur sans GPU (SwiftShader) | — | — | 1,97 ms (`game.step`, jeu + soumission du rendu) | inclus | référence |
+| 2026-10-09 | Godot natif | conteneur sans GPU (llvmpipe) | 34 / — ms | 29 | 2,88 ms (p95 6,2) | 2,55 ms | GPU émulé 22,9 ms : non représentatif |
+| 2026-10-09 | Godot web (wasm) | conteneur sans GPU (SwiftShader) | — | 7 | ≈ 3,9 ms (`BattleView`) | — | rendu logiciel du navigateur : non représentatif |
+| 2026-10-09 | Godot web (wasm) | iPhone de Kim, Safari (modèle à préciser) | 16,7 / 16,7 ms (p99 16,7, max 25,3) | 60,0 | 2,43 ms (p95 4,00) | 1,52 ms | 8035 images, 7 > 16,7 ms, 0 > 33 ms, 0 interruption, 129 ennemis max ; GPU non mesurable en WebGL |
+| à faire | Godot Android | Android milieu de gamme (à emprunter : Kim a un iPhone) | | | | | **critère ADR : ≥ 60 FPS** |
+| à faire | Godot iOS natif | iPhone de Kim | | | | | facultatif pour le spike (Xcode + compte Apple) |
+
+Lecture : sur CPU, Godot consomme ≈ 2,7× plus que Phaser sur cette scène (≈ 5,4 ms contre 1,97 ms), tout en restant loin du budget de 16,7 ms. Si le téléphone ne tient pas 60 FPS, piste connue : passer `BattleView` du dessin immédiat en GDScript à des nœuds `Sprite2D` triés par le moteur (y-sort en C++).
 - [ ] Prérequis backend (§5).
 - [ ] Solo complet : HUD, tutoriel, son, quatre saisons.
 - [ ] Coop puis versus (STOMP).

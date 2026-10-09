@@ -4,7 +4,8 @@
 # 1. Copie les sprites sous licence utilisés par le combat (frontend-web/public/sprites,
 #    alimenté par le bundle kcd-assets.tgz) dans client-godot/assets/sprites/.
 # 2. Exporte, depuis le VRAI GameScene web, le sol et le décor de chaque carte
-#    (scripts/visual-export) dans client-godot/assets/baked/.
+#    (scripts/visual-export) dans client-godot/assets/baked/, plus la vague du banc
+#    de charge (même générateur que scripts/perf-bench) pour l'écran « Banc de perf ».
 # Tout est dans client-godot/assets/, ignoré par git — comme côté web, ces fichiers
 # ne sont jamais versionnés. Sans eux, le client tourne avec des formes colorées.
 #
@@ -38,5 +39,5 @@ if [ ! -d scripts/visual-export/node_modules ] || [ ! -d frontend-web/node_modul
   exit 0
 fi
 rm -rf client-godot/assets/baked
-(cd scripts/visual-export && node export.mjs)
+(cd scripts/visual-export && node export.mjs && node export.mjs --bench --maps desert)
 echo "Étape suivante : godot --headless --path client-godot --import"

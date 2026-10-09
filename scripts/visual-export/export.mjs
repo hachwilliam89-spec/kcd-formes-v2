@@ -6,7 +6,11 @@
 // sous licence). Option --reference : captures du web pendant une vague
 // déterministe + ses ticks, pour comparer le rendu Godot (dossier --out).
 //
-// Usage : npm run export [-- --maps desert,spring] [-- --reference --out /tmp/ref]
+// Option --bench : la vague du banc de charge (générateur de scripts/perf-bench)
+// en bench.json, rejouée par l'écran « Banc de perf » du client Godot.
+//
+// Usage : npm run export [-- --maps desert,spring] [-- --bench --maps desert]
+//         [-- --reference --out /tmp/ref]
 import { build } from 'esbuild'
 import { chromium } from 'playwright-core'
 import http from 'node:http'
@@ -23,6 +27,7 @@ const { values: opt } = parseArgs({
     options: {
         maps: { type: 'string', default: 'desert,fourche,spring,autumn' },
         reference: { type: 'boolean', default: false },
+        bench: { type: 'boolean', default: false },
         out: { type: 'string', default: path.join(root, 'client-godot/assets/baked') },
         software: { type: 'boolean', default: false },
     },
@@ -73,13 +78,19 @@ for (const map of opt.maps.split(',')) {
     const page = await browser.newPage({ viewport: { width: 800, height: 640 } })
     const errors = []
     page.on('pageerror', (e) => errors.push(e.message))
-    await page.goto(`http://localhost:${port}/?map=${map}${opt.reference ? '&mode=wave' : ''}`)
+    const mode = opt.bench ? 'bench' : opt.reference ? 'wave' : 'export'
+    await page.goto(`http://localhost:${port}/?map=${map}&mode=${mode}`)
     await page.waitForFunction(() => window.__done, null, { timeout: 5 * 60_000, polling: 200 })
     const err = await page.evaluate(() => window.__error)
     if (err) throw new Error(`${map} : ${err}`)
     const dir = path.join(opt.out, map)
     fs.mkdirSync(path.join(dir, 'textures'), { recursive: true })
-    if (opt.reference) {
+    if (opt.bench) {
+        const data = await page.evaluate(() => window.__export)
+        fs.writeFileSync(path.join(dir, 'bench.json'), JSON.stringify(data))
+        const peak = Math.max(...data.ticks.map((t) => t.enemies.length))
+        console.log(`${map} : vague du banc (${data.enemies} ennemis, ${data.towers.length} tours, ${data.ticks.length} ticks, jusqu'à ${peak} à l'écran)`)
+    } else if (opt.reference) {
         const { data, shots } = await page.evaluate(() => ({ data: window.__export, shots: window.__shots }))
         fs.writeFileSync(path.join(dir, 'wave.json'), JSON.stringify(data))
         for (const s of shots) fs.writeFileSync(path.join(dir, `web_tick${s.tick}.png`), dataUrl(s.png))

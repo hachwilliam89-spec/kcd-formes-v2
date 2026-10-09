@@ -13,6 +13,9 @@ func _ready() -> void:
 
 func _check_session() -> void:
 	_retry.visible = false
+	if Router.bench_requested():
+		Router.goto_bench()
+		return
 	if not Session.is_logged_in():
 		Router.goto_login()
 		return
