@@ -60,7 +60,7 @@ public class PlaceTowerService implements PlaceTowerUseCase {
         // devant et le cassent (voir WaveSimulationService.handleWallBlocking).
         Position pos = new Position(x, y);
         boolean onCorridor = pathfindingService.corridorCells(map).contains(pos);
-        if (type == TowerType.WALL) {
+        if (type.placedOnCorridor()) {
             if (!onCorridor) {
                 throw new IllegalStateException(
                         "Wall must be placed on the enemy corridor (cell (%d, %d) is outside it)".formatted(x, y));

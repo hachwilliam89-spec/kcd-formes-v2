@@ -102,4 +102,13 @@ public enum TowerType {
         this.structureHp = structureHp;
         this.heavyTargetMultiplier = heavyTargetMultiplier;
     }
+
+    /**
+     * Se pose SUR le couloir des ennemis (règle inverse des tours, voir
+     * PlaceTowerService) : seul le Mur-barrage. Exposé aussi aux clients par
+     * le catalogue des tours (GetTowerCatalogUseCase).
+     */
+    public boolean placedOnCorridor() {
+        return this == WALL;
+    }
 }
