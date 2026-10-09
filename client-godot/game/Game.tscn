@@ -4,7 +4,7 @@
 [ext_resource type="Script" path="res://game/map/MapView.gd" id="2_mapview"]
 [ext_resource type="Resource" path="res://visuals/map_palette_default.tres" id="3_palette"]
 [ext_resource type="Script" path="res://game/battle/BattleView.gd" id="4_battle"]
-[ext_resource type="Resource" path="res://visuals/unit_catalog.tres" id="5_catalog"]
+[ext_resource type="Resource" path="res://visuals/visual_catalog.tres" id="5_catalog"]
 [ext_resource type="Script" path="res://game/TickPlayer.gd" id="6_ticks"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_towers"]
@@ -46,6 +46,13 @@ palette = ExtResource("3_palette")
 unique_name_in_owner = true
 script = ExtResource("4_battle")
 catalog = ExtResource("5_catalog")
+
+[node name="Fps" type="Label" parent="Layout/MapArea"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 4.0
+offset_top = 2.0
+theme_type_variation = &"FpsLabel"
 
 [node name="Side" type="PanelContainer" parent="Layout"]
 custom_minimum_size = Vector2(200, 0)

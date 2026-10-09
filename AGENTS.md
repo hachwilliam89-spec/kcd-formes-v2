@@ -44,6 +44,8 @@ Nouvelle décision structurante → nouvel ADR `docs/adr/NNNN-titre.md` (même f
 
 ## Transition Phaser → Godot
 
+- **Le client Godot reproduit le rendu web, il ne le réinvente pas** : décor exporté du vrai `GameScene` (`scripts/visual-export`), paramètres des tours/ennemis/tirs repris de `GameScene.ts` dans `visual_catalog.tres`. Toute évolution visuelle se vérifie par comparaison d'images avec le web (voir `docs/CLIENT_GODOT.md` §6).
+
 - Tant que le spike Godot n'est pas validé : `frontend-web` évolue normalement.
 - **Dès le spike validé** : `frontend-web/components/game/GameScene.ts` est en gel fonctionnel — corrections de bugs uniquement, toute nouvelle feature visuelle va dans `client-godot/`.
 - Les changements de gameplay se font dans le backend : ils profitent aux deux clients pendant la transition.
@@ -70,7 +72,8 @@ docker compose up -d
 ```
 
 ```bash
-# Client Godot : import (obligatoire après un clone : enregistre les class_name), puis lancement
+# Client Godot : visuels du web (sprites sous licence + décor exporté, hors git), import (obligatoire après un clone), lancement
+./scripts/sync-godot-assets.sh
 godot --headless --path client-godot --import
 godot --path client-godot
 ```

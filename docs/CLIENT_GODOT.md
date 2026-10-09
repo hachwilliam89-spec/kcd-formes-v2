@@ -27,16 +27,23 @@ client-godot/
     Grid.gd               seule conversion case ↔ espace local (CELL_SIZE = 16 ; ennemis : entier = centre de case)
     TickPlayer.gd         rejoue les ticks à 120 ms, interpole les ennemis, signaux tick_played / finished
     map/MapView.gd        vue provisoire de la carte (cases colorées) — remplaçable par une vue à tuiles
-    battle/BattleView.gd  vue provisoire du combat (formes colorées) : tours, ennemis, tirs, morts
+    battle/BattleView.gd  vue du combat, reproduction de GameScene.ts : décor, tours, ennemis, tirs, impacts, triés par profondeur
+    battle/DecorSet.gd    sol + décor exportés du web (assets/baked/<carte>/)
     entities/             scènes Tower, Enemy, Projectile, Castle avec sprites — à venir
   visuals/
     MapPalette.gd + map_palette_default.tres   couleurs de la vue de carte provisoire
     MapNames.gd           libellés affichés des cartes (les ids viennent de l'API)
-    UnitVisual.gd / UnitCatalog.gd / unit_catalog.tres   type d'unité → apparence (couleur, taille, lettre pour l'instant ; sprites ensuite)
+    VisualCatalog.gd + visual_catalog.tres   catalogue des visuels du combat (valeurs reprises de GameScene.ts) :
+      TowerVisual.gd      socle + arme pivotante, planche animée (Mage) ou image orientée (Mur), projectile, impact
+      EnemyVisual.gd      planche 96 px (marche / mort / attaque), taille, décalage, barre de vie, anneau au sol
+      EffectVisual.gd     impacts et projectiles animés
+    TextureCache.gd       chargement tolérant : asset absent → null → forme de repli
   ui/
     theme.tres            LE thème unique de l'UI (déclaré dans project.godot → gui/theme/custom)
     boot/ login/ home/    puis MapSelect, Hud, Coop, Versus, Leaderboard
-  assets/                 sprites et sons (source : kcd-assets.tgz, voir scripts/)
+  assets/                 HORS GIT, généré par scripts/sync-godot-assets.sh :
+    sprites/              sprites sous licence copiés de frontend-web/public/sprites
+    baked/<carte>/        sol (ground.png) + décor (decor.json, textures/) exportés du vrai GameScene web
   tests/                  gdUnit4
 ```
 
@@ -81,6 +88,15 @@ client-godot/
 ## 6. Assets et rendu
 
 - Pixel art : filtre Nearest (réglage projet), rendu GL Compatibility (web + mobile).
+- **Le rendu reproduit le jeu web, il ne le réinvente pas.** Source unique des visuels : le web.
+  - Sol et décor (terrain, emplacements, ruines, arbres, châteaux et portails peints par code) : **exportés du vrai `GameScene`** par `scripts/visual-export` (Chrome headless) — rien n'est redessiné à la main.
+  - Tours, ennemis, tirs : mêmes fichiers et mêmes paramètres que `GameScene.ts` (`ROT_WEAPON`, `TOWER_ANIM`, `ENEMY_SCALE`, `PROJECTILES`, `TOWER_IMPACT`, `drawEnemies`, `placeTowerParts`, `drawEffects`), stockés dans `visual_catalog.tres`.
+  - Profondeur : même règle que le web (`1 + pied / 100`), barres de vie au-dessus des unités, puis projectiles et impacts.
+  - `Grid.CELL_SIZE = 40`, comme le web : tailles et positions en pixels reprises telles quelles.
+- **Vérification** : `npm run export -- --reference` capture le web pendant une vague déterministe ; la même vague rejouée par Godot est comparée image par image (écart moyen mesuré le 2026-10-09 : 0,6 à 3,6 / 255 sur les 4 cartes, hors météo).
+- **Pas encore reproduit** : météo (neige, pluie, grêle, brume, mirage), terrain saisonnier dynamique (crue, boue), tirs du château, effets de boss et de siège, son.
+- **Assets sous licence (CraftPix) jamais versionnés**, comme côté web : `client-godot/assets/` est ignoré par git. Les visuels référencent les fichiers par **chemin texte** : sans eux (clone frais, CI, Codex), le jeu tourne avec des formes colorées au lieu de planter.
+- Conséquence : un export qui doit contenir les vrais visuels se fait sur une machine qui a les assets (le Mac), ou en CI après restauration du bundle depuis un stockage privé.
 - **Provisoire (spike)** : résolution de base 640×360, étirement `canvas_items`, aspect `expand`, paysage forcé (capteur). À confirmer à la fin du spike.
 - Taille des cibles tactiles : portée par les marges des StyleBox du Theme, pas par des tailles posées nœud par nœud.
 - Polices : MedievalSharp, Pixelify Sans (comme le web).
@@ -93,6 +109,7 @@ client-godot/
   - Export web → fichiers statiques servis par Caddy sous `/jouer`.
   - Export Android → APK signé (keystore en secret CI), servi en téléchargement comme celui d'Equilibre.
   - iOS : Xcode sur le Mac, compte Apple Developer seulement au moment de publier.
+- **Visuels réels** : `./scripts/sync-godot-assets.sh` (prérequis une fois : `cd frontend-web && npm ci`, `cd scripts/visual-export && npm install`, Google Chrome) puis l'import ci-dessous. Sans ça : formes colorées.
 - **Après un clone (ou si `.godot/` a été supprimé)** : `godot --headless --path client-godot --import` une fois, sinon les `class_name` (ApiResult, DTO…) ne sont pas encore enregistrés et les autoloads échouent au parsing. Ouvrir le projet dans l'éditeur a le même effet.
 - Lancer en local (backend sur `localhost:8080`) : `godot --path client-godot` (ou ouvrir `client-godot/project.godot` dans l'éditeur, F5).
 - Vérifier que tout compile sans erreur : `godot --headless --path client-godot --import`.
@@ -105,7 +122,7 @@ client-godot/
   - [x] Ossature + connexion / inscription / session persistée (2026-10-09)
   - [x] Carte : disposition chargée depuis `GET /api/v1/maps/{id}`, affichée à l'échelle de l'écran, tap → nature de la case, choix parmi les 4 cartes (2026-10-09)
   - [x] Partie : création, pose de tours au tap (Archer, Mage, Catapulte), replay des vagues à 120 ms avec interpolation, tirs et morts, palier de bonus, défaite et nouvelle partie (2026-10-09)
-  - [ ] Visuels réels (sprites du web) pour mesurer la perf de façon représentative
+  - [x] Visuels identiques au web : sol et décor exportés du vrai GameScene, tours (socle + arme qui vise, Mage animé), ennemis, tirs et impacts, vérifiés par comparaison d'images ; compteur FPS en jeu (`war_seasons/debug/show_fps`) (2026-10-09)
   - [ ] Exports Android + web, mesures sur téléphone
 - [ ] Prérequis backend (§5).
 - [ ] Solo complet : HUD, tutoriel, son, quatre saisons.

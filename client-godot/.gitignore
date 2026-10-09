@@ -3,3 +3,7 @@
 
 # Sorties d'export (APK, build web, binaires desktop)
 /build/
+
+# Assets sous licence et visuels exportés du web : générés par
+# scripts/sync-godot-assets.sh, jamais versionnés
+/assets/

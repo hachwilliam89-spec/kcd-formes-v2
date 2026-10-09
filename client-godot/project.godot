@@ -47,5 +47,7 @@ renderer/rendering_method.mobile="gl_compatibility"
 
 [war_seasons]
 
+debug/show_fps=true
+
 network/api_base_url="http://localhost:8080"
 network/api_base_url.web=""

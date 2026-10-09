@@ -29,6 +29,9 @@ var _busy: bool = false
 @onready var _bonus_box: VBoxContainer = %BonusBox
 @onready var _info: Label = %Info
 @onready var _back: Button = %Back
+@onready var _fps: Label = %Fps
+
+var _fps_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -39,6 +42,7 @@ func _ready() -> void:
 	_battle.bind(_ticks)
 	_ticks.tick_played.connect(_on_tick)
 	_ticks.finished.connect(_on_wave_finished)
+	_fps.visible = bool(ProjectSettings.get_setting("war_seasons/debug/show_fps", false))
 	_title.text = MapNames.label(Router.current_map_id)
 	_stats.text = ""
 	_info.text = "Chargement de la carte…"
@@ -51,7 +55,10 @@ func _ready() -> void:
 	if _layout == null:
 		_info.text = "Carte illisible"
 		return
-	_map_view.show_layout(_layout)
+	# Décor exporté du web (scripts/visual-export) ; absent → cases colorées.
+	var decor: DecorSet = DecorSet.load_for(_layout.id)
+	_map_view.show_layout(_layout, decor.ground if decor != null else null)
+	_battle.setup(_layout, decor)
 	_fit_map()
 	await _new_game()
 
@@ -62,6 +69,16 @@ func _new_game() -> void:
 	if not _apply_state_result(result):
 		return
 	_info.text = "Choisis une tour puis touche une case constructible (verte)."
+
+
+## Compteur de perf du spike (réglage war_seasons/debug/show_fps).
+func _process(delta: float) -> void:
+	if not _fps.visible:
+		return
+	_fps_timer -= delta
+	if _fps_timer <= 0.0:
+		_fps_timer = 0.5
+		_fps.text = "%d fps · %d ennemis" % [Engine.get_frames_per_second(), _battle.enemy_count()]
 
 
 # --- Entrées du joueur -------------------------------------------------------
