@@ -32,11 +32,12 @@ dégâts non-Mage). Annoncée dans l’aperçu (`Forecast.hail`) et envoyée ave
 grêle (rebonds au sol, voile froid) pendant la vague.
 
 **Terre fertile** (bonus permanent, 9 octobre 2026) : chaque ennemi tué au printemps
-rapporte +25 % d’or (`FERTILE_GOLD_FACTOR`, arrondi à l’unité, `SeasonalTerrain.goldFor`),
+rapporte +50 % d’or (`FERTILE_GOLD_FACTOR`, arrondi à l’unité, `SeasonalTerrain.goldFor`),
 en solo comme en live. Contrepoids d’une carte courte (voies de ~20 cases contre 60 au
 désert, 64 cases constructibles dont 22 berges inondables) où la crue de la vague 6
 tombe sur la crise des élites. Mesure (simulateur, bot de pose gourmand, 30 parties) :
-vague de mort médiane 9 / 7 → 9 / 12 (défense mixte / dense), désert 12 / 15. Les
+vague de mort médiane 9 / 7 → 12 / 12 (défense mixte / dense), désert 12 / 15.
+Passé de +25 % à +50 % après essai en jeu (+25 % : 9 / 12, encore trop dur). Les
 ponts restent la piste suivante si l’écart persiste en jeu.
 
 Pas de bandeau d’avertissement : le plateau annonce tout (berges qui clignotent et

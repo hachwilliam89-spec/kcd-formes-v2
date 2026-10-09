@@ -61,7 +61,7 @@ const FLOOD_SEQUENCE: Cell[][] = [
 export const floodCellsFor = (wave: number): Cell[] =>
     wave > 0 && wave % FLOOD_INTERVAL === 0 ? FLOOD_SEQUENCE[(wave / FLOOD_INTERVAL - 1) % FLOOD_SEQUENCE.length] : []
 export const HAIL_DAMAGE_BONUS = 25 // % de dégâts en plus pendant la grêle (SeasonalTerrain.HAIL_DAMAGE_FACTOR)
-export const FERTILE_GOLD_BONUS = 25 // % d'or en plus par ennemi tué au printemps (SeasonalTerrain.FERTILE_GOLD_FACTOR)
+export const FERTILE_GOLD_BONUS = 50 // % d'or en plus par ennemi tué au printemps (SeasonalTerrain.FERTILE_GOLD_FACTOR)
 export const FOG_DAMAGE_REDUCTION = 55 // % de dégâts de siège en moins pour une tour dans la brume (SeasonalTerrain.FOG_DAMAGE_TAKEN_FACTOR)
 
 /** Emplacements de flaques de boue (automne) : 6 sur le serpentin, 2 sur le raccourci. */

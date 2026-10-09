@@ -39,7 +39,7 @@ public final class SeasonalTerrain {
      * inondables : mesuré au harnais (MapBalanceHarnessTest), il ramène le printemps
      * vers le niveau du désert sans toucher aux crues.
      */
-    public static final double FERTILE_GOLD_FACTOR = 1.25;
+    public static final double FERTILE_GOLD_FACTOR = 1.5;
     /**
      * Brume protectrice (automne) : une tour couverte par la brume ne reçoit que cette
      * fraction des dégâts de siège (Sapeur, rayons, pulse du boss) — mal visible, les
@@ -199,7 +199,7 @@ public final class SeasonalTerrain {
     /** Multiplicateur des dégâts reçus par les ennemis (grêle : armures cabossées). */
     public double damageTakenFactor() { return hail() ? HAIL_DAMAGE_FACTOR : 1.0; }
 
-    /** Or rapporté par un ennemi tué sur ce terrain (terre fertile du printemps : +25 %). */
+    /** Or rapporté par un ennemi tué sur ce terrain (terre fertile du printemps : +50 %). */
     public static int goldFor(TerrainType type, int baseReward) {
         return type == TerrainType.SPRING ? (int) Math.round(baseReward * FERTILE_GOLD_FACTOR) : baseReward;
     }
