@@ -582,7 +582,8 @@ public class WaveSimulationService {
         Tower target;
 
         if (targetId == null) {
-            target = findClosestTower(enemy, map.getTowers());
+            // Tours immergées par la crue : hors d'atteinte, le Sapeur en cherche une autre.
+            target = findClosestTower(enemy, map.getTowers().stream().filter(t -> !terrain.submerged(t)).toList());
             if (target == null) {
                 // Plus aucune tour sur la map (toutes détruites, ou aucune n'a
                 // jamais été posée) : reprend/suit le chemin normalement.
@@ -598,6 +599,12 @@ public class WaveSimulationService {
                 siegeTargets.remove(enemy.getId());
                 return true;
             }
+        }
+
+        if (terrain.submerged(target)) {
+            // Cible passée sous l'eau : on lâche, nouvelle cible au prochain tick.
+            siegeTargets.remove(enemy.getId());
+            return true;
         }
 
         double dx = target.getX() - enemy.getX();
@@ -685,7 +692,7 @@ public class WaveSimulationService {
         Tower closest = null;
         double closestDist = Double.MAX_VALUE;
         for (Tower tower : map.getTowers()) {
-            if (tower.isDestroyed()) {
+            if (tower.isDestroyed() || terrain.submerged(tower)) { // immergée : hors d'atteinte
                 continue;
             }
             double dx = tower.getX() - enemy.getX();
@@ -743,7 +750,7 @@ public class WaveSimulationService {
         // Copie défensive : une tour détruite par ce pulse est retirée de `map`
         // en cours d'itération (même besoin que handleSapperTick).
         for (Tower tower : new ArrayList<>(map.getTowers())) {
-            if (tower.isDestroyed()) {
+            if (tower.isDestroyed() || terrain.submerged(tower)) { // immergée : hors d'atteinte
                 continue;
             }
             double dx = tower.getX() - boss.getX();

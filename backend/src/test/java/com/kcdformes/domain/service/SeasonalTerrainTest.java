@@ -42,6 +42,37 @@ class SeasonalTerrainTest {
         assertThat(map.getTowerById(bank.getId())).isPresent();
     }
 
+    @Test void submergedTowersAreOutOfEnemiesReach() {
+        // Vague 3 : rive ouest noyée. Troll (rayon) et Sapeur passent tout près de la tour.
+        assertThat(soloSiegeLoss(3, EnemyType.TROLL)).isZero();
+        assertThat(soloSiegeLoss(3, EnemyType.SAPEUR)).isZero();
+        assertThat(soloSiegeLoss(4, EnemyType.TROLL)).isPositive();   // décrue : de nouveau exposée
+        assertThat(soloSiegeLoss(4, EnemyType.SAPEUR)).isPositive();
+
+        var t = new SeasonalTerrain(TerrainType.SPRING, 3);
+        assertThat(t.submerged(new Tower(TowerType.ARCHER, 6, 7))).isTrue();
+        assertThat(t.submerged(new Tower(TowerType.ARCHER, 8, 5))).isFalse();
+
+        // Live : même règle — le rayon du Troll ignore la tour immergée.
+        var engine = new MatchEngine(new PathfindingService());
+        var map = MapCatalog.buildMap("spring");
+        Tower bank = new Tower(TowerType.ARCHER, 6, 7); map.placeTower(bank);
+        var state = engine.start(map);
+        state.wave = 3;
+        var troll = new LiveEnemy(EnemyType.TROLL, 5, 8, 1_000_000); troll.pathIndex = 5;
+        state.enemies.add(troll);
+        for (int i = 0; i < 20; i++) engine.step(state, 120);
+        assertThat(bank.getHp()).isEqualTo(bank.getMaxHp());
+    }
+
+    private int soloSiegeLoss(int waveNumber, EnemyType type) {
+        var map = MapCatalog.buildMap("spring");
+        Tower bank = new Tower(TowerType.ARCHER, 6, 7); map.placeTower(bank);
+        var enemy = new Enemy(type, 0, 8, 0, 1_000_000);
+        new WaveSimulationService(new PathfindingService()).simulate(map, new Wave(waveNumber, List.of(enemy)), castle());
+        return bank.getMaxHp() - bank.getHp() + (bank.isDestroyed() ? 1 : 0);
+    }
+
     @Test void floodDirectionChangesFromOneFloodToTheNext() {
         Set<Position> reached = new HashSet<>();
         for (int k = 1; k <= 16; k++) {

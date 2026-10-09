@@ -340,12 +340,15 @@ public class MatchEngine {
         java.util.UUID targetId = s.siegeTargets.get(e.id);
         Tower target;
         if (targetId == null) {
-            target = closestTower(e, map.getTowers());
+            // Tours immergées par la crue : hors d'atteinte, le Sapeur en cherche une autre.
+            target = closestTower(e, map.getTowers().stream().filter(t -> !s.terrain.submerged(t)).toList());
             if (target == null) return false; // plus aucune tour : reprend le chemin
             s.siegeTargets.put(e.id, target.getId());
         } else {
             target = map.getTowerById(targetId).orElse(null);
             if (target == null) { s.siegeTargets.remove(e.id); return true; }
+            // Cible passée sous l'eau (nouvelle vague de crue) : on lâche, nouvelle cible au prochain tick.
+            if (s.terrain.submerged(target)) { s.siegeTargets.remove(e.id); return true; }
         }
         double dx = target.getX() - e.x, dy = target.getY() - e.y;
         double dist = Math.hypot(dx, dy);
@@ -373,7 +376,7 @@ public class MatchEngine {
         Tower closest = null;
         double closestDist = Double.MAX_VALUE;
         for (Tower t : map.getTowers()) {
-            if (t.isDestroyed()) continue;
+            if (t.isDestroyed() || s.terrain.submerged(t)) continue; // immergée : hors d'atteinte
             double d = Math.hypot(t.getX() - e.x, t.getY() - e.y);
             if (d <= ray.range() && d < closestDist) { closestDist = d; closest = t; }
         }
@@ -394,7 +397,7 @@ public class MatchEngine {
         }
         GameMap map = s.map;
         for (Tower tower : new ArrayList<>(map.getTowers())) {
-            if (tower.isDestroyed()) continue;
+            if (tower.isDestroyed() || s.terrain.submerged(tower)) continue; // immergée : hors d'atteinte
             if (Math.hypot(tower.getX() - boss.x, tower.getY() - boss.y) <= type.aoeRadius) {
                 tower.takeSiegeDamage(s.terrain.siegeDamageTo(tower, type.aoeDamage)); // brume protectrice
                 if (tower.isDestroyed()) {

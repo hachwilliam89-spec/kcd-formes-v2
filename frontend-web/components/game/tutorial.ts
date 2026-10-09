@@ -93,11 +93,11 @@ export const FEATURE_TUTORIAL: Record<string, TutorialEntry> = {
   // phénomène. Pas de bandeau permanent : le joueur attentif lit le plateau.
   spring: {
     title: 'Les Jardins éveillés',
-    body: `Le château est au cœur du lac : tous les ennemis finissent sur ses deux ponts. Terre fertile : chaque ennemi tué rapporte +${FERTILE_GOLD_BONUS} % d’or. Les berges (roseaux, vaguelette) se construisent mais sont inondables : aux vagues 3, 6, 9…, la crue en noie une partie, et leurs tours ne tirent plus pendant la vague. Le côté noyé change à chaque crue.`,
+    body: `Le château est au cœur du lac : tous les ennemis finissent sur ses deux ponts. Terre fertile : chaque ennemi tué rapporte +${FERTILE_GOLD_BONUS} % d’or. Les berges (roseaux, vaguelette) se construisent mais sont inondables : aux vagues 3, 6, 9…, la crue en noie une partie : leurs tours ne tirent plus pendant la vague, mais aucun ennemi ne peut les atteindre. Le côté noyé change à chaque crue.`,
   },
   flood: {
     title: 'Crue annoncée',
-    body: 'La bruine annonce la crue : les berges qui clignotent seront sous l’eau à la prochaine vague, et leurs tours ne tireront pas. Ne compte pas sur elles cette fois-ci.',
+    body: 'La bruine annonce la crue : les berges qui clignotent seront sous l’eau à la prochaine vague : leurs tours ne tireront pas, mais Sapeurs, rayons et boss ne pourront pas les toucher. Ne compte pas sur elles pour tirer cette fois-ci.',
   },
   // Printemps, fin de la 1re vague : d'où vient l'or en plus.
   fertile: {

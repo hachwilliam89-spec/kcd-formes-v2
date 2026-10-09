@@ -9,8 +9,8 @@ import java.util.*;
  *
  * <ul>
  *   <li>Printemps : crue toutes les {@link #FLOOD_INTERVAL} vagues → les tours des
- *   berges noyées ne tirent plus pendant la vague (jamais détruites, réactivées à la
- *   décrue). Le sens de la crue change d'une fois sur l'autre (ouest-est, nord, sud…).
+ *   berges noyées ne tirent plus pendant la vague, mais les ennemis ne peuvent pas les
+ *   atteindre non plus (jamais détruites, réactivées à la décrue). Le sens de la crue change d'une fois sur l'autre (ouest-est, nord, sud…).
  *   Certaines autres vagues, la grêle cabosse les armures : les ennemis subissent
  *   {@link #HAIL_DAMAGE_FACTOR} fois les dégâts. Tout est tiré à l'avance, donc annoncé.
  *   Terre fertile : chaque ennemi tué rapporte {@link #FERTILE_GOLD_FACTOR} fois son or.</li>
@@ -211,6 +211,15 @@ public final class SeasonalTerrain {
     /** Tour d'une berge noyée par la crue : ne tire pas (un mur, passif, n'est pas concerné). */
     public boolean disables(Tower tower) {
         return !floodSet.isEmpty() && tower.getType() != TowerType.WALL && floodSet.contains(cellOf(tower));
+    }
+
+    /**
+     * Tour immergée par la crue : hors d'atteinte des ennemis pendant la vague — ni
+     * Sapeur, ni rayon, ni pulse du boss (l'eau la protège autant qu'elle l'empêche de
+     * tirer). Un mur n'est jamais concerné (il n'est pas sur les berges, et il bloque).
+     */
+    public boolean submerged(Tower tower) {
+        return disables(tower);
     }
 
     /** Les géants (Troll, boss) enjambent la boue : elle ne les ralentit pas. */

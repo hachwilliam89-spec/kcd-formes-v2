@@ -20,8 +20,10 @@ tours ne tirent plus pendant toute la vague. Le sens change d’une crue à l’
 selon une séquence fixe de 8 (ouest-est, nord, sud, ouest-est, nord-sud, sud, nord,
 nord-sud) : jamais deux fois le même d’affilée (`floodCells`, envoyé dans
 `Forecast.affectedCells` et `Snapshot.flood`). La crue elle-même ne retire aucun
-PV ; les ennemis peuvent toujours attaquer ces tours. Les murs sont passifs et ne
-sont pas suspendus.
+PV, et les tours immergées sont hors d’atteinte pendant la vague (9 octobre 2026) :
+le Sapeur choisit une autre cible (ou lâche la sienne si elle passe sous l’eau), les
+rayons et le pulse du boss les ignorent (`SeasonalTerrain.submerged`, solo et live).
+Les murs sont passifs et ne sont pas suspendus.
 
 **Grêle** (contrepoids des crues) : certaines autres vagues — jamais la 1re ni une
 vague de crue, tirage fixe 4, 11, 14, 16, 19, 26, 29… (`hailAt`) — la grêle
