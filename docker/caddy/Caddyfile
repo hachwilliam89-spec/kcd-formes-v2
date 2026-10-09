@@ -37,7 +37,10 @@ equilibre.164-132-246-49.sslip.io {
 			header_down Content-Disposition "attachment; filename=\"equilibre.apk\""
 		}
 	}
-	handle {
+	handle /api/* {
 		reverse_proxy equilibre-api-recette:3000
+	}
+	handle {
+		reverse_proxy equilibre-web:80
 	}
 }
