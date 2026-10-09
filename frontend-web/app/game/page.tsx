@@ -318,6 +318,16 @@ export default function GamePage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [wavePreview, combatRunning])
 
+    // Automne : 1re tour sous la brume annoncée → bulle « Brume protectrice ».
+    useEffect(() => {
+        const terrain = wavePreview?.terrain
+        if (!terrain || terrain.type !== 'AUTUMN' || isGameOver || combatRunning) return
+        const fog = new Set(terrain.fogCells.map((c) => `${c.x},${c.y}`))
+        const covered = (map?.towers ?? []).some((t) => t.type !== 'WALL' && fog.has(`${t.x},${t.y}`))
+        if (covered) maybeShowTutorial('tip', 'fogShield')
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [wavePreview, combatRunning, map?.towers])
+
     /**
      * Règles de pose côté client (le backend reste l'arbitre final), filtrées ici
      * pour un retour immédiat au lieu d'un aller-retour réseau voué au rejet.
@@ -503,6 +513,8 @@ export default function GamePage() {
                 }
                 // Après la 1re vague survécue : astuce sur l'inspection en combat.
                 maybeShowTutorial('tip', 'combat')
+                // Printemps : d'où vient l'or en plus (terre fertile).
+                if (mapId === 'spring') maybeShowTutorial('tip', 'fertile')
             }
 
             if (canvasRef.current) {

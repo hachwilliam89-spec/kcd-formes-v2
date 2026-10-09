@@ -12,7 +12,7 @@ export type TutorialEntry = {
   icon?: string // chemin d'icône pixel optionnel (public/sprites/ui)
 }
 
-import { HAIL_DAMAGE_BONUS } from './seasons'
+import { FERTILE_GOLD_BONUS, FOG_DAMAGE_REDUCTION, HAIL_DAMAGE_BONUS } from './seasons'
 
 export type TutorialKind = 'enemy' | 'tower' | 'tip'
 
@@ -93,19 +93,29 @@ export const FEATURE_TUTORIAL: Record<string, TutorialEntry> = {
   // phénomène. Pas de bandeau permanent : le joueur attentif lit le plateau.
   spring: {
     title: 'Les Jardins éveillés',
-    body: 'Le château est au cœur du lac : tous les ennemis finissent sur ses deux ponts. Les berges (roseaux, vaguelette) se construisent mais sont inondables : aux vagues 3, 6, 9…, la crue en noie une partie, et leurs tours ne tirent plus pendant la vague. Le côté noyé change à chaque crue.',
+    body: `Le château est au cœur du lac : tous les ennemis finissent sur ses deux ponts. Terre fertile : chaque ennemi tué rapporte +${FERTILE_GOLD_BONUS} % d’or. Les berges (roseaux, vaguelette) se construisent mais sont inondables : aux vagues 3, 6, 9…, la crue en noie une partie, et leurs tours ne tirent plus pendant la vague. Le côté noyé change à chaque crue.`,
   },
   flood: {
     title: 'Crue annoncée',
     body: 'La bruine annonce la crue : les berges qui clignotent seront sous l’eau à la prochaine vague, et leurs tours ne tireront pas. Ne compte pas sur elles cette fois-ci.',
   },
+  // Printemps, fin de la 1re vague : d'où vient l'or en plus.
+  fertile: {
+    title: 'Terre fertile',
+    body: `Le printemps est généreux : chaque ennemi tué ici rapporte +${FERTILE_GOLD_BONUS} % d’or. De quoi reconstruire après une crue — et poser des tours hors des berges inondables.`,
+  },
   hail: {
     title: 'Grêle annoncée',
     body: `Des grêlons tombent : la prochaine vague sera grêlée. Armures cabossées, les ennemis subiront +${HAIL_DAMAGE_BONUS} % de dégâts. C’est le moment d’être agressif.`,
   },
+  // Automne : la 1re fois qu'une tour se retrouve sous la brume annoncée.
+  fogShield: {
+    title: 'Brume protectrice',
+    body: `Une de tes tours sera dans la brume à la prochaine vague : elle perd 1 case de portée, mais l’ennemi la voit mal. Sapeurs, rayons et ondes du boss lui feront ${FOG_DAMAGE_REDUCTION} % de dégâts en moins (pas aux murs). Bonne place pour une tour exposée.`,
+  },
   autumn: {
     title: 'Le Val des feuilles',
-    body: 'Un raccourci coupe le serpentin. La boue brune ralentit les ennemis (pas les Trolls ni les boss) : couvre-la bien. La brume blanche coûte 1 case de portée aux tours qu’elle recouvre. Les deux changent de place à chaque vague — une averse annonce le changement : regarde le plateau avant de lancer la vague.',
+    body: `Un raccourci coupe le serpentin. La boue brune ralentit les ennemis (pas les Trolls ni les boss) : couvre-la bien. La brume blanche coûte 1 case de portée aux tours qu’elle recouvre, mais les cache : elles encaissent ${FOG_DAMAGE_REDUCTION} % de dégâts en moins (Sapeurs, rayons, boss). Les deux changent de place à chaque vague — une averse annonce le changement : regarde le plateau avant de lancer la vague.`,
   },
   // À la fin de la 1re vague.
   combat: {

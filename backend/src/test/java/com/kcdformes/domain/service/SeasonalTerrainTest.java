@@ -92,6 +92,41 @@ class SeasonalTerrainTest {
         assertThat(state.terrain.snapshot(List.of()).hail()).isTrue();
     }
 
+    @Test void fertileSoilGivesMoreGoldPerKillOnlyInSpring() {
+        for (EnemyType type : EnemyType.values()) {
+            assertThat(SeasonalTerrain.goldFor(TerrainType.SPRING, type.goldReward))
+                    .isEqualTo((int) Math.round(type.goldReward * SeasonalTerrain.FERTILE_GOLD_FACTOR));
+            assertThat(SeasonalTerrain.goldFor(TerrainType.AUTUMN, type.goldReward)).isEqualTo(type.goldReward);
+            assertThat(SeasonalTerrain.goldFor(TerrainType.NONE, type.goldReward)).isEqualTo(type.goldReward);
+        }
+
+        // Solo : même Orc tué, sur le printemps et sur le désert.
+        int springGold = soloKillGold("spring", 8, 5);
+        int desertGold = soloKillGold("desert", 5, 2);
+        assertThat(desertGold).isEqualTo(EnemyType.ORC.goldReward);
+        assertThat(springGold).isEqualTo(SeasonalTerrain.goldFor(TerrainType.SPRING, EnemyType.ORC.goldReward));
+
+        // Live : l'or partagé suit la même règle.
+        var engine = new MatchEngine(new PathfindingService());
+        var state = engine.start(MapCatalog.buildMap("spring"));
+        state.wave = 1;
+        int before = state.gold;
+        var dying = new LiveEnemy(EnemyType.ORC, 1, 8); dying.hp = 0;
+        state.enemies.add(dying);
+        engine.step(state, 120);
+        assertThat(state.gold - before)
+                .isEqualTo(SeasonalTerrain.goldFor(TerrainType.SPRING, EnemyType.ORC.goldReward));
+    }
+
+    private int soloKillGold(String mapId, int towerX, int towerY) {
+        var map = MapCatalog.buildMap(mapId);
+        map.placeTower(new Tower(TowerType.MAGE, towerX, towerY));
+        Position start = map.getPathStart();
+        var result = new WaveSimulationService(new PathfindingService())
+                .simulate(map, new Wave(1, List.of(new Enemy(EnemyType.ORC, start.x(), start.y(), 0, 1))), castle());
+        return result.goldEarned();
+    }
+
     private int firstHit(WaveSimulationService simulation, int waveNumber) {
         var map = MapCatalog.buildMap("spring");
         map.placeTower(new Tower(TowerType.ARCHER, 8, 5));
@@ -191,6 +226,40 @@ class SeasonalTerrainTest {
         map.placeTower(new Tower(TowerType.ARCHER, 6, 5));
         var result = simulation.simulate(map, new Wave(waveNumber, List.of(new Enemy(EnemyType.TROLL, 0, 3, 0, 100_000))), castle());
         return result.ticks().stream().mapToLong(t -> t.damageEvents().size()).sum();
+    }
+
+    @Test void fogProtectsCoveredTowersFromSiegeDamage() {
+        var t = new SeasonalTerrain(TerrainType.AUTUMN, 1);
+        Tower covered = new Tower(TowerType.ARCHER, 6, 5);   // banc nord-ouest, vague 1
+        Tower clear = new Tower(TowerType.ARCHER, 6, 10);
+        Tower wall = new Tower(TowerType.WALL, 6, 5);
+        assertThat(t.fogged(covered)).isTrue();
+        assertThat(t.fogged(clear)).isFalse();
+        assertThat(t.siegeDamageTo(clear, 40)).isEqualTo(40);
+        assertThat(t.siegeDamageTo(wall, 40)).isEqualTo(40);           // un mur n'est jamais couvert
+        assertThat(t.siegeDamageTo(covered, 40)).isEqualTo(18);         // 40 × 0,45
+
+        // Rayon de 1 dégât par tick : le reste est reporté, -55 % exact sur la durée.
+        var ray = new SeasonalTerrain(TerrainType.AUTUMN, 1);
+        int dealt = 0;
+        for (int tick = 0; tick < 100; tick++) dealt += ray.siegeDamageTo(covered, 1);
+        assertThat(dealt).isEqualTo(45);
+
+        // Hors automne, aucune protection.
+        assertThat(new SeasonalTerrain(TerrainType.SPRING, 1).siegeDamageTo(covered, 40)).isEqualTo(40);
+
+        // Solo : même tour, même Troll — couverte (vague 1), elle perd ~45 % de ce qu'elle perd à découvert (vague 2).
+        int lostCovered = soloRayDamage(1), lostClear = soloRayDamage(2);
+        assertThat(lostClear).isPositive();
+        assertThat(lostCovered).isCloseTo((int) Math.round(lostClear * SeasonalTerrain.FOG_DAMAGE_TAKEN_FACTOR), within(1));
+    }
+
+    private int soloRayDamage(int waveNumber) {
+        var map = MapCatalog.buildMap("autumn");
+        Tower tower = new Tower(TowerType.ARCHER, 6, 5); map.placeTower(tower);
+        var troll = new Enemy(EnemyType.TROLL, 0, 3, 0, 1_000_000);
+        new WaveSimulationService(new PathfindingService()).simulate(map, new Wave(waveNumber, List.of(troll)), castle());
+        return tower.getMaxHp() - tower.getHp();
     }
 
     @Test void liveMudAndFogUseTheSameRulesAsSolo() {

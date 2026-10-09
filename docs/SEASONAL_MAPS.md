@@ -31,10 +31,19 @@ dégâts non-Mage). Annoncée dans l’aperçu (`Forecast.hail`) et envoyée ave
 (`Snapshot.hail`). Rendu : quelques grêlons la vague qui l’annonce, une averse de
 grêle (rebonds au sol, voile froid) pendant la vague.
 
+**Terre fertile** (bonus permanent, 9 octobre 2026) : chaque ennemi tué au printemps
+rapporte +25 % d’or (`FERTILE_GOLD_FACTOR`, arrondi à l’unité, `SeasonalTerrain.goldFor`),
+en solo comme en live. Contrepoids d’une carte courte (voies de ~20 cases contre 60 au
+désert, 64 cases constructibles dont 22 berges inondables) où la crue de la vague 6
+tombe sur la crise des élites. Mesure (simulateur, bot de pose gourmand, 30 parties) :
+vague de mort médiane 9 / 7 → 9 / 12 (défense mixte / dense), désert 12 / 15. Les
+ponts restent la piste suivante si l’écart persiste en jeu.
+
 Pas de bandeau d’avertissement : le plateau annonce tout (berges qui clignotent et
 bruine avant une crue, grêlons avant la grêle ; boue et brume de la vague suivante
 en automne). Les règles passent par les bulles de conseils (à l’arrivée sur la
-carte, puis à la 1re crue et à la 1re grêle annoncées), que le joueur peut couper.
+carte, puis à la 1re crue et à la 1re grêle annoncées, « Terre fertile » après la 1re vague
+du printemps, « Brume protectrice » la 1re fois qu’une tour est sous la brume annoncée), que le joueur peut couper.
 En live, le changement suit le numéro de la vague courante.
 
 Rendu : au repos, les berges sont marquées (terre humide, roseaux, vaguelette) ;
@@ -70,6 +79,13 @@ Un terrain qui aide **et** qui gêne, pour une carte qui se joue autrement :
   endroit ; chacune couvre environ un tiers des cases constructibles. La brume de la vague suivante est envoyée dans l’aperçu
   (`Forecast.fogCells`) et affichée sur le plateau avant le lancement : le joueur
   peut placer ses tours en conséquence.
+- **Brume protectrice (aide, 9 octobre 2026)** : en échange de la portée perdue, une
+  tour couverte ne reçoit que 45 % des dégâts de siège — Sapeur, rayons (Troll,
+  Chariot, boss), pulse du boss (`FOG_DAMAGE_TAKEN_FACTOR`, `siegeDamageTo`). Les murs
+  ne sont jamais couverts. Le reste fractionnaire est reporté d’un coup à l’autre
+  (rayons de 1 à 3 par tick) : -55 % exact et déterministe, solo et live. La brume
+  devient un choix (portée contre solidité). Mesure (simulateur, 30 parties) : vague
+  de mort médiane 10 / 14 → 12 / 15 (défense mixte / dense), désert 12 / 15.
 
 Mêmes règles en solo (ticks précalculés) et en live (`MatchEngine`) : vitesse via
 `speedFactorAt`, portée via `rangeOf` / `inRange`. Les instantanés envoient les

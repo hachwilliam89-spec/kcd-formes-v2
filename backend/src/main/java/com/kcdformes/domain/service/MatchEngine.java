@@ -220,7 +220,7 @@ public class MatchEngine {
         while (dead.hasNext()) {
             LiveEnemy e = dead.next();
             if (e.hp <= 0) {
-                s.gold += e.type.goldReward;
+                s.gold += s.terrain.goldFor(e.type); // terre fertile au printemps
                 s.enemiesKilled++;
                 // Bonus au nombre de kills (choix non bloquant, voir MatchService).
                 if (++s.killsSinceBonus >= KILLS_PER_BONUS) {
@@ -350,7 +350,8 @@ public class MatchEngine {
         double dx = target.getX() - e.x, dy = target.getY() - e.y;
         double dist = Math.hypot(dx, dy);
         if (dist <= SIEGE_MELEE_RANGE) {
-            int dmg = e.type.siegeDamage * (target.getType() == TowerType.WALL ? WALL_SAPPER_MULTIPLIER : 1);
+            int dmg = s.terrain.siegeDamageTo(target,
+                    e.type.siegeDamage * (target.getType() == TowerType.WALL ? WALL_SAPPER_MULTIPLIER : 1)); // brume protectrice
             target.takeSiegeDamage(dmg);
             if (target.isDestroyed()) {
                 map.removeTower(target.getX(), target.getY());
@@ -377,7 +378,7 @@ public class MatchEngine {
             if (d <= ray.range() && d < closestDist) { closestDist = d; closest = t; }
         }
         if (closest == null) return;
-        closest.takeSiegeDamage(ray.damagePerTick());
+        closest.takeSiegeDamage(s.terrain.siegeDamageTo(closest, ray.damagePerTick())); // brume protectrice
         if (closest.isDestroyed()) map.removeTower(closest.getX(), closest.getY());
     }
 
@@ -395,7 +396,7 @@ public class MatchEngine {
         for (Tower tower : new ArrayList<>(map.getTowers())) {
             if (tower.isDestroyed()) continue;
             if (Math.hypot(tower.getX() - boss.x, tower.getY() - boss.y) <= type.aoeRadius) {
-                tower.takeSiegeDamage(type.aoeDamage);
+                tower.takeSiegeDamage(s.terrain.siegeDamageTo(tower, type.aoeDamage)); // brume protectrice
                 if (tower.isDestroyed()) {
                     map.removeTower(tower.getX(), tower.getY());
                 } else if (type.stunDurationTicks > 0) {

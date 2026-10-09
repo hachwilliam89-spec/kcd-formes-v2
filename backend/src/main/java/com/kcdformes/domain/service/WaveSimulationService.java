@@ -186,7 +186,7 @@ public class WaveSimulationService {
 
                 if (enemy.getType().attacksTowers) {
                     boolean diverted = handleSapperTick(enemy, map, path, progress, siegeTargets,
-                            towerDamageEvents, destroyedTowers);
+                            towerDamageEvents, destroyedTowers, terrain);
                     if (diverted) {
                         // Ce tick a été consommé par le déplacement hors-chemin ou
                         // l'attaque de la tour visée : pas de suivi de chemin normal.
@@ -265,7 +265,7 @@ public class WaveSimulationService {
                 if (tick <= enemy.getSpawnDelayTicks()) {
                     continue;
                 }
-                handleSiegeRayTick(enemy, map, towerDamageEvents, destroyedTowers);
+                handleSiegeRayTick(enemy, map, towerDamageEvents, destroyedTowers, terrain);
             }
 
             // 1.5b. Pulsation des Boss (EnemyType.isBoss), tous les
@@ -287,7 +287,7 @@ public class WaveSimulationService {
 
                 bossCooldowns.put(enemy.getId(), enemy.getType().abilityIntervalTicks);
                 bossAbilityEvents.add(handleBossAbilityTick(enemy, map, wave, towerDamageEvents,
-                        destroyedTowers, towerStuns));
+                        destroyedTowers, towerStuns, terrain));
             }
 
             // 2. Attaques des tours (cible : ennemi à portée le plus proche)
@@ -481,7 +481,7 @@ public class WaveSimulationService {
         target.takeDamage(damage);
         damageEvents.add(new DamageEvent(tower.getId(), target.getId(), damage));
         if (target.isDead()) {
-            wave.addGold(target.getGoldReward());
+            wave.addGold(terrain.goldFor(target.getType())); // terre fertile au printemps
             deaths.add(target.getId());
         }
     }
@@ -576,7 +576,8 @@ public class WaveSimulationService {
      */
     private boolean handleSapperTick(Enemy enemy, GameMap map, List<Position> path,
                                       Map<UUID, Double> progress, Map<UUID, UUID> siegeTargets,
-                                      List<TowerDamageEvent> towerDamageEvents, List<UUID> destroyedTowers) {
+                                      List<TowerDamageEvent> towerDamageEvents, List<UUID> destroyedTowers,
+                                      SeasonalTerrain terrain) {
         UUID targetId = siegeTargets.get(enemy.getId());
         Tower target;
 
@@ -607,8 +608,8 @@ public class WaveSimulationService {
             // Contre un mur, le Sapeur frappe x3 (voir WALL_SAPPER_MULTIPLIER) :
             // casser les défenses est sa spécialité, le mur ne doit jamais être
             // une meilleure réponse au Sapeur que de l'abattre en route.
-            int damage = enemy.getType().siegeDamage
-                    * (target.getType() == TowerType.WALL ? WALL_SAPPER_MULTIPLIER : 1);
+            int damage = terrain.siegeDamageTo(target, enemy.getType().siegeDamage
+                    * (target.getType() == TowerType.WALL ? WALL_SAPPER_MULTIPLIER : 1)); // brume protectrice
             target.takeSiegeDamage(damage);
             towerDamageEvents.add(new TowerDamageEvent(enemy.getId(), target.getId(), damage));
 
@@ -678,7 +679,7 @@ public class WaveSimulationService {
      */
     private void handleSiegeRayTick(Enemy enemy, GameMap map,
                                      List<TowerDamageEvent> towerDamageEvents,
-                                     List<UUID> destroyedTowers) {
+                                     List<UUID> destroyedTowers, SeasonalTerrain terrain) {
         EnemyType.Ray ray = enemy.getType().ray;
 
         Tower closest = null;
@@ -699,8 +700,9 @@ public class WaveSimulationService {
             return;
         }
 
-        closest.takeSiegeDamage(ray.damagePerTick());
-        towerDamageEvents.add(new TowerDamageEvent(enemy.getId(), closest.getId(), ray.damagePerTick()));
+        int rayDamage = terrain.siegeDamageTo(closest, ray.damagePerTick()); // brume protectrice
+        closest.takeSiegeDamage(rayDamage);
+        towerDamageEvents.add(new TowerDamageEvent(enemy.getId(), closest.getId(), rayDamage));
         if (closest.isDestroyed()) {
             map.removeTower(closest.getX(), closest.getY());
             destroyedTowers.add(closest.getId());
@@ -720,7 +722,8 @@ public class WaveSimulationService {
     private BossAbilityEvent handleBossAbilityTick(Enemy boss, GameMap map, Wave wave,
                                                      List<TowerDamageEvent> towerDamageEvents,
                                                      List<UUID> destroyedTowers,
-                                                     Map<UUID, Integer> towerStuns) {
+                                                     Map<UUID, Integer> towerStuns,
+                                                     SeasonalTerrain terrain) {
         EnemyType type = boss.getType();
 
         int alliesHealed = 0;
@@ -746,8 +749,9 @@ public class WaveSimulationService {
             double dx = tower.getX() - boss.getX();
             double dy = tower.getY() - boss.getY();
             if (Math.sqrt(dx * dx + dy * dy) <= type.aoeRadius) {
-                tower.takeSiegeDamage(type.aoeDamage);
-                towerDamageEvents.add(new TowerDamageEvent(boss.getId(), tower.getId(), type.aoeDamage));
+                int pulseDamage = terrain.siegeDamageTo(tower, type.aoeDamage); // brume protectrice
+                tower.takeSiegeDamage(pulseDamage);
+                towerDamageEvents.add(new TowerDamageEvent(boss.getId(), tower.getId(), pulseDamage));
                 towersHit++;
                 if (tower.isDestroyed()) {
                     map.removeTower(tower.getX(), tower.getY());
