@@ -1,0 +1,72 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/login/Login.gd" id="1_login"]
+
+[node name="Login" type="Panel"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"Screen"
+script = ExtResource("1_login")
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Card" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="Form" type="VBoxContainer" parent="Center/Card"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Center/Card/Form"]
+layout_mode = 2
+theme_type_variation = &"TitleLabel"
+text = "War Seasons"
+horizontal_alignment = 1
+
+[node name="Username" type="LineEdit" parent="Center/Card/Form"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Pseudo"
+
+[node name="Email" type="LineEdit" parent="Center/Card/Form"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+placeholder_text = "Email"
+virtual_keyboard_type = 5
+
+[node name="Password" type="LineEdit" parent="Center/Card/Form"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Mot de passe"
+virtual_keyboard_type = 6
+secret = true
+
+[node name="Error" type="Label" parent="Center/Card/Form"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"ErrorLabel"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Submit" type="Button" parent="Center/Card/Form"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Se connecter"
+
+[node name="ModeSwitch" type="Button" parent="Center/Card/Form"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"FlatButton"
+text = "Pas de compte ? S'inscrire"

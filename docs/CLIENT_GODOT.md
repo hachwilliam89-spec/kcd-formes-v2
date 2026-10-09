@@ -13,11 +13,15 @@
 ```
 client-godot/
   project.godot           filtre de texture par défaut : Nearest ; variables non typées = erreur
-  autoload/
-    Api.gd                HTTPRequest + JWT, désérialisation en DTO typés
-    Stomp.gd              WebSocketPeer + trames STOMP 1.2
+  autoload/               (ordre de chargement = ordre dans project.godot)
+    Config.gd             URL du backend (réglage war_seasons/network/api_base_url + surcharges par plateforme)
     Session.gd            token + joueur, stockés dans user:// (chiffré)
-  net/dto/                classes typées des DTO (Tick, Enemy, Tower, Match…)
+    Api.gd                HTTPRequest + JWT → ApiResult ; 401 = session vidée + signal `unauthorized`
+    Router.gd             navigation entre écrans (seul endroit qui change de scène)
+    Stomp.gd              WebSocketPeer + trames STOMP 1.2 (à venir)
+  net/
+    ApiResult.gd          résultat d'un appel : ok / status (0 = réseau) / data / error (message du backend)
+    dto/                  classes typées des DTO, miroir des records Java (AuthResponseDto…)
   game/
     TickPlayer.gd         rejoue les ticks et émet des signaux (aucun accès aux nœuds visuels)
     Grid.gd               seule conversion case ↔ écran (cell_to_world / world_to_cell)
@@ -27,8 +31,8 @@ client-godot/
     catalog.tres          type d'unité → UnitVisual
     units/*.tres          une ressource UnitVisual par type (animations, échelle, décalages, sons, effets)
   ui/
-    theme.tres            LE thème unique de l'UI
-    Login, Home, MapSelect, Hud, Coop, Versus, Leaderboard
+    theme.tres            LE thème unique de l'UI (déclaré dans project.godot → gui/theme/custom)
+    boot/ login/ home/    puis MapSelect, Hud, Coop, Versus, Leaderboard
   assets/                 sprites et sons (source : kcd-assets.tgz, voir scripts/)
   tests/                  gdUnit4
 ```
@@ -68,7 +72,9 @@ client-godot/
 
 ## 6. Assets et rendu
 
-- Pixel art : filtre Nearest, mise à l'échelle entière. Résolution de base et mode d'étirement à fixer pendant le spike, puis à consigner ici.
+- Pixel art : filtre Nearest (réglage projet), rendu GL Compatibility (web + mobile).
+- **Provisoire (spike)** : résolution de base 640×360, étirement `canvas_items`, aspect `expand`, paysage forcé (capteur). À confirmer à la fin du spike.
+- Taille des cibles tactiles : portée par les marges des StyleBox du Theme, pas par des tailles posées nœud par nœud.
 - Polices : MedievalSharp, Pixelify Sans (comme le web).
 - Audio : bus SFX et musique séparés, réglages persistés dans `user://`.
 
@@ -79,11 +85,18 @@ client-godot/
   - Export web → fichiers statiques servis par Caddy sous `/jouer`.
   - Export Android → APK signé (keystore en secret CI), servi en téléchargement comme celui d'Equilibre.
   - iOS : Xcode sur le Mac, compte Apple Developer seulement au moment de publier.
-- Commandes exactes (tests, exports) : à fixer pendant le spike, puis à consigner ici et dans `AGENTS.md`.
+- **Après un clone (ou si `.godot/` a été supprimé)** : `godot --headless --path client-godot --import` une fois, sinon les `class_name` (ApiResult, DTO…) ne sont pas encore enregistrés et les autoloads échouent au parsing. Ouvrir le projet dans l'éditeur a le même effet.
+- Lancer en local (backend sur `localhost:8080`) : `godot --path client-godot` (ou ouvrir `client-godot/project.godot` dans l'éditeur, F5).
+- Vérifier que tout compile sans erreur : `godot --headless --path client-godot --import`.
+- Test sur téléphone en dev : surcharger l'URL dans `project.godot` (`network/api_base_url.android="http://<IP-du-Mac>:8080"`). Android bloque le HTTP en clair par défaut : à vérifier au premier export.
+- Commandes de tests (gdUnit4) et d'export : à consigner ici quand elles seront en place.
 
 ## 8. Jalons
 
 - [ ] **Spike** (≤ 1 semaine) : connexion REST, une carte, replay d'une vague solo, export Android + web, mesures sur téléphone. Critères d'arrêt : ADR 0001.
+  - [x] Ossature + connexion / inscription / session persistée (2026-10-09)
+  - [ ] Une carte + replay d'une vague solo
+  - [ ] Exports Android + web, mesures sur téléphone
 - [ ] Prérequis backend (§5).
 - [ ] Solo complet : HUD, tutoriel, son, quatre saisons.
 - [ ] Coop puis versus (STOMP).

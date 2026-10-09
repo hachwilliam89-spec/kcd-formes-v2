@@ -1,0 +1,5 @@
+# Cache et imports régénérés par l'éditeur
+.godot/
+
+# Sorties d'export (APK, build web, binaires desktop)
+/build/

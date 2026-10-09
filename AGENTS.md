@@ -66,4 +66,10 @@ cd frontend-web && npm run lint && npm run build
 docker compose up -d
 ```
 
-Commandes Godot (tests gdUnit4, exports) : voir `docs/CLIENT_GODOT.md`.
+```bash
+# Client Godot : import (obligatoire après un clone : enregistre les class_name), puis lancement
+godot --headless --path client-godot --import
+godot --path client-godot
+```
+
+Tests gdUnit4 et exports : voir `docs/CLIENT_GODOT.md` §7.

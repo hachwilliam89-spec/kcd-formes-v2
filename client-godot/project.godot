@@ -1,0 +1,51 @@
+; War Seasons — client de jeu Godot (voir docs/CLIENT_GODOT.md et docs/adr/0001).
+
+config_version=5
+
+[application]
+
+config/name="War Seasons"
+config/description="Client de jeu War Seasons (Android, iOS, web, desktop)."
+run/main_scene="res://ui/boot/Boot.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Config="*res://autoload/Config.gd"
+Session="*res://autoload/Session.gd"
+Api="*res://autoload/Api.gd"
+Router="*res://autoload/Router.gd"
+
+[debug]
+
+gdscript/warnings/untyped_declaration=2
+
+[display]
+
+window/size/viewport_width=640
+window/size/viewport_height=360
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=4
+
+[gui]
+
+theme/custom="res://ui/theme.tres"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+
+[war_seasons]
+
+network/api_base_url="http://localhost:8080"
+network/api_base_url.web=""

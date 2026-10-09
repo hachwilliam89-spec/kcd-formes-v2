@@ -1,0 +1,50 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/home/Home.gd" id="1_home"]
+
+[node name="Home" type="Panel"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"Screen"
+script = ExtResource("1_home")
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Card" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="Box" type="VBoxContainer" parent="Center/Card"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Center/Card/Box"]
+layout_mode = 2
+theme_type_variation = &"TitleLabel"
+text = "War Seasons"
+horizontal_alignment = 1
+
+[node name="Welcome" type="Label" parent="Center/Card/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+
+[node name="Next" type="Label" parent="Center/Card/Box"]
+layout_mode = 2
+text = "Spike : prochaine étape = rejouer une vague solo."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Logout" type="Button" parent="Center/Card/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Se déconnecter"
