@@ -29,7 +29,7 @@ Tower defense médiéval-fantasy, quatre cartes saisonnières. Solo en survie in
 
 1. **Serveur autoritaire.** Toute la simulation tourne côté backend. Un client affiche l'état reçu et envoie des intentions ; il ne calcule jamais une règle de jeu.
 2. **Architecture hexagonale.** Domaine pur (aucune dépendance Spring, beans déclarés dans `DomainConfig`). Toute règle passe par `domain/`, jamais par un contrôleur, un mapper ou un client. Les adapters vivent dans `infrastructure/`.
-3. **Aucune règle dupliquée côté client.** Si un client a besoin d'une règle (cases constructibles, verdict de pose, coûts…), le backend l'expose via l'API. Cartes et tours viennent déjà de l'API côté web (`frontend-web/store/catalogStore.ts`) ; ce qui reste recopié (mécaniques saisonnières de `seasons.ts`, envois du versus) est une **dette à résorber**, pas un modèle à reproduire.
+3. **Aucune règle dupliquée côté client.** Si un client a besoin d'une règle (cases constructibles, verdict de pose, coûts…), le backend l'expose via l'API. Cartes, tours et mécaniques saisonnières viennent de l'API côté web (`frontend-web/store/catalogStore.ts`) ; ce qui reste recopié (catalogue des envois du versus) est une **dette à résorber**, pas un modèle à reproduire.
 4. **Un seul client de jeu à terme : Godot.** Pas de second moteur de rendu (ni React Native/Skia, ni réécriture parallèle).
 5. **Réutilisation avant duplication** (voir `docs/GAME_DESIGN.md` §7).
 6. **Design patterns seulement quand la complexité le justifie**, jamais par principe.

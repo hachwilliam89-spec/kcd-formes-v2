@@ -3,8 +3,10 @@ package com.kcdformes.application.usecase;
 import com.kcdformes.domain.exception.UnknownMapException;
 import com.kcdformes.domain.model.MapCatalog;
 import com.kcdformes.domain.model.Position;
+import com.kcdformes.domain.model.SeasonalTerrain;
 import com.kcdformes.domain.model.TerrainType;
 import com.kcdformes.domain.port.in.query.GetMapLayoutUseCase.MapLayout;
+import com.kcdformes.domain.port.in.query.GetMapLayoutUseCase.SeasonalRules;
 import com.kcdformes.domain.service.PathfindingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -140,6 +142,43 @@ class MapLayoutServiceTest {
             assertThat(a.y() < b.y() || (a.y() == b.y() && a.x() < b.x()))
                     .as("%s avant %s", a, b).isTrue();
         }
+    }
+
+    @Test
+    @DisplayName("Printemps : berges inondables exposées ; aucune ailleurs")
+    void bankCells_onlyOnSpring() {
+        assertThat(new HashSet<>(service.getLayout("spring").bankCells()))
+                .isEqualTo(new HashSet<>(SeasonalTerrain.bankCells()));
+        assertThat(service.getLayout("desert").bankCells()).isEmpty();
+        assertThat(service.getLayout("autumn").bankCells()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Règles saisonnières reprises de SeasonalTerrain")
+    void seasonalRules_matchDomain() {
+        SeasonalRules rules = service.getLayout("autumn").seasonalRules();
+
+        assertThat(rules.floodInterval()).isEqualTo(SeasonalTerrain.FLOOD_INTERVAL);
+        assertThat(rules.mudSpeedFactor()).isEqualTo(SeasonalTerrain.MUD_SPEED_FACTOR);
+        assertThat(rules.fogRangePenalty()).isEqualTo(SeasonalTerrain.FOG_RANGE_PENALTY);
+        assertThat(rules.hailDamageFactor()).isEqualTo(SeasonalTerrain.HAIL_DAMAGE_FACTOR);
+        assertThat(rules.fertileGoldFactor()).isEqualTo(SeasonalTerrain.FERTILE_GOLD_FACTOR);
+        assertThat(rules.fogDamageTakenFactor()).isEqualTo(SeasonalTerrain.FOG_DAMAGE_TAKEN_FACTOR);
+    }
+
+    @ParameterizedTest(name = "Prévision vague {0} : identique au domaine (automne et printemps)")
+    @ValueSource(ints = {1, 2, 3, 4, 6})
+    void forecast_matchesDomain(int wave) {
+        assertThat(service.forecast("autumn", wave)).isEqualTo(SeasonalTerrain.forecast(TerrainType.AUTUMN, wave));
+        assertThat(service.forecast("spring", wave)).isEqualTo(SeasonalTerrain.forecast(TerrainType.SPRING, wave));
+        assertThat(service.forecast("desert", wave).affectedCells()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Prévision d'une carte inconnue : UnknownMapException")
+    void forecast_unknownMap_throws() {
+        assertThatThrownBy(() -> service.forecast("atlantide", 1))
+                .isInstanceOf(UnknownMapException.class);
     }
 
     @Test

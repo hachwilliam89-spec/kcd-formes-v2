@@ -35,6 +35,9 @@ export type MapDef = MapPresentation & {
   halfWidth: number      // demi-largeur du couloir (serveur) : largeur de route dessinée
   wideSpots: Cell[]      // aires d'élargissement de la route (serveur)
   water: Cell[]          // eau infranchissable et inconstructible (serveur)
+  /** Emprise du lac (eau, ponts, île) : rectangle englobant l'eau ; null sans lac. */
+  lake: { x0: number; y0: number; x1: number; y1: number } | null
+  bankCells: Cell[]      // berges inondables (printemps, serveur)
   castle: Cell           // château du joueur, arrivée commune des voies (serveur)
   spawns: Cell[]         // entrées ennemies (serveur)
   path: PathData         // index de la disposition (couloir, constructible, directions)
@@ -94,6 +97,13 @@ function pathDataFromLayout(layout: MapLayout): PathData {
   }
 }
 
+/** Rectangle englobant des cases (null si aucune). */
+function boundsOf(cells: Cell[]): MapDef['lake'] {
+  if (cells.length === 0) return null
+  const xs = cells.map((c) => c.x), ys = cells.map((c) => c.y)
+  return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }
+}
+
 /** Assemble disposition serveur + présentation web (appelé une fois au chargement du catalogue). */
 export function buildMapDef(layout: MapLayout): MapDef {
   const lanes = layout.lanes.length > 0 ? layout.lanes : [[layout.castle]]
@@ -107,6 +117,8 @@ export function buildMapDef(layout: MapLayout): MapDef {
     halfWidth: layout.corridorHalfWidth,
     wideSpots: layout.wideSpots,
     water: layout.waterCells,
+    lake: boundsOf(layout.waterCells),
+    bankCells: layout.bankCells ?? [],
     castle: layout.castle,
     spawns: layout.spawns,
     path: pathDataFromLayout(layout),

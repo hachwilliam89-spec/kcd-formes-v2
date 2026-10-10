@@ -1,6 +1,5 @@
 import type { MapDef } from './maps'
 import { corridorHas, buildableHas } from './constants'
-import { LAKE } from './seasons'
 
 export type Sprite = { sx: number; sy: number; w: number; h: number }
 // Régions de l'atlas plants.png (TX Plant, Cainos) : trois arbres, quatre buissons.
@@ -82,7 +81,8 @@ export type TreeSpot = { x: number; y: number; tree: number; hue: number; flip: 
 export function roadTreeSpots(map: MapDef): TreeSpot[] {
     const tints = FOLIAGE_TINTS[map.id]
     if (map.id !== 'autumn' || !tints) return []
-    const nearLake = (x: number, y: number) => map.water.length > 0 && x >= LAKE.x0 - 1 && x <= LAKE.x1 + 1 && y >= LAKE.y0 - 2 && y <= LAKE.y1 + 2
+    const LAKE = map.lake
+    const nearLake = (x: number, y: number) => LAKE != null && x >= LAKE.x0 - 1 && x <= LAKE.x1 + 1 && y >= LAKE.y0 - 2 && y <= LAKE.y1 + 2
     let seed = 404
     const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296)
     const gates = [...map.lanes.map(l => l[0]), map.waypoints[map.waypoints.length - 1]]
@@ -164,8 +164,9 @@ export function paintSeasonalTerrain(ctx: CanvasRenderingContext2D, map: MapDef,
     // Lac du printemps : l'île du château au centre, les douves (map.water) et les ponts
     // (cases de route qui traversent le lac). L'eau n'est jamais une case de tour.
     const castle = map.waypoints[map.waypoints.length - 1]
-    const inLake = (x: number, y: number) => map.water.length > 0 && x >= LAKE.x0 && x <= LAKE.x1 && y >= LAKE.y0 && y <= LAKE.y1
-    if (map.water.length > 0) {
+    const LAKE = map.lake
+    const inLake = (x: number, y: number) => LAKE != null && x >= LAKE.x0 && x <= LAKE.x1 && y >= LAKE.y0 && y <= LAKE.y1
+    if (LAKE != null) {
         const lx = LAKE.x0 * 40, ly = LAKE.y0 * 40, lw = (LAKE.x1 - LAKE.x0 + 1) * 40, lh = (LAKE.y1 - LAKE.y0 + 1) * 40
         ctx.fillStyle = '#344e39'; ctx.fillRect(lx - 4, ly - 4, lw + 8, lh + 8)          // rive
         ctx.fillStyle = '#527f87'; ctx.fillRect(lx, ly, lw, lh)

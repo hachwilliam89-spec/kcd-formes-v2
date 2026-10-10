@@ -1,11 +1,13 @@
 package com.kcdformes.infrastructure.web.controller;
 
+import com.kcdformes.domain.model.SeasonalTerrain;
 import com.kcdformes.domain.port.in.query.GetMapLayoutUseCase;
 import com.kcdformes.infrastructure.web.dto.MapLayoutResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -33,5 +35,12 @@ public class MapController {
     @GetMapping("/{mapId}")
     public ResponseEntity<MapLayoutResponse> getLayout(@PathVariable String mapId) {
         return ResponseEntity.ok(MapLayoutResponse.from(getMapLayoutUseCase.getLayout(mapId)));
+    }
+
+    /** Prévision saisonnière d'une vague (crue, boue, brume, grêle) — même format que l'aperçu de vague. */
+    @GetMapping("/{mapId}/forecast")
+    public ResponseEntity<SeasonalTerrain.Forecast> getForecast(@PathVariable String mapId,
+                                                               @RequestParam(defaultValue = "1") int wave) {
+        return ResponseEntity.ok(getMapLayoutUseCase.forecast(mapId, wave));
     }
 }

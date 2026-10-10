@@ -1,6 +1,7 @@
 package com.kcdformes.domain.port.in.query;
 
 import com.kcdformes.domain.model.Position;
+import com.kcdformes.domain.model.SeasonalTerrain;
 import com.kcdformes.domain.model.TerrainType;
 
 import java.util.List;
@@ -40,7 +41,30 @@ public interface GetMapLayoutUseCase {
             /** Cases où une tour peut être posée sur une carte vide. Triées par y puis x. */
             List<Position> buildableCells,
             /** Eau permanente (lac du printemps), jamais constructible. */
-            List<Position> waterCells
+            List<Position> waterCells,
+            /** Berges que la crue peut noyer (printemps), vide ailleurs. Constructibles. */
+            List<Position> bankCells,
+            /** Effets chiffrés des saisons (identiques pour toutes les cartes). */
+            SeasonalRules seasonalRules
+    ) {}
+
+    /**
+     * Constantes des mécaniques saisonnières (SeasonalTerrain), pour l'affichage :
+     * annonces de crue, cercle de portée réduit dans la brume, textes d'aide.
+     */
+    record SeasonalRules(
+            /** Une crue toutes les N vagues (printemps). */
+            int floodInterval,
+            /** Vitesse dans la boue (automne), sauf géants. */
+            double mudSpeedFactor,
+            /** Cases de portée perdues par une tour dans la brume (automne). */
+            double fogRangePenalty,
+            /** Multiplicateur des dégâts subis par les ennemis sous la grêle (printemps). */
+            double hailDamageFactor,
+            /** Multiplicateur de l'or par ennemi tué (printemps). */
+            double fertileGoldFactor,
+            /** Multiplicateur des dégâts de siège subis par une tour dans la brume (automne). */
+            double fogDamageTakenFactor
     ) {}
 
     /** Ids des cartes jouables, dans l'ordre de présentation. */
@@ -48,4 +72,13 @@ public interface GetMapLayoutUseCase {
 
     /** @throws com.kcdformes.domain.exception.UnknownMapException si l'id n'est pas au catalogue. */
     MapLayout getLayout(String mapId);
+
+    /**
+     * Prévision saisonnière d'une vague sur une carte vide (crue, boue, brume, grêle),
+     * pour les aperçus hors partie (choix de la carte, outils). En partie, l'aperçu de
+     * la prochaine vague (GetWavePreviewUseCase) porte la même prévision.
+     *
+     * @throws com.kcdformes.domain.exception.UnknownMapException si l'id n'est pas au catalogue.
+     */
+    SeasonalTerrain.Forecast forecast(String mapId, int wave);
 }
