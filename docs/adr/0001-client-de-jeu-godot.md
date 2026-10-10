@@ -63,5 +63,6 @@ Le résultat du spike (mesures, appareil, versions) est consigné à la fin de c
 **En cours — critère Android pas encore mesuré.**
 
 - 2026-10-09, Godot web (wasm, sans threads) sur l'iPhone de Kim, Safari : 60,0 FPS sur toute la vague du banc (200 ennemis, 32 tours, pic à 129 ennemis à l'écran), image p95 et p99 à 16,7 ms, aucune image > 33 ms, CPU jeu 2,43 ms en moyenne. Le web mobile n'est pas un frein sur iOS. Détail : `docs/CLIENT_GODOT.md`, « Mesures du banc ».
+- 2026-10-10, intégration STOMP (critère d'arrêt n° 3) : **validée** sur le backend local. Le client Godot (WebSocket natif, STOMP 1.2 écrit en GDScript, sans bibliothèque) crée ou rejoint une partie coop avec le client web, dans les deux sens ; poses de tours et or partagé synchronisés, carte de la partie chargée. Restent à éprouver : reconnexion après coupure, bonus.
 - Reste à mesurer : APK sur un Android milieu de gamme (critère d'arrêt n° 1). Kim n'a pas d'Android : en emprunter un, l'APK s'installe sans câble.
 - Décision (Acceptée ou repli Phaser + Capacitor) une fois la mesure Android faite.
