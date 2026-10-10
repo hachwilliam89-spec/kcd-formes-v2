@@ -89,7 +89,7 @@ client-godot/
 - [x] Client Godot : barre de construction construite depuis le catalogue (coût, verrou « vague N », compteur de murs, grisée si l'or manque), Mur posé sur la route, Baliste proposée une fois débloquée, annonce des déblocages en fin de vague.
 - [x] `frontend-web` branché sur `/api/v1/towers` et `/api/v1/maps` (`store/catalogStore.ts`, chargé une fois) : solo, coop, versus et `GameScene` ne recopient plus ni coûts, ni stats, ni portées, ni limite de murs, ni tracés, couloirs ou cases constructibles. `maps.ts` ne garde que la présentation (nom, biome, image). Les outils `scripts/visual-export` et `scripts/perf-bench` lisent le même catalogue (backend lancé, ou `--catalog`).
 - [ ] Reste dupliqué côté web : mécaniques saisonnières (`components/game/seasons.ts` : crues, boue, brume) et catalogue des envois du versus (`app/versus/page.tsx` `SENDS`, miroir de `SendCatalog`).
-- [ ] Vérifier sur le vrai backend la connexion STOMP du client natif (sans `Origin`) : validé contre un serveur STOMP simulé, à confirmer par une partie coop Godot + web.
+- [x] Connexion STOMP du client natif (sans `Origin`) acceptée par le vrai backend : partie coop Godot + web validée dans les deux sens (2026-10-10).
 
 ## 6. Assets et rendu
 
@@ -141,7 +141,7 @@ client-godot/
   - [x] Exports Android + web configurés, banc de perf identique au banc web (2026-10-09)
   - [x] Barre de construction depuis le catalogue serveur (Mur, Baliste, coûts, déblocages) ; fiche de la tour touchée : stats → niveau suivant, amélioration, priorité de tir (2026-10-10)
   - [x] STOMP : `StompClient` (WebSocketPeer, STOMP 1.2) + écran coop (lobby, partie live, pose, bonus), testés contre un serveur STOMP simulé (2026-10-10)
-  - [ ] STOMP contre le vrai backend : partie coop Godot + web → critère d'arrêt n° 3 de l'ADR 0001
+  - [x] STOMP contre le vrai backend (local) : partie coop Godot ↔ web dans les deux sens, lobby, démarrage, carte choisie (La Fourche) chargée, poses de tours synchronisées et or partagé (2026-10-10). Non testés : reconnexion après coupure, bonus.
   - [ ] Mesures sur téléphone → conclusion dans l'ADR 0001
 
 ### Mesures du banc (même vague : 200 ennemis, 32 tours, graine 1)
