@@ -3,7 +3,10 @@
 import Phaser from 'phaser'
 import { GameScene, type TowerData } from '@/components/game/GameScene'
 import { floodCellsFor, fogCellsFor, mudCellsFor, type TerrainSnapshot } from '@/components/game/seasons'
-import { getMapDef } from '@/components/game/maps'
+import { getMapDef, useCatalogStore, type CatalogData } from '@/store/catalogStore'
+
+// Catalogue servi par run.mjs / export.mjs (backend ou --catalog) : chargé avant toute lecture.
+useCatalogStore.getState().seed((window as unknown as { __CATALOG__: CatalogData }).__CATALOG__)
 
 const map = getMapDef(new URLSearchParams(location.search).get('map') ?? 'spring')
 const panel = document.createElement('div')

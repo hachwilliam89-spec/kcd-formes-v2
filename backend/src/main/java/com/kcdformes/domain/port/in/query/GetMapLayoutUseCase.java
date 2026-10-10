@@ -27,8 +27,14 @@ public interface GetMapLayoutUseCase {
             Position castle,
             /** Entrées ennemies distinctes (début des voies), dans l'ordre des voies. */
             List<Position> spawns,
+            /** Points de passage de chaque voie (tracé du catalogue), de l'entrée au château. */
+            List<List<Position>> lanes,
             /** Chemin case par case de chaque voie, de l'entrée au château. */
             List<List<Position>> lanePaths,
+            /** Demi-largeur du couloir autour des voies (Chebyshev) : 0 = voies fines. */
+            int corridorHalfWidth,
+            /** Aires d'élargissement local de la route (cases de couloir en plus des voies). */
+            List<Position> wideSpots,
             /** Cases de route (inconstructibles). Triées par y puis x. */
             List<Position> corridorCells,
             /** Cases où une tour peut être posée sur une carte vide. Triées par y puis x. */

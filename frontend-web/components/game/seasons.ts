@@ -36,12 +36,9 @@ const union = (...parts: Cell[][]): Cell[] => {
     return parts.flat().filter((c) => { const k = `${c.x},${c.y}`; return seen.has(k) ? false : (seen.add(k), true) })
 }
 
-/**
- * Lac du printemps : douves de part et d'autre de l'île du château (10,8). Eau
- * infranchissable et inconstructible — miroir de SeasonalTerrain.WATER_CELLS. Les deux
- * ponts (nord et sud) sont les cases de route qui traversent le lac.
- */
-export const WATER_CELLS: Cell[] = union(rect(7, 6, 8, 10), rect(12, 6, 13, 10))
+// Lac du printemps : l'eau elle-même (douves) vient du serveur (MapDef.water,
+// SeasonalTerrain.WATER_CELLS côté backend). Les deux ponts (nord et sud) sont
+// les cases de route qui traversent le lac.
 /** Emprise du lac (eau + ponts + île) : x=7..13, y=6..10. */
 export const LAKE = { x0: 7, y0: 6, x1: 13, y1: 10 }
 

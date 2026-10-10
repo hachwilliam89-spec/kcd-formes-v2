@@ -3,8 +3,9 @@ import { paintCastle, FORT_WIDTH, FORT_HEIGHT, PORTAL_FRAMES } from './castles'
 import { BANK_CELLS, LAKE, FOG_RANGE_PENALTY, type TerrainSnapshot, type TerrainForecast } from './seasons'
 import Phaser from 'phaser'
 import type { Cell } from './constants'
-import { TOP_RESERVED_ROWS, MAX_WALLS, towerRangeAt } from './constants'
-import { GAME_MAPS, DEFAULT_MAP_ID, getMapDef, mapIsCorridor, mapIsBuildable, mapPathDir, mapLaneStarts, mapCastle } from './maps'
+import { TOP_RESERVED_ROWS } from './constants'
+import { mapIsCorridor, mapIsBuildable, mapPathDir, mapLaneStarts, mapCastle } from './maps'
+import { getMaps, getMapDef, getTowerSpec, towerRangeAt } from '@/store/catalogStore'
 import { audio, Sfx } from '@/lib/audio'
 
 // Association effet visuel d'impact → bruitage, avec un intervalle mini (ms) pour
@@ -366,7 +367,8 @@ export class GameScene extends Phaser.Scene {
 
     // Map active (tracé + biome). Fixée par le canvas AVANT le boot de la scène
     // (setActiveMap) ; create() rend alors le bon terrain/décor. Défaut = désert.
-    private activeMapId: string = DEFAULT_MAP_ID
+    // Première carte du catalogue jusqu'à setActiveMap (le catalogue est chargé avant la scène).
+    private activeMapId = getMaps()[0]?.id ?? ''
     setActiveMap(id: string) { this.activeMapId = id }
     private get mapDef() { return getMapDef(this.activeMapId) }
     private get pathStart(): Cell { return this.mapDef.waypoints[0] }
@@ -505,7 +507,7 @@ export class GameScene extends Phaser.Scene {
         this.load.image('road_fill', '/sprites/terrain/road_fill.png')
         // Map "terres désolées" pré-composée (terre terne + piste sableuse aux bords
         // naturels) : image unique, rendu garanti (voir buildBakedTerrain).
-        for (const m of GAME_MAPS) if (m.image) this.load.image(`map-${m.id}`, m.image)
+        for (const m of getMaps()) if (m.image) this.load.image(`map-${m.id}`, m.image)
         // Thème terres désolées / ruines : PAS d'arbres/herbe verts. Ruines "tall"
         // (colonne, tombes, croix, bannières, palissade, feu) calées en HAUTEUR ;
         // "flat" (ossements, tronc, rocher, souche) en LARGEUR ; rochers + petits cailloux.
@@ -934,11 +936,14 @@ export class GameScene extends Phaser.Scene {
         if (this.getTowerAt(x, y)) return { ok: false, reason: 'Case occupée' }
         if (y < TOP_RESERVED_ROWS) return { ok: false, reason: 'Rangée réservée' }
         const corridor = mapIsCorridor(this.mapDef, x, y)
-        // Mur : sur le couloir, dans la limite de MAX_WALLS ; tours : bande constructible.
-        if (type === 'WALL') {
+        // Règle de pose et plafond du catalogue serveur : le Mur sur le couloir
+        // (dans la limite de maxCount), les tours sur la bande constructible.
+        const spec = getTowerSpec(type)
+        if (spec?.placement === 'ON_CORRIDOR') {
             if (!corridor) return { ok: false, reason: 'Mur : sur le couloir' }
-            const walls = [...this.towersById.values()].filter((t) => t.type === 'WALL').length
-            return walls >= MAX_WALLS ? { ok: false, reason: `Limite de ${MAX_WALLS} murs` } : { ok: true }
+            const count = [...this.towersById.values()].filter((t) => t.type === type).length
+            return spec.maxCount > 0 && count >= spec.maxCount
+                ? { ok: false, reason: `Limite de ${spec.maxCount} murs` } : { ok: true }
         }
         if (corridor) return { ok: false, reason: 'Pas sur le couloir' }
         return mapIsBuildable(this.mapDef, x, y) ? { ok: true } : { ok: false, reason: 'Impossible' }

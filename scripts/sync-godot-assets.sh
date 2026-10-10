@@ -11,6 +11,8 @@
 #
 # Prérequis (une fois) : cd frontend-web && npm ci ; cd scripts/visual-export && npm install ;
 # Google Chrome installé (ou BENCH_CHROME=/chemin/vers/chrome).
+# À chaque fois : backend lancé (docker compose up -d), qui sert la disposition des
+# cartes ; autre adresse : API_URL=http://… ./scripts/sync-godot-assets.sh
 # Usage : ./scripts/sync-godot-assets.sh   puis   godot --headless --path client-godot --import
 set -euo pipefail
 cd "$(dirname "$0")/.."

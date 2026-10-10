@@ -9,6 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
 import { fileURLToPath } from 'node:url'
+import { CATALOG_OPTIONS, loadCatalog, catalogScript, NEXT_ENV_DEFINE } from '../lib/catalog.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const front = path.resolve(here, '../../frontend-web')
@@ -27,13 +28,15 @@ const { values: opt } = parseArgs({
         profile: { type: 'boolean', default: false },  // top des fonctions (profil CPU)
         json: { type: 'boolean', default: false },     // sortie brute
         help: { type: 'boolean', short: 'h', default: false },
+        ...CATALOG_OPTIONS,
     },
 })
 
 if (opt.help) {
     console.log(`Usage : npm run bench -- [--enemies 200] [--towers 32] [--map desert|fourche|spring|autumn]
                        [--idle] [--headed] [--software] [--profile] [--json]
-                       [--serve] [--seasonal]`)
+                       [--serve] [--seasonal]
+                       [--api http://localhost:8080 | --catalog fichier.json]`)
     process.exit(0)
 }
 if (!fs.existsSync(path.join(front, 'public/sprites'))) {
@@ -61,12 +64,20 @@ await build({
     target: 'es2022',
     keepNames: true,
     logLevel: 'warning',
+    define: NEXT_ENV_DEFINE,
 })
+// Disposition des cartes et catalogue des tours : servis par le backend (comme en jeu).
+const CATALOG_JS = catalogScript(await loadCatalog(opt))
 
 // 2. Serveur statique : page + bundle ici, sprites/sons depuis frontend-web/public.
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.jpg': 'image/jpeg', '.mp3': 'audio/mpeg' }
 const server = http.createServer((req, res) => {
     const url = decodeURIComponent(req.url.split('?')[0])
+    if (url === '/catalog.js') {
+        res.writeHead(200, { 'Content-Type': 'text/javascript' })
+        res.end(CATALOG_JS)
+        return
+    }
     const file = url === '/' ? path.join(here, 'index.html')
         : url === '/phaser.js' ? PHASER_DIST
         : /^\/(sprites|sounds)\//.test(url) ? path.join(front, 'public', url)

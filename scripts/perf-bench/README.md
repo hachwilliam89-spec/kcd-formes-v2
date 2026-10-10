@@ -12,8 +12,10 @@ exactement comme le solo (`playWave`). Même graine → même vague, d'un run à
 ## Installation
 
 Prérequis : les dépendances du front installées (`frontend-web/node_modules`), les
-assets présents (`frontend-web/public/sprites`, voir `scripts/unpack-assets.sh`) et
-Google Chrome installé.
+assets présents (`frontend-web/public/sprites`, voir `scripts/unpack-assets.sh`),
+Google Chrome installé et le backend lancé (`docker compose up -d`) : la disposition
+des cartes et le catalogue des tours viennent de l'API (`--api <url>`, ou
+`--catalog <fichier.json>` sans backend).
 
 ```bash
 cd scripts/perf-bench

@@ -9,8 +9,11 @@
 // Option --bench : la vague du banc de charge (générateur de scripts/perf-bench)
 // en bench.json, rejouée par l'écran « Banc de perf » du client Godot.
 //
+// Prérequis : backend joignable (--api, défaut http://localhost:8080), qui sert la
+// disposition des cartes ; ou --catalog <fichier.json> ({ towers, maps }).
+//
 // Usage : npm run export [-- --maps desert,spring] [-- --bench --maps desert]
-//         [-- --reference --out /tmp/ref]
+//         [-- --reference --out /tmp/ref] [-- --api http://localhost:8080]
 import { build } from 'esbuild'
 import { chromium } from 'playwright-core'
 import http from 'node:http'
@@ -18,6 +21,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
 import { fileURLToPath } from 'node:url'
+import { CATALOG_OPTIONS, loadCatalog, catalogScript, NEXT_ENV_DEFINE } from '../lib/catalog.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '../..')
@@ -30,6 +34,7 @@ const { values: opt } = parseArgs({
         bench: { type: 'boolean', default: false },
         out: { type: 'string', default: path.join(root, 'client-godot/assets/baked') },
         software: { type: 'boolean', default: false },
+        ...CATALOG_OPTIONS,
     },
 })
 if (!fs.existsSync(path.join(front, 'public/sprites'))) {
@@ -47,12 +52,19 @@ const phaserGlobal = {
 }
 await build({
     entryPoints: [path.join(here, 'entry.ts')], bundle: true, outfile: path.join(here, 'dist/bundle.js'),
-    alias: { '@': front }, plugins: [phaserGlobal], target: 'es2022', logLevel: 'warning',
+    alias: { '@': front }, plugins: [phaserGlobal], target: 'es2022', logLevel: 'warning', define: NEXT_ENV_DEFINE,
 })
+// Disposition des cartes et catalogue des tours : servis par le backend (comme en jeu).
+const CATALOG_JS = catalogScript(await loadCatalog(opt))
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.jpg': 'image/jpeg', '.mp3': 'audio/mpeg', '.webp': 'image/webp' }
 const server = http.createServer((req, res) => {
     const url = decodeURIComponent(req.url.split('?')[0])
+    if (url === '/catalog.js') {
+        res.writeHead(200, { 'Content-Type': 'text/javascript' })
+        res.end(CATALOG_JS)
+        return
+    }
     const file = url === '/' ? path.join(here, 'index.html')
         : url === '/phaser.js' ? PHASER_DIST
         : /^\/(sprites|sounds)\//.test(url) ? path.join(front, 'public', url)

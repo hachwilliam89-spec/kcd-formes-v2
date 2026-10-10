@@ -16,7 +16,8 @@ import { UnitChip } from '@/components/game/UnitChip'
 import { ChatPanel, type ChatMessage } from '@/components/game/ChatPanel'
 import { useHasGutter } from '@/components/game/useHasGutter'
 import { TOP_RESERVED_ROWS } from '@/components/game/constants'
-import { getMapDef, mapIsCorridor, mapIsBuildable } from '@/components/game/maps'
+import { mapIsCorridor, mapIsBuildable } from '@/components/game/maps'
+import { useCatalog, getMapDef, type TowerType } from '@/store/catalogStore'
 import MapSelector from '@/components/game/MapSelector'
 import { audio } from '@/lib/audio'
 import type { PlacementVerdict } from '@/components/game/GameScene'
@@ -30,14 +31,13 @@ const CoopCanvas = dynamic(() => import('@/components/coop/CoopCanvas'), {
     ),
 })
 
-type TowerType = 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA' | 'WALL'
-// color = couleur du type (légende) reprise du rendu de jeu.
-const TOWERS: { type: TowerType; label: string; cost: number; color: string }[] = [
-    { type: 'ARCHER', label: 'Archer', cost: 50, color: '#5bbd3a' },
-    { type: 'MAGE', label: 'Mage', cost: 100, color: '#9a6ce0' },
-    { type: 'CATAPULT', label: 'Catapulte', cost: 150, color: '#e08a3a' },
-    { type: 'BALLISTA', label: 'Baliste', cost: 200, color: '#c7cdd4' },
-    { type: 'WALL', label: 'Mur', cost: 35, color: '#9a8560' },
+// Libellés affichés (présentation) ; coûts et règle de pose : catalogue du serveur.
+const TOWERS: { type: TowerType; label: string }[] = [
+    { type: 'ARCHER', label: 'Archer' },
+    { type: 'MAGE', label: 'Mage' },
+    { type: 'CATAPULT', label: 'Catapulte' },
+    { type: 'BALLISTA', label: 'Baliste' },
+    { type: 'WALL', label: 'Mur' },
 ]
 
 const BONUSES: { type: string; label: string }[] = [
@@ -63,6 +63,11 @@ export default function CoopPage() {
     const [code, setCode] = useState('')
     const [pendingMapId, setPendingMapId] = useState<string>('desert')
     const [selectedTower, setSelectedTower] = useState<TowerType>('ARCHER')
+    // Catalogue du serveur (tours + cartes) : chargé une fois, le plateau attend `ready`.
+    const { status: catalogStatus, towers: towerSpecs, load: loadCatalog } = useCatalog()
+    useEffect(() => { void loadCatalog() }, [loadCatalog])
+    const costOf = (type: string) => towerSpecs.find((s) => s.type === type)?.cost ?? 0
+    const onCorridorOf = (type: string) => towerSpecs.find((s) => s.type === type)?.placement === 'ON_CORRIDOR'
     const [notice, setNotice] = useState<string | null>(null)
     const canvasRef = useRef<CoopCanvasHandle>(null)
     const { ref: boardRef, gutter } = useHasGutter()
@@ -124,10 +129,11 @@ export default function CoopPage() {
         if (y < TOP_RESERVED_ROWS) { setNotice('Rangée du haut réservée.'); return }
         const mapDef = getMapDef(match?.mapId)
         const inCorridor = mapIsCorridor(mapDef, x, y)
-        if (selectedTower === 'WALL' && !inCorridor) { setNotice('Le mur se pose sur le couloir des ennemis.'); return }
-        if (selectedTower !== 'WALL' && inCorridor) { setNotice('Impossible de poser une tour sur le couloir.'); return }
-        if (selectedTower !== 'WALL' && !inCorridor && !mapIsBuildable(mapDef, x, y)) { setNotice('Impossible de construire ici.'); return }
-        const cost = TOWERS.find((t) => t.type === selectedTower)?.cost ?? 0
+        const onCorridor = onCorridorOf(selectedTower)
+        if (onCorridor && !inCorridor) { setNotice('Le mur se pose sur le couloir des ennemis.'); return }
+        if (!onCorridor && inCorridor) { setNotice('Impossible de poser une tour sur le couloir.'); return }
+        if (!onCorridor && !inCorridor && !mapIsBuildable(mapDef, x, y)) { setNotice('Impossible de construire ici.'); return }
+        const cost = costOf(selectedTower)
         if ((hud?.gold ?? 0) < cost) { setNotice(`Or insuffisant : il faut ${cost} or.`); return }
         actions.placeTower(selectedTower, x, y)
     }
@@ -135,11 +141,24 @@ export default function CoopPage() {
     // Aperçu de pose : coût, ou « Or insuffisant » (les règles de terrain et la
     // limite de murs sont vérifiées par la scène).
     function placementValidator(type: string): PlacementVerdict {
-        const cost = TOWERS.find((t) => t.type === type)?.cost ?? 0
+        const cost = costOf(type)
         return (hud?.gold ?? 0) < cost ? { ok: false, cost, reason: `Or insuffisant (${cost})` } : { ok: true, cost }
     }
 
     if (!hasHydrated || !isAuthenticated) return null
+    // Le plateau lit le catalogue dès sa création : rien n'est affiché avant.
+    if (catalogStatus !== 'ready') {
+        return (
+            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center gap-3">
+                <p className="text-white text-xl">
+                    {catalogStatus === 'error' ? 'Impossible de charger les données du jeu (serveur injoignable).' : 'Chargement du jeu…'}
+                </p>
+                {catalogStatus === 'error' && (
+                    <button onClick={() => void loadCatalog()} className="kcd-btn text-sm py-1 px-4">Réessayer</button>
+                )}
+            </div>
+        )
+    }
 
     const gold = hud?.gold ?? 0
     const castleRatio = hud && hud.castleMaxHp > 0 ? Math.max(0, hud.castleHp / hud.castleMaxHp) : 1
@@ -311,11 +330,11 @@ export default function CoopPage() {
                                     key={t.type}
                                     icon={<TowerIcon type={t.type} size={32} />}
                                     label={t.label}
-                                    cost={t.cost}
+                                    cost={costOf(t.type)}
                                     selected={selectedTower === t.type}
-                                    affordable={gold >= t.cost}
+                                    affordable={gold >= costOf(t.type)}
                                     onClick={() => { audio.play('ui_click', { volume: 0.5 }); setSelectedTower(t.type) }}
-                                    title={`${t.label} — ${t.cost} or`}
+                                    title={`${t.label} — ${costOf(t.type)} or`}
                                 />
                             ))}
                         </div>

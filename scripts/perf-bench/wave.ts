@@ -4,7 +4,7 @@
 // mesurent EXACTEMENT la même vague.
 import type { TowerData, TickSnapshot, EnemySnapshot } from '@/components/game/GameScene'
 import type { MapDef } from '@/components/game/maps'
-import { towerRangeAt } from '@/components/game/constants'
+import { towerRangeAt } from '@/store/catalogStore'
 
 // PRNG déterministe (mulberry32) : deux runs = exactement la même vague.
 function rng(seed: number) {

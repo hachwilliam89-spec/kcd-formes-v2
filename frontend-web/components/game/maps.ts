@@ -1,92 +1,137 @@
-// Catalogue des maps jouables (solo + multi). Grille fixe 20×16 : le TRACÉ (une ou
-// plusieurs voies), le BIOME (image de terrain + décor) et la largeur de couloir
-// changent d'une map à l'autre. Doit rester synchronisé avec le catalogue backend
-// (MapCatalog) — mêmes id, mêmes voies, même halfWidth.
-import { Cell, PathData, buildLanesData, corridorHas, buildableHas, pathDirectionAtIn } from './constants'
-import { WATER_CELLS } from './seasons'
+// Cartes jouables : la DISPOSITION (voies, couloir, cases constructibles, eau,
+// château) vient du backend (GET /api/v1/maps/{id}, voir store/catalogStore.ts) ;
+// ce fichier ne garde que la PRÉSENTATION propre au web (nom affiché, biome,
+// image de terrain) et assemble les deux en MapDef pour le rendu et les aperçus.
+import type { Cell, PathData } from './constants'
+import type { MapLayout } from '@/store/catalogStore'
 
 export type Biome = 'desert' | 'prairie' | 'snow' | 'spring' | 'autumn'
 
-export type MapDef = {
-  id: string
+/** Présentation d'une carte côté web (rien de ce qui touche aux règles). */
+type MapPresentation = {
   name: string
   biome: Biome
-  image: string          // image de terrain (/sprites/terrain/…)
-  lanes: Cell[][]        // une voie = liste de waypoints ; plusieurs voies convergent sur le château
-  waypoints: Cell[]      // = lanes[0], pour compat (départ/arrivée de référence)
-  halfWidth: number      // demi-largeur du couloir (1 = large, 0 = voies fines)
-  wideSpots: Cell[]      // aires d'élargissement local du couloir (aires de croisement)
-  proceduralRoad: boolean // route dessinée au runtime (multi-voies) plutôt que peinte dans l'image
-  water: Cell[]          // eau infranchissable et inconstructible (lac du printemps)
-  path: PathData         // dérivé (couloir union, cases de chemin, directions)
+  image: string          // image de terrain (/sprites/terrain/…), vide = terrain peint au runtime
+  proceduralRoad: boolean // route dessinée au runtime plutôt que peinte dans l'image
 }
 
-/** Carte mono-voie classique (couloir large, route peinte dans l'image). */
-function def(id: string, name: string, biome: Biome, image: string, waypoints: Cell[]): MapDef {
+const PRESENTATION: Record<string, MapPresentation> = {
+  desert: { name: 'Terres désolées', biome: 'desert', image: '/sprites/terrain/desert_map.png', proceduralRoad: false },
+  fourche: { name: 'La Fourche', biome: 'snow', image: '/sprites/terrain/fourche_map.png', proceduralRoad: false },
+  spring: { name: 'Les Jardins éveillés', biome: 'spring', image: '', proceduralRoad: false },
+  autumn: { name: 'Le Val des feuilles', biome: 'autumn', image: '', proceduralRoad: false },
+}
+
+/** Carte inconnue du web (ajoutée côté serveur) : jouable, terrain peint au runtime. */
+const fallbackPresentation = (id: string): MapPresentation =>
+  ({ name: id, biome: 'prairie', image: '', proceduralRoad: true })
+
+export type MapDef = MapPresentation & {
+  id: string
+  width: number
+  height: number
+  lanes: Cell[][]        // points de passage de chaque voie (serveur)
+  waypoints: Cell[]      // = lanes[0], départ/arrivée de référence
+  halfWidth: number      // demi-largeur du couloir (serveur) : largeur de route dessinée
+  wideSpots: Cell[]      // aires d'élargissement de la route (serveur)
+  water: Cell[]          // eau infranchissable et inconstructible (serveur)
+  castle: Cell           // château du joueur, arrivée commune des voies (serveur)
+  spawns: Cell[]         // entrées ennemies (serveur)
+  path: PathData         // index de la disposition (couloir, constructible, directions)
+}
+
+const key = (x: number, y: number) => `${x},${y}`
+
+/**
+ * Index de lecture de la disposition renvoyée par le serveur : aucun calcul de
+ * règle, seulement des ensembles pour des tests en O(1) et la direction de
+ * déplacement le long des chemins fournis (orientation du mur).
+ */
+function pathDataFromLayout(layout: MapLayout): PathData {
+  // Union des chemins des voies, dans l'ordre des voies.
+  const pathCells: Cell[] = []
+  const seen = new Set<string>()
+  for (const lane of layout.lanePaths) {
+    for (const c of lane) {
+      const k = key(c.x, c.y)
+      if (!seen.has(k)) { seen.add(k); pathCells.push(c) }
+    }
+  }
+  // Direction des ennemis à chaque case de chemin : vers la case suivante de sa
+  // voie ; la première voie qui passe par une case gagne.
+  const pathDir = new Map<string, { dx: number; dy: number }>()
+  for (const lane of layout.lanePaths) {
+    for (let i = 0; i < lane.length; i++) {
+      const a = lane[i]
+      const b = lane[Math.min(i + 1, lane.length - 1)]
+      const k = key(a.x, a.y)
+      if (!pathDir.has(k)) pathDir.set(k, { dx: Math.sign(b.x - a.x), dy: Math.sign(b.y - a.y) })
+    }
+  }
+  // Cases de couloir (appartenance : serveur) rangées dans l'ordre de parcours des
+  // voies, puis des aires élargies : le décor semé sur la route (tirage aléatoire
+  // déterministe, case par case) reste exactement le même d'une version à l'autre.
+  const corridorSet = new Set(layout.corridorCells.map((c) => key(c.x, c.y)))
+  const corridorCells: Cell[] = []
+  const placed = new Set<string>()
+  const take = (x: number, y: number) => {
+    const k = key(x, y)
+    if (corridorSet.has(k) && !placed.has(k)) { placed.add(k); corridorCells.push({ x, y }) }
+  }
+  const w = layout.corridorHalfWidth
+  for (const p of pathCells) {
+    for (let dx = -w; dx <= w; dx++) for (let dy = -w; dy <= w; dy++) take(p.x + dx, p.y + dy)
+  }
+  for (const c of layout.wideSpots) take(c.x, c.y)
+  for (const c of layout.corridorCells) take(c.x, c.y)
   return {
-    id, name, biome, image,
-    lanes: [waypoints], waypoints, halfWidth: 1, wideSpots: [], proceduralRoad: false, water: [],
-    path: buildLanesData([waypoints], 1),
+    waypoints: layout.lanes[0] ?? [],
+    pathCells,
+    corridorSet,
+    corridorCells,
+    buildableSet: new Set(layout.buildableCells.map((c) => key(c.x, c.y))),
+    pathDir,
   }
 }
 
-/** Carte multi-voies (voies fines). La route est bakée dans l'image (comme le désert),
- *  donc proceduralRoad = false. wideSpots = aires larges. */
-function defLanes(id: string, name: string, biome: Biome, image: string, lanes: Cell[][], wideSpots: Cell[] = [], halfWidth = 0, water: Cell[] = []): MapDef {
+/** Assemble disposition serveur + présentation web (appelé une fois au chargement du catalogue). */
+export function buildMapDef(layout: MapLayout): MapDef {
+  const lanes = layout.lanes.length > 0 ? layout.lanes : [[layout.castle]]
   return {
-    id, name, biome, image,
-    lanes, waypoints: lanes[0], halfWidth, wideSpots, proceduralRoad: false, water,
-    path: buildLanesData(lanes, halfWidth, wideSpots, water),
+    ...(PRESENTATION[layout.id] ?? fallbackPresentation(layout.id)),
+    id: layout.id,
+    width: layout.width,
+    height: layout.height,
+    lanes,
+    waypoints: lanes[0],
+    halfWidth: layout.corridorHalfWidth,
+    wideSpots: layout.wideSpots,
+    water: layout.waterCells,
+    castle: layout.castle,
+    spawns: layout.spawns,
+    path: pathDataFromLayout(layout),
   }
 }
 
-// ⚠️ Waypoints alignés deux à deux (chaque paire partage x ou y), y ≥ 1 (rangée 0
-// = tampon). Doivent être IDENTIQUES côté backend (MapCatalog).
-export const GAME_MAPS: MapDef[] = [
-  def('desert', 'Terres désolées', 'desert', '/sprites/terrain/desert_map.png', [
-    { x: 0, y: 3 }, { x: 17, y: 3 }, { x: 17, y: 8 }, { x: 2, y: 8 }, { x: 2, y: 13 }, { x: 19, y: 13 },
-  ]),
-  // La Fourche : UNE entrée (0,8), la route se divise en (3,8) en trois branches qui
-  // rejoignent le château COLLÉ AU BORD DROIT (19,8) par des angles différents —
-  // nord (bord droit descendant), ouest (direct), sud (bord droit montant).
-  defLanes('fourche', 'La Fourche', 'snow', '/sprites/terrain/fourche_map.png', [
-    [{ x: 0, y: 8 }, { x: 3, y: 8 }, { x: 3, y: 2 }, { x: 19, y: 2 }, { x: 19, y: 8 }],
-    [{ x: 0, y: 8 }, { x: 19, y: 8 }],
-    [{ x: 0, y: 8 }, { x: 3, y: 8 }, { x: 3, y: 14 }, { x: 19, y: 14 }, { x: 19, y: 8 }],
-  ], [
-    // Aires de croisement (route élargie vers les bords haut/bas) — IDENTIQUE au backend.
-    { x: 9, y: 1 }, { x: 10, y: 1 }, { x: 11, y: 1 }, { x: 12, y: 1 },
-    { x: 9, y: 15 }, { x: 10, y: 15 }, { x: 11, y: 15 }, { x: 12, y: 15 },
-  ]),
-  // Les Jardins : le château sur son île, au centre du lac ; un fort ennemi de chaque
-  // côté. Chaque route se divise (nord / sud) et toutes finissent sur les deux ponts.
-  defLanes('spring', 'Les Jardins éveillés', 'spring', '', [
-    [{ x: 0, y: 8 }, { x: 4, y: 8 }, { x: 4, y: 3 }, { x: 10, y: 3 }, { x: 10, y: 8 }],
-    [{ x: 0, y: 8 }, { x: 4, y: 8 }, { x: 4, y: 13 }, { x: 10, y: 13 }, { x: 10, y: 8 }],
-    [{ x: 19, y: 8 }, { x: 16, y: 8 }, { x: 16, y: 3 }, { x: 10, y: 3 }, { x: 10, y: 8 }],
-    [{ x: 19, y: 8 }, { x: 16, y: 8 }, { x: 16, y: 13 }, { x: 10, y: 13 }, { x: 10, y: 8 }],
-  ], [], 1, WATER_CELLS),
-  // Le Val : le grand serpentin, plus un raccourci boueux par le milieu (couloir large).
-  defLanes('autumn', 'Le Val des feuilles', 'autumn', '', [
-    [{ x: 0, y: 3 }, { x: 16, y: 3 }, { x: 16, y: 8 }, { x: 3, y: 8 }, { x: 3, y: 13 }, { x: 19, y: 13 }],
-    [{ x: 0, y: 3 }, { x: 9, y: 3 }, { x: 9, y: 13 }, { x: 19, y: 13 }],
-  ], [], 1),
-]
-
-export const DEFAULT_MAP_ID = 'desert'
-
-export function getMapDef(id?: string | null): MapDef {
-  return GAME_MAPS.find((m) => m.id === id) ?? GAME_MAPS[0]
-}
-
-// Helpers par map (équivalents des globaux de constants.ts mais pour une map donnée).
-export const mapIsCorridor = (m: MapDef, x: number, y: number) => corridorHas(m.path, x, y)
+// Helpers par map : simples lectures de la disposition serveur.
+export const mapIsCorridor = (m: MapDef, x: number, y: number) => m.path.corridorSet.has(key(x, y))
 /** Constructible = bande au bord des routes. Hors couloir ET hors bande = décor. */
-export const mapIsBuildable = (m: MapDef, x: number, y: number) => buildableHas(m.path, x, y)
-export const mapPathDir = (m: MapDef, x: number, y: number) => pathDirectionAtIn(m.path, x, y)
+export const mapIsBuildable = (m: MapDef, x: number, y: number) => m.path.buildableSet.has(key(x, y))
+/** Direction du chemin (sens des ennemis) à/près d'une case — pour orienter le mur. */
+export function mapPathDir(m: MapDef, x: number, y: number): { dx: number; dy: number } {
+  const exact = m.path.pathDir.get(key(x, y))
+  if (exact) return exact
+  let best: { dx: number; dy: number } = { dx: 1, dy: 0 }
+  let bestD = Infinity
+  for (const p of m.path.pathCells) {
+    const d = (p.x - x) ** 2 + (p.y - y) ** 2
+    if (d < bestD) { bestD = d; best = m.path.pathDir.get(key(p.x, p.y)) ?? best }
+  }
+  return best
+}
 export const mapPathStart = (m: MapDef) => m.waypoints[0]
-export const mapPathEnd = (m: MapDef) => m.waypoints[m.waypoints.length - 1]
+export const mapPathEnd = (m: MapDef) => m.castle
 /** Départs de chaque voie (entrées ennemies) — une carte mono-voie en a une seule. */
 export const mapLaneStarts = (m: MapDef): Cell[] => m.lanes.map((lane) => lane[0])
-/** Arrivée commune (château) — dernière case de n'importe quelle voie. */
-export const mapCastle = (m: MapDef): Cell => m.lanes[0][m.lanes[0].length - 1]
+/** Arrivée commune (château). */
+export const mapCastle = (m: MapDef): Cell => m.castle

@@ -16,8 +16,11 @@
 //           scripts/perf-bench : 200 ennemis, 32 tours, graine 1), rejouée par Godot.
 import Phaser from 'phaser'
 import { GameScene } from '@/components/game/GameScene'
-import { getMapDef } from '@/components/game/maps'
+import { getMapDef, useCatalogStore, type CatalogData } from '@/store/catalogStore'
 import { buildBenchWave } from '../perf-bench/wave'
+
+// Catalogue servi par run.mjs / export.mjs (backend ou --catalog) : chargé avant toute lecture.
+useCatalogStore.getState().seed((window as unknown as { __CATALOG__: CatalogData }).__CATALOG__)
 
 const params = new URLSearchParams(location.search)
 const MAP = getMapDef(params.get('map') ?? 'desert')

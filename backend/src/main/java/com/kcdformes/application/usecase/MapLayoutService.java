@@ -58,7 +58,10 @@ public class MapLayoutService implements GetMapLayoutUseCase {
                 map.getTerrain(),
                 map.getPathEnd(),
                 List.copyOf(spawns),
+                map.getLanes().stream().map(List::copyOf).toList(),
                 lanePaths == null ? List.of() : List.copyOf(lanePaths),
+                map.getCorridorHalfWidth(),
+                List.copyOf(map.getWideSpots()),
                 sorted(pathfindingService.corridorCells(map)),
                 sorted(pathfindingService.buildableCells(map)),
                 sorted(SeasonalTerrain.waterCells(map.getTerrain())));

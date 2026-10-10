@@ -3,17 +3,17 @@
 // Choix de la carte : aperçu réel du champ de bataille (rendu du jeu, dans
 // public/sprites/thumbs/ avec les autres sprites sous licence), saison, une phrase
 // et la difficulté. Sans l'aperçu, le schéma du tracé le remplace.
-import { useState } from 'react'
-import { GAME_MAPS, type MapDef, mapIsCorridor } from './maps'
-import { GRID_W, GRID_H } from './constants'
+import { useEffect, useState } from 'react'
+import { type MapDef, mapIsCorridor } from './maps'
+import { useCatalog } from '@/store/catalogStore'
 import { MAP_THEMES, BANK_CELLS, LAKE, fogCellsFor, mudCellsFor, type MapDifficulty } from './seasons'
 
 function PathPreview({ map }: { map: MapDef }) {
     const theme = MAP_THEMES[map.id]
-    const castle = map.lanes[0][map.lanes[0].length - 1]
+    const castle = map.castle
     return (
-        <svg viewBox={`0 0 ${GRID_W} ${GRID_H}`} className="w-full h-auto block" preserveAspectRatio="none">
-            <rect x={0} y={0} width={GRID_W} height={GRID_H} fill={theme.ground} />
+        <svg viewBox={`0 0 ${map.width} ${map.height}`} className="w-full h-auto block" preserveAspectRatio="none">
+            <rect x={0} y={0} width={map.width} height={map.height} fill={theme.ground} />
             {map.id === 'spring' && (
                 <rect x={LAKE.x0} y={LAKE.y0} width={LAKE.x1 - LAKE.x0 + 1} height={LAKE.y1 - LAKE.y0 + 1} fill="#527f87" />
             )}
@@ -89,10 +89,22 @@ export default function MapSelector({
     onChange: (id: string) => void
     disabled?: boolean
 }) {
+    // Cartes servies par le backend (voir store/catalogStore.ts).
+    const { maps, status, load } = useCatalog()
+    useEffect(() => { void load() }, [load])
+    if (status === 'error') {
+        return (
+            <div className="flex flex-col items-center gap-2 py-6 text-sm">
+                <p>Impossible de charger les cartes (serveur injoignable).</p>
+                <button type="button" onClick={() => void load()} className="kcd-btn text-xs py-1 px-3">Réessayer</button>
+            </div>
+        )
+    }
+    if (status !== 'ready') return <p className="py-6 text-center text-sm">Chargement des cartes…</p>
     return (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {GAME_MAPS.map((m) => {
-                const theme = MAP_THEMES[m.id]
+            {maps.map((m) => {
+                const theme = MAP_THEMES[m.id] ?? MAP_THEMES.desert
                 const selected = m.id === value
                 return (
                     <button
