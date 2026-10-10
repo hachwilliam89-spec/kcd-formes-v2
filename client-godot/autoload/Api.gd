@@ -56,6 +56,17 @@ func place_tower(game_id: String, tower_type: String, cell: Vector2i) -> ApiResu
 		{"towerType": tower_type, "x": cell.x, "y": cell.y})
 
 
+## Améliore une tour d'un niveau : le serveur vérifie le niveau max et débite l'or.
+func upgrade_tower(game_id: String, tower_id: String) -> ApiResult:
+	return await _request(HTTPClient.METHOD_POST, "/api/v1/games/%s/towers/%s/upgrade" % [game_id, tower_id], {})
+
+
+## Priorité de tir d'une tour (CLOSEST, FIRST, STRONGEST) : réglage gratuit hors combat.
+func set_targeting_mode(game_id: String, tower_id: String, mode: String) -> ApiResult:
+	return await _request(HTTPClient.METHOD_POST, "/api/v1/games/%s/towers/%s/targeting" % [game_id, tower_id],
+		{"mode": mode})
+
+
 ## Lance la vague suivante : le serveur la simule entièrement et renvoie tous ses ticks.
 func start_wave(game_id: String) -> ApiResult:
 	return await _request(HTTPClient.METHOD_POST, "/api/v1/games/%s/waves/start" % game_id, {})
