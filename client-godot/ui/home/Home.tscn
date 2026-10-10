@@ -55,6 +55,12 @@ layout_mode = 2
 disabled = true
 text = "Coop avec un allié"
 
+[node name="Versus" type="Button" parent="Center/Card/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Duel en versus"
+
 [node name="Error" type="Label" parent="Center/Card/Box"]
 unique_name_in_owner = true
 visible = false

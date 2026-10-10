@@ -1,15 +1,15 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://game/coop/Coop.gd" id="1_coop"]
+[ext_resource type="Script" path="res://game/multi/MatchScreen.gd" id="1_match"]
 [ext_resource type="Script" path="res://game/map/MapView.gd" id="2_mapview"]
 [ext_resource type="Resource" path="res://visuals/map_palette_default.tres" id="3_palette"]
 [ext_resource type="Script" path="res://game/battle/BattleView.gd" id="4_battle"]
 [ext_resource type="Resource" path="res://visuals/visual_catalog.tres" id="5_catalog"]
 [ext_resource type="Script" path="res://game/TickPlayer.gd" id="6_ticks"]
 [ext_resource type="Script" path="res://game/TowerBar.gd" id="7_towerbar"]
-[ext_resource type="Script" path="res://game/coop/ChatBox.gd" id="8_chat"]
+[ext_resource type="Script" path="res://game/multi/ChatBox.gd" id="8_chat"]
 
-[node name="Coop" type="Panel"]
+[node name="Match" type="Panel"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -17,7 +17,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_type_variation = &"Screen"
-script = ExtResource("1_coop")
+script = ExtResource("1_match")
 
 [node name="TickPlayer" type="Node" parent="."]
 unique_name_in_owner = true
@@ -75,6 +75,7 @@ grow_vertical = 2
 layout_mode = 2
 
 [node name="EndTitle" type="Label" parent="Layout/MapArea/EndPanel/EndBox"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"HeadingLabel"
 text = "Le château est tombé"
@@ -114,7 +115,7 @@ size_flags_vertical = 3
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"HeadingLabel"
-text = "Coop"
+text = "Multijoueur"
 autowrap_mode = 3
 
 [node name="Status" type="Label" parent="Layout/Side/Scroll/Box"]

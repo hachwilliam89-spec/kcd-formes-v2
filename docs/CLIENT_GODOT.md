@@ -27,9 +27,14 @@ client-godot/
     Grid.gd               seule conversion case ↔ espace local (CELL_SIZE = 16 ; ennemis : entier = centre de case)
     TickPlayer.gd         rejoue les ticks à 120 ms, interpole les ennemis, signaux tick_played / finished ; mode direct (play_live / push) pour le multijoueur
     TowerBar.gd           barre de construction depuis le catalogue serveur, partagée solo / coop
-    coop/Coop.tscn        écran coop : lobby (créer, rejoindre par code, prêt, démarrer) + plateau live, pose, bonus, chat, écran de fin ; reconnexion et reprise
-    coop/SnapshotFeed.gd  snapshots live → ticks rejouables par TickPlayer / BattleView (même rendu qu'en solo) ; détecte les trous du flux
-    coop/ChatBox.gd       chat de match (fil + saisie), réutilisable par le versus ; texte des joueurs jamais interprété en BBCode
+    multi/Match.tscn      scène commune des écrans multijoueur (Coop.tscn et Versus.tscn en héritent)
+    multi/MatchScreen.gd  socle : lobby (créer, rejoindre par code, prêt, démarrer), plateau live, pose, bonus, chat, écran de fin, reconnexion, chien de garde, reprise
+    multi/Coop.gd         coop : plateau et château partagés (comportement par défaut du socle)
+    multi/Versus.gd       versus : son plateau, envois chez l'adversaire, aperçu de sa grille, victoire / défaite
+    multi/SendBar.gd      barre d'envoi depuis `GET /api/v1/versus/sends` (coût, revenu)
+    multi/MiniBoard.gd    aperçu de la grille adverse (route, château selon ses PV, tours, ennemis), comme `MiniBoard.tsx`
+    multi/SnapshotFeed.gd snapshots live → ticks rejouables par TickPlayer / BattleView (même rendu qu'en solo) ; détecte les trous du flux
+    multi/ChatBox.gd      chat de match (fil + saisie) ; texte des joueurs jamais interprété en BBCode
     map/MapView.gd        vue provisoire de la carte (cases colorées) — remplaçable par une vue à tuiles
     battle/BattleView.gd  vue du combat, reproduction de GameScene.ts : décor, tours, ennemis, tirs, impacts, triés par profondeur
     battle/DecorSet.gd    sol + décor exportés du web (assets/baked/<carte>/)
@@ -74,7 +79,7 @@ client-godot/
 
 **STOMP** sur WebSocket brut `/ws` (pas de SockJS) :
 - Trame `CONNECT` avec l'en-tête `Authorization: Bearer <token>` (comme `frontend-web/hooks/useCoop.ts`).
-- Abonnements : `/user/queue/match`, `/user/queue/errors`, `/topic/match/{id}`, `/topic/match/{id}/state`, `/topic/match/{id}/chat`.
+- Abonnements : `/user/queue/match`, `/user/queue/errors`, `/topic/match/{id}`, `/topic/match/{id}/chat`, et l'état de jeu : `/topic/match/{id}/state` (coop, plateau commun) ou `/topic/match/{id}/player/{playerId}` (versus : son plateau + résumé de l'adversaire, `VersusPlayerView`).
 - Chaque trame se termine par un octet NULL (découpe en octets : une String Godot ne contient pas de caractère nul) ; heart-beat `0,0` (le broker simple de Spring n'en émet pas) ; reconnexion au bout de 3 s avec renvoi de tous les abonnements.
 - `Origin` : le WebSocket natif de Godot (desktop, Android, iOS) n'envoie pas d'en-tête `Origin`, ce que Spring accepte (seules les origines présentes sont filtrées par `setAllowedOrigins`) ; l'export web est servi par le même domaine que l'API.
 - Snapshots live (`/topic/match/{id}/state`, un par tick de 120 ms) : `SnapshotFeed` en fait des ticks pour `TickPlayer` en mode direct (retard borné à 3 ticks). Le snapshot ne dit ni pourquoi un ennemi disparaît ni qui vise qui : déduit pour le choix de l'animation seulement (présentation). Il porte aussi les options de bonus (`bonusOptions`, libellés du serveur) quand un bonus attend.
@@ -144,6 +149,7 @@ client-godot/
   - [x] Exports Android + web configurés, banc de perf identique au banc web (2026-10-09)
   - [x] Barre de construction depuis le catalogue serveur (Mur, Baliste, coûts, déblocages) ; fiche de la tour touchée : stats → niveau suivant, amélioration, priorité de tir (2026-10-10)
   - [x] STOMP : `StompClient` (WebSocketPeer, STOMP 1.2) + écran coop (lobby, partie live, pose, bonus), testés contre un serveur STOMP simulé (2026-10-10)
+  - [x] Versus : lobby (duel), plateau, barre d'envoi (catalogue serveur, grisée sans or), revenu et tués, aperçu de la grille adverse, victoire / défaite, retour au lobby ; reprise séparée de la coop ; testé contre un serveur STOMP simulé (2026-10-10)
   - [x] STOMP contre le vrai backend (local) : partie coop Godot ↔ web dans les deux sens, lobby, démarrage, carte choisie (La Fourche) chargée, poses de tours synchronisées et or partagé (2026-10-10). Non testés : reconnexion après coupure, bonus.
   - [x] Coop complète : chat, bonus aux libellés du serveur (un choix à la fois), écran de fin (vague atteinte, aussi en rejoignant une partie déjà terminée : `wave` de l'état du match ; nouvelle partie, accueil), reconnexion après coupure, chien de garde, reprise par code après un arrêt de l'appli ; testés contre un serveur STOMP simulé (2026-10-10)
   - [ ] Mesures sur téléphone → conclusion dans l'ADR 0001
@@ -163,7 +169,7 @@ Lecture : sur CPU, Godot consomme ≈ 2,7× plus que Phaser sur cette scène (�
 - [ ] Prérequis backend (§5).
 - [ ] Solo complet : HUD, tutoriel, son, quatre saisons.
 - [x] Coop complète (chat, fin de partie, reconnexion en cours de vague).
-- [ ] Versus (STOMP) : envois depuis `GET /api/v1/versus/sends`, plateau adverse réduit.
+- [x] Versus (STOMP) : envois depuis `GET /api/v1/versus/sends`, revenu, aperçu de la grille adverse, victoire / défaite ; écrans coop et versus sur un socle commun (`MatchScreen`).
 - [ ] Bascule : `/jouer` sert l'export web Godot, suppression du code de jeu de `frontend-web`.
 - [ ] Distribution : APK, puis stores.
 
