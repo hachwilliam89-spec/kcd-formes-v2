@@ -93,6 +93,11 @@ unique_name_in_owner = true
 visible = false
 layout_mode = 2
 
+[node name="TowerCard" type="VBoxContainer" parent="Layout/Side/Scroll/Box"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
 [node name="Info" type="Label" parent="Layout/Side/Scroll/Box"]
 unique_name_in_owner = true
 layout_mode = 2

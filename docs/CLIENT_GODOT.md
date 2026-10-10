@@ -134,6 +134,7 @@ client-godot/
   - [x] Partie : création, pose de tours au tap (Archer, Mage, Catapulte), replay des vagues à 120 ms avec interpolation, tirs et morts, palier de bonus, défaite et nouvelle partie (2026-10-09)
   - [x] Visuels identiques au web : sol et décor exportés du vrai GameScene, tours (socle + arme qui vise, Mage animé), ennemis, tirs et impacts, vérifiés par comparaison d'images ; compteur FPS en jeu (`war_seasons/debug/show_fps`) (2026-10-09)
   - [x] Exports Android + web configurés, banc de perf identique au banc web (2026-10-09)
+  - [x] Barre de construction depuis le catalogue serveur (Mur, Baliste, coûts, déblocages) ; fiche de la tour touchée : stats → niveau suivant, amélioration, priorité de tir (2026-10-10)
   - [ ] Mesures sur téléphone → conclusion dans l'ADR 0001
 
 ### Mesures du banc (même vague : 200 ennemis, 32 tours, graine 1)

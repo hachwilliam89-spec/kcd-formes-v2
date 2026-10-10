@@ -12,6 +12,8 @@ var damage_type: String = ""
 var splash_radius: float = 0.0
 var hp: int = 0
 var max_hp: int = 0
+## Priorité de tir choisie par le joueur : CLOSEST, FIRST ou STRONGEST.
+var targeting_mode: String = "CLOSEST"
 
 
 static func from_variant(value: Variant) -> TowerDto:
@@ -29,4 +31,5 @@ static func from_variant(value: Variant) -> TowerDto:
 	dto.splash_radius = float(body.get("splashRadius", 0.0))
 	dto.hp = int(body.get("hp", 0))
 	dto.max_hp = int(body.get("maxHp", 0))
+	dto.targeting_mode = str(body.get("targetingMode", "CLOSEST"))
 	return dto

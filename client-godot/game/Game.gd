@@ -6,6 +6,13 @@ extends Control
 ## déblocages) ; MapView/BattleView dessinent, TickPlayer rejoue, Grid convertit.
 ## La barre de construction vient du catalogue du serveur (GET /api/v1/towers).
 
+## Priorités de tir (TargetingMode côté serveur) : libellés de présentation.
+const TARGETING_MODES: Array[Dictionary] = [
+	{"mode": "CLOSEST", "label": "Le plus proche"},
+	{"mode": "FIRST", "label": "Le plus avancé"},
+	{"mode": "STRONGEST", "label": "Le plus solide"},
+]
+
 const CELL_LABELS: Dictionary = {
 	MapLayoutDto.CellKind.DEAD: "zone morte (décor)",
 	MapLayoutDto.CellKind.ROAD: "route",
@@ -22,6 +29,10 @@ var _catalog: Array[TowerSpecDto] = []
 var _best_wave: int = 0
 var _busy: bool = false
 var _tower_group: ButtonGroup = ButtonGroup.new()
+## Tour posée sélectionnée (fiche : amélioration, priorité de tir) ; "" = aucune.
+var _selected_tower_id: String = ""
+var _upgrade_button: Button
+var _targeting_buttons: Array[Button] = []
 
 @onready var _map_area: Control = %MapArea
 @onready var _map_view: MapView = %MapView
@@ -32,6 +43,7 @@ var _tower_group: ButtonGroup = ButtonGroup.new()
 @onready var _tower_bar: GridContainer = %TowerBar
 @onready var _wave_button: Button = %WaveButton
 @onready var _bonus_box: VBoxContainer = %BonusBox
+@onready var _tower_card: VBoxContainer = %TowerCard
 @onready var _info: Label = %Info
 @onready var _back: Button = %Back
 @onready var _fps: Label = %Fps
@@ -80,6 +92,7 @@ func _ready() -> void:
 
 
 func _new_game() -> void:
+	_selected_tower_id = ""
 	_info.text = "Création de la partie…"
 	var result: ApiResult = await Api.create_game("Château de %s" % Session.username, _layout.id)
 	if not _apply_state_result(result):
@@ -115,8 +128,11 @@ func _on_map_input(event: InputEvent) -> void:
 func _on_cell_tapped(cell: Vector2i) -> void:
 	var tower: TowerDto = _state.tower_at(cell)
 	if tower != null:
-		_info.text = "%s niv. %d\nPV %d/%d · portée %.1f" % [TowerNames.label(tower.type), tower.level, tower.hp, tower.max_hp, tower.range_cells]
+		# Toucher une tour posée la sélectionne (fiche) : jamais d'or dépensé par surprise.
+		_select_tower(tower.id)
+		_info.text = "Touche une case libre pour construire, ou une autre tour."
 		return
+	_select_tower("")
 	var spec: TowerSpecDto = _selected_spec()
 	if _busy or _ticks.playing or _state.is_over() or spec == null or not _fits_cell(spec, cell):
 		_info.text = "Case (%d, %d) : %s" % [cell.x, cell.y, CELL_LABELS.get(_layout.kind_at(cell), "?")]
@@ -215,6 +231,7 @@ func _apply_state_result(result: ApiResult) -> bool:
 		return false
 	_state = state
 	_battle.show_towers(_state.towers)
+	_rebuild_tower_card()
 	_refresh_hud()
 	return true
 
@@ -252,8 +269,138 @@ func _set_busy(busy: bool) -> void:
 	var waiting_bonus: bool = _state != null and _state.awaiting_bonus_choice
 	_wave_button.disabled = busy or _state == null or waiting_bonus
 	_refresh_tower_bar()
+	_refresh_tower_card()
 	for child: Node in _bonus_box.get_children():
 		(child as Button).disabled = busy
+
+
+# --- Fiche de la tour sélectionnée -------------------------------------------
+
+func _select_tower(tower_id: String) -> void:
+	_selected_tower_id = tower_id
+	_rebuild_tower_card()
+	if _tower_card.visible:
+		# Le panneau latéral défile : amener la fiche à l'écran une fois mise en page.
+		await get_tree().process_frame
+		var scroll: ScrollContainer = _tower_card.get_parent().get_parent() as ScrollContainer
+		if scroll != null and _tower_card.visible:
+			scroll.ensure_control_visible(_tower_card)
+
+
+func _selected_tower() -> TowerDto:
+	if _state == null or _selected_tower_id.is_empty():
+		return null
+	for tower: TowerDto in _state.towers:
+		if tower.id == _selected_tower_id:
+			return tower
+	return null
+
+
+## Fiche : niveau, stats (→ niveau suivant), amélioration, priorité de tir.
+## Valeurs du serveur : la tour (TowerResponse) et le catalogue pour le niveau suivant.
+func _rebuild_tower_card() -> void:
+	for child: Node in _tower_card.get_children():
+		_tower_card.remove_child(child)
+		child.queue_free()
+	_upgrade_button = null
+	_targeting_buttons.clear()
+	var tower: TowerDto = _selected_tower()
+	_tower_card.visible = tower != null
+	if tower == null:
+		# Tour détruite en combat ou partie relancée : la sélection tombe.
+		_selected_tower_id = ""
+		return
+	var spec: TowerSpecDto = _spec(tower.type)
+	var max_level: int = spec.levels.size() if spec != null and not spec.levels.is_empty() else tower.level
+	var next: TowerSpecDto.Level = spec.level(tower.level + 1) if spec != null and tower.level < max_level else null
+
+	var title: Label = Label.new()
+	title.text = "%s · niv. %d/%d" % [TowerNames.label(tower.type), tower.level, max_level]
+	_tower_card.add_child(title)
+
+	var stats: Label = Label.new()
+	stats.theme_type_variation = &"SmallLabel"
+	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var lines: PackedStringArray = []
+	if tower.damage > 0:
+		lines.append("Dégâts %d%s · portée %.1f%s" % [tower.damage, " → %d" % next.damage if next != null else "",
+			tower.range_cells, " → %.1f" % next.range_cells if next != null else ""])
+	lines.append("PV %d/%d%s" % [tower.hp, tower.max_hp, " → %d" % next.max_hp if next != null else ""])
+	stats.text = "\n".join(lines)
+	_tower_card.add_child(stats)
+
+	# Mur : structure sans tir, ni amélioration ni priorité (comme sur le web).
+	if spec != null and spec.on_corridor:
+		return
+
+	if next != null:
+		var cost: int = spec.level(tower.level).upgrade_cost
+		_upgrade_button = Button.new()
+		_upgrade_button.text = "Améliorer : %d or" % cost
+		_upgrade_button.theme_type_variation = &"SmallButton"
+		_upgrade_button.set_meta("cost", cost)
+		_upgrade_button.pressed.connect(_on_upgrade_pressed)
+		_tower_card.add_child(_upgrade_button)
+	else:
+		var top: Label = Label.new()
+		top.theme_type_variation = &"SmallLabel"
+		top.text = "Niveau maximum atteint."
+		_tower_card.add_child(top)
+
+	var heading: Label = Label.new()
+	heading.theme_type_variation = &"SmallLabel"
+	heading.text = "Priorité de tir"
+	_tower_card.add_child(heading)
+	for option: Dictionary in TARGETING_MODES:
+		var mode: String = str(option["mode"])
+		var button: Button = Button.new()
+		button.text = ("✓ " if tower.targeting_mode == mode else "") + str(option["label"])
+		button.theme_type_variation = &"SmallButton"
+		button.pressed.connect(_on_targeting_pressed.bind(mode, str(option["label"])))
+		_tower_card.add_child(button)
+		_targeting_buttons.append(button)
+	_refresh_tower_card()
+
+
+## Actions de la fiche : bloquées pendant une vague, un appel en cours ou une partie finie.
+func _refresh_tower_card() -> void:
+	var locked: bool = _busy or _ticks.playing or _state == null or _state.is_over()
+	if _upgrade_button != null:
+		_upgrade_button.disabled = locked or _state.gold < int(_upgrade_button.get_meta("cost", 0))
+	for button: Button in _targeting_buttons:
+		button.disabled = locked
+
+
+func _on_upgrade_pressed() -> void:
+	var tower: TowerDto = _selected_tower()
+	if tower == null:
+		return
+	_set_busy(true)
+	var result: ApiResult = await Api.upgrade_tower(_state.game_id, tower.id)
+	if not result.ok:
+		_set_busy(false)
+		_info.text = result.error
+		return
+	# TowerResponse ne contient pas l'or restant : on relit l'état complet.
+	_apply_state_result(await Api.get_game(_state.game_id))
+	_set_busy(false)
+	var upgraded: TowerDto = _selected_tower()
+	_info.text = "%s amélioré au niveau %d." % [TowerNames.label(tower.type), upgraded.level if upgraded != null else tower.level + 1]
+
+
+func _on_targeting_pressed(mode: String, label: String) -> void:
+	var tower: TowerDto = _selected_tower()
+	if tower == null or tower.targeting_mode == mode:
+		return
+	_set_busy(true)
+	var result: ApiResult = await Api.set_targeting_mode(_state.game_id, tower.id, mode)
+	if not result.ok:
+		_set_busy(false)
+		_info.text = result.error
+		return
+	_apply_state_result(await Api.get_game(_state.game_id))
+	_set_busy(false)
+	_info.text = "Priorité de tir : %s." % label.to_lower()
 
 
 # --- Barre de construction ---------------------------------------------------
