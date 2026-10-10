@@ -2,6 +2,7 @@ package com.kcdformes.infrastructure.web.dto;
 
 import com.kcdformes.domain.model.Position;
 import com.kcdformes.domain.port.in.query.GetMapLayoutUseCase.MapLayout;
+import com.kcdformes.domain.port.in.query.GetMapLayoutUseCase.SeasonalRules;
 
 import java.util.List;
 
@@ -19,7 +20,9 @@ public record MapLayoutResponse(
         List<Position> wideSpots,
         List<Position> corridorCells,
         List<Position> buildableCells,
-        List<Position> waterCells
+        List<Position> waterCells,
+        List<Position> bankCells,
+        SeasonalRules seasonalRules
 ) {
     public static MapLayoutResponse from(MapLayout layout) {
         return new MapLayoutResponse(
@@ -35,6 +38,8 @@ public record MapLayoutResponse(
                 layout.wideSpots(),
                 layout.corridorCells(),
                 layout.buildableCells(),
-                layout.waterCells());
+                layout.waterCells(),
+                layout.bankCells(),
+                layout.seasonalRules());
     }
 }

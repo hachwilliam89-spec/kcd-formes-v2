@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import api from '@/lib/api'
 import { buildMapDef, type MapDef } from '@/components/game/maps'
 import type { Cell } from '@/components/game/constants'
+import type { TerrainForecast } from '@/components/game/seasons'
 
 /**
  * Données de jeu statiques servies par le backend : catalogue des tours
@@ -60,12 +61,30 @@ export interface MapLayout {
     corridorCells: Cell[]
     buildableCells: Cell[]
     waterCells: Cell[]
+    /** Berges que la crue peut noyer (printemps), vide ailleurs. */
+    bankCells: Cell[]
+    seasonalRules: SeasonalRules
+}
+
+/** Miroir de GetMapLayoutUseCase.SeasonalRules : effets chiffrés des saisons. */
+export interface SeasonalRules {
+    floodInterval: number
+    mudSpeedFactor: number
+    fogRangePenalty: number
+    hailDamageFactor: number
+    fertileGoldFactor: number
+    fogDamageTakenFactor: number
 }
 
 /** Contenu brut des deux endpoints : aussi le format injecté par les outils hors ligne. */
 export interface CatalogData {
     towers: TowerSpec[]
     maps: MapLayout[]
+    /**
+     * Prévisions saisonnières par carte (GET /api/v1/maps/{id}/forecast), index = vague - 1.
+     * Le jeu charge la vague 1 (aperçu du choix de carte) ; les outils peuvent en fournir plus.
+     */
+    forecasts?: Record<string, TerrainForecast[]>
 }
 
 type Status = 'idle' | 'loading' | 'ready' | 'error'
@@ -74,6 +93,8 @@ interface CatalogState {
     towers: TowerSpec[]
     /** Cartes dans l'ordre du serveur, disposition + présentation (voir maps.ts). */
     maps: MapDef[]
+    seasonalRules: SeasonalRules | null
+    forecasts: Record<string, TerrainForecast[]>
     status: Status
     /** Charge le catalogue s'il ne l'est pas déjà (idempotent, relance après une erreur). */
     load: () => Promise<void>
@@ -86,6 +107,8 @@ let pending: Promise<void> | null = null
 export const useCatalogStore = create<CatalogState>()((set, get) => ({
     towers: [],
     maps: [],
+    seasonalRules: null,
+    forecasts: {},
     status: 'idle',
 
     load: () => {
@@ -98,10 +121,13 @@ export const useCatalogStore = create<CatalogState>()((set, get) => ({
                     api.get<TowerSpec[]>('/api/v1/towers'),
                     api.get<string[]>('/api/v1/maps'),
                 ])
-                const layouts = await Promise.all(
-                    ids.data.map((id) => api.get<MapLayout>(`/api/v1/maps/${encodeURIComponent(id)}`)),
-                )
-                get().seed({ towers: towers.data, maps: layouts.map((r) => r.data) })
+                const [layouts, firstWaves] = await Promise.all([
+                    Promise.all(ids.data.map((id) => api.get<MapLayout>(`/api/v1/maps/${encodeURIComponent(id)}`))),
+                    Promise.all(ids.data.map((id) => api.get<TerrainForecast>(`/api/v1/maps/${encodeURIComponent(id)}/forecast?wave=1`))),
+                ])
+                const forecasts: Record<string, TerrainForecast[]> = {}
+                ids.data.forEach((id, i) => { forecasts[id] = [firstWaves[i].data] })
+                get().seed({ towers: towers.data, maps: layouts.map((r) => r.data), forecasts })
             } catch {
                 set({ status: 'error' })
             } finally {
@@ -114,6 +140,8 @@ export const useCatalogStore = create<CatalogState>()((set, get) => ({
     seed: (data) => set({
         towers: data.towers,
         maps: data.maps.map(buildMapDef),
+        seasonalRules: data.maps[0]?.seasonalRules ?? null,
+        forecasts: data.forecasts ?? {},
         status: 'ready',
     }),
 }))
@@ -145,6 +173,30 @@ export function getMapDef(id?: string | null): MapDef {
     if (!map) throw new Error('Catalogue des cartes non chargé (useCatalogStore.load)')
     return map
 }
+
+/**
+ * Effets chiffrés des saisons (serveur). Valeurs neutres tant que le catalogue n'est
+ * pas chargé : aucune pénalité ni bonus affiché à tort.
+ */
+export function getSeasonalRules(): SeasonalRules {
+    return useCatalogStore.getState().seasonalRules ?? {
+        floodInterval: 0, mudSpeedFactor: 1, fogRangePenalty: 0,
+        hailDamageFactor: 1, fertileGoldFactor: 1, fogDamageTakenFactor: 1,
+    }
+}
+
+/** Prévision saisonnière d'une vague sur une carte, si le catalogue la fournit. */
+export const getForecast = (mapId: string, wave: number): TerrainForecast | undefined =>
+    useCatalogStore.getState().forecasts[mapId]?.[wave - 1]
+
+/** Vagues de crue lisibles (« 3, 6, 9… ») d'après l'intervalle du serveur. */
+export function floodWavesLabel(): string {
+    const n = getSeasonalRules().floodInterval
+    return n > 0 ? `${n}, ${2 * n}, ${3 * n}…` : '—'
+}
+
+/** Écart en pour cent d'un multiplicateur (1.25 → 25, 0.45 → 55). */
+export const percentOff = (factor: number) => Math.round(Math.abs(factor - 1) * 100)
 
 /** Spécification d'un type de tour, undefined si le catalogue ne la connaît pas. */
 export const getTowerSpec = (type: string): TowerSpec | undefined =>

@@ -5,17 +5,21 @@
 // et la difficulté. Sans l'aperçu, le schéma du tracé le remplace.
 import { useEffect, useState } from 'react'
 import { type MapDef, mapIsCorridor } from './maps'
-import { useCatalog } from '@/store/catalogStore'
-import { MAP_THEMES, BANK_CELLS, LAKE, fogCellsFor, mudCellsFor, type MapDifficulty } from './seasons'
+import { useCatalog, getForecast } from '@/store/catalogStore'
+import { MAP_THEMES, type MapDifficulty } from './seasons'
 
 function PathPreview({ map }: { map: MapDef }) {
     const theme = MAP_THEMES[map.id]
     const castle = map.castle
+    // Prévision de la vague 1 (serveur) : boue et brume de l'automne, qui bougent ensuite.
+    const first = getForecast(map.id, 1)
+    const mud = first?.type === 'AUTUMN' ? first.affectedCells : []
+    const fog = first?.fogCells ?? []
     return (
         <svg viewBox={`0 0 ${map.width} ${map.height}`} className="w-full h-auto block" preserveAspectRatio="none">
             <rect x={0} y={0} width={map.width} height={map.height} fill={theme.ground} />
-            {map.id === 'spring' && (
-                <rect x={LAKE.x0} y={LAKE.y0} width={LAKE.x1 - LAKE.x0 + 1} height={LAKE.y1 - LAKE.y0 + 1} fill="#527f87" />
+            {map.lake && (
+                <rect x={map.lake.x0} y={map.lake.y0} width={map.lake.x1 - map.lake.x0 + 1} height={map.lake.y1 - map.lake.y0 + 1} fill="#527f87" />
             )}
             {/* Chaque voie tracée + son entrée (vert). Château commun (or). */}
             {map.lanes.map((lane, i) => (
@@ -29,14 +33,14 @@ function PathPreview({ map }: { map: MapDef }) {
                     strokeLinecap="round"
                 />
             ))}
-            {map.id === 'spring' && BANK_CELLS.map(p => (
+            {map.bankCells.map(p => (
                 <rect key={`${p.x},${p.y}`} x={p.x + 0.12} y={p.y + 0.12} width={0.76} height={0.76} fill="#92c9db" />
             ))}
-            {map.id === 'autumn' && mudCellsFor(1).map(p => (
+            {mud.map(p => (
                 <rect key={`m${p.x},${p.y}`} x={p.x + 0.08} y={p.y + 0.08} width={0.84} height={0.84} rx={0.3} fill="#4a3220" />
             ))}
             {/* Boue et brume de la vague 1 (elles se déplacent ensuite à chaque vague). */}
-            {map.id === 'autumn' && fogCellsFor(1).filter(p => !mapIsCorridor(map, p.x, p.y)).map(p => (
+            {fog.filter(p => !mapIsCorridor(map, p.x, p.y)).map(p => (
                 <rect key={`f${p.x},${p.y}`} x={p.x} y={p.y} width={1} height={1} fill="#e6e8ec" opacity={0.42} />
             ))}
             {map.lanes.map((lane, i) => (

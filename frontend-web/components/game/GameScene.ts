@@ -1,11 +1,11 @@
 import { paintSeasonalTerrain, roadTreeSpots, castleTreeSpots, recolorFoliage, TREES, FOLIAGE_TINTS } from './seasonalTerrain'
 import { paintCastle, FORT_WIDTH, FORT_HEIGHT, PORTAL_FRAMES } from './castles'
-import { BANK_CELLS, LAKE, FOG_RANGE_PENALTY, type TerrainSnapshot, type TerrainForecast } from './seasons'
+import type { TerrainSnapshot, TerrainForecast } from './seasons'
 import Phaser from 'phaser'
 import type { Cell } from './constants'
 import { TOP_RESERVED_ROWS } from './constants'
 import { mapIsCorridor, mapIsBuildable, mapPathDir, mapLaneStarts, mapCastle } from './maps'
-import { getMaps, getMapDef, getTowerSpec, towerRangeAt } from '@/store/catalogStore'
+import { getMaps, getMapDef, getTowerSpec, towerRangeAt, getSeasonalRules, floodWavesLabel } from '@/store/catalogStore'
 import { audio, Sfx } from '@/lib/audio'
 
 // Association effet visuel d'impact → bruitage, avec un intervalle mini (ms) pour
@@ -917,7 +917,7 @@ export class GameScene extends Phaser.Scene {
         // Étiquette : coût si la pose est possible, sinon la raison du refus.
         const text = ok
             ? (verdict.cost != null ? `${verdict.cost} or` : '')
-                + (this.activeMapId === 'spring' && BANK_CELLS.some(p => p.x === cell.x && p.y === cell.y) ? ' · berge inondable (crues v. 3, 6, 9…)' : '')
+                + (this.mapDef.bankCells.some(p => p.x === cell.x && p.y === cell.y) ? ` · berge inondable (crues v. ${floodWavesLabel()})` : '')
                 + (baseRange > 0 && this.fogPenaltyAt(cell.x, cell.y) > 0 ? ' · brume : −1 portée' : '')
             : (verdict.reason ?? 'Pose impossible')
         const label = this.ensureGhostLabel()
@@ -1121,7 +1121,7 @@ export class GameScene extends Phaser.Scene {
 
         // Printemps : berges noyées de cette vague (le sens change à chaque crue), berges
         // annoncées pour la prochaine, grêle en cours ou annoncée.
-        const floodCells = state?.flood ?? (flooded ? BANK_CELLS : [])
+        const floodCells = state?.flood ?? (flooded ? this.mapDef.bankCells : [])
         const alertCells = forecastFlood ? this.terrainForecast?.affectedCells ?? [] : []
         const hail = !!state?.hail
         const forecastHail = !this.seasonalCombat && !!this.terrainForecast?.hail
@@ -1129,7 +1129,7 @@ export class GameScene extends Phaser.Scene {
             const underWater = new Set(floodCells.map((c) => `${c.x},${c.y}`))
             // Berges : terre humide, roseaux et vaguelette (le symbole de la crue).
             const g = this.make.graphics({ x: 0, y: 0 }, false)
-            for (const p of BANK_CELLS) {
+            for (const p of this.mapDef.bankCells) {
                 const x = p.x * CELL_SIZE, y = p.y * CELL_SIZE
                 g.fillStyle(0x5f9792, 0.22)
                 g.fillRoundedRect(x + 2, y + 2, 36, 36, 5)
@@ -1367,7 +1367,7 @@ export class GameScene extends Phaser.Scene {
 
     /** Portée perdue par une tour posée sur cette case (brume de la vague affichée). */
     private fogPenaltyAt(x: number, y: number) {
-        return this.currentFog.has(`${x},${y}`) ? FOG_RANGE_PENALTY : 0
+        return this.currentFog.has(`${x},${y}`) ? getSeasonalRules().fogRangePenalty : 0
     }
 
     /**
@@ -1672,7 +1672,7 @@ export class GameScene extends Phaser.Scene {
             this.puddleSpots = []
             let seed = 7331
             const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
-            const flood = new Set(BANK_CELLS.map((c) => `${c.x},${c.y}`))
+            const flood = new Set(this.mapDef.bankCells.map((c) => `${c.x},${c.y}`))
             const gates = [...mapLaneStarts(this.mapDef), mapCastle(this.mapDef)]
             const cells: Cell[] = []
             for (let tries = 0; cells.length < 34 && tries < 600; tries++) {
@@ -1680,7 +1680,8 @@ export class GameScene extends Phaser.Scene {
                 const road = mapIsCorridor(this.mapDef, x, y)
                 if (!road && !mapIsBuildable(this.mapDef, x, y)) continue          // zones mortes : arbres
                 if (!road && rnd() < 0.6) continue                                 // surtout dans les ornières
-                const lake = this.mapDef.water.length > 0 && x >= LAKE.x0 && x <= LAKE.x1 && y >= LAKE.y0 && y <= LAKE.y1
+                const box = this.mapDef.lake
+                const lake = box != null && x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1
                 if (lake || (this.activeMapId === 'spring' && flood.has(`${x},${y}`))) continue
                 if (gates.some((g) => Math.max(Math.abs(g.x - x), Math.abs(g.y - y)) <= 1)) continue
                 if (cells.some((c) => Math.abs(c.x - x) + Math.abs(c.y - y) < 2)) continue

@@ -5,6 +5,7 @@ import com.kcdformes.domain.model.GameMap;
 import com.kcdformes.domain.model.MapCatalog;
 import com.kcdformes.domain.model.Position;
 import com.kcdformes.domain.model.SeasonalTerrain;
+import com.kcdformes.domain.model.TerrainType;
 import com.kcdformes.domain.port.in.query.GetMapLayoutUseCase;
 import com.kcdformes.domain.service.PathfindingService;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,14 @@ public class MapLayoutService implements GetMapLayoutUseCase {
     /** Ordre de lecture d'une grille : ligne par ligne, puis colonne. */
     private static final Comparator<Position> GRID_ORDER =
             Comparator.comparingInt(Position::y).thenComparingInt(Position::x);
+
+    private static final SeasonalRules SEASONAL_RULES = new SeasonalRules(
+            SeasonalTerrain.FLOOD_INTERVAL,
+            SeasonalTerrain.MUD_SPEED_FACTOR,
+            SeasonalTerrain.FOG_RANGE_PENALTY,
+            SeasonalTerrain.HAIL_DAMAGE_FACTOR,
+            SeasonalTerrain.FERTILE_GOLD_FACTOR,
+            SeasonalTerrain.FOG_DAMAGE_TAKEN_FACTOR);
 
     private final PathfindingService pathfindingService;
 
@@ -64,7 +73,17 @@ public class MapLayoutService implements GetMapLayoutUseCase {
                 List.copyOf(map.getWideSpots()),
                 sorted(pathfindingService.corridorCells(map)),
                 sorted(pathfindingService.buildableCells(map)),
-                sorted(SeasonalTerrain.waterCells(map.getTerrain())));
+                sorted(SeasonalTerrain.waterCells(map.getTerrain())),
+                map.getTerrain() == TerrainType.SPRING ? sorted(SeasonalTerrain.bankCells()) : List.of(),
+                SEASONAL_RULES);
+    }
+
+    @Override
+    public SeasonalTerrain.Forecast forecast(String mapId, int wave) {
+        if (!MapCatalog.exists(mapId)) {
+            throw new UnknownMapException(mapId);
+        }
+        return SeasonalTerrain.forecast(MapCatalog.buildMap(mapId).getTerrain(), Math.max(wave, 1));
     }
 
     private static List<Position> sorted(Collection<Position> cells) {

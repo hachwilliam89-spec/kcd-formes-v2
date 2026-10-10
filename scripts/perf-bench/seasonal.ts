@@ -2,13 +2,18 @@
 // Les règles serveur sont couvertes par SeasonalTerrainTest, pas par cet aperçu.
 import Phaser from 'phaser'
 import { GameScene, type TowerData } from '@/components/game/GameScene'
-import { floodCellsFor, fogCellsFor, mudCellsFor, type TerrainSnapshot } from '@/components/game/seasons'
-import { getMapDef, useCatalogStore, type CatalogData } from '@/store/catalogStore'
+import type { TerrainSnapshot } from '@/components/game/seasons'
+import { getMapDef, getForecast, getSeasonalRules, percentOff, useCatalogStore, type CatalogData } from '@/store/catalogStore'
 
 // Catalogue servi par run.mjs / export.mjs (backend ou --catalog) : chargé avant toute lecture.
 useCatalogStore.getState().seed((window as unknown as { __CATALOG__: CatalogData }).__CATALOG__)
 
 const map = getMapDef(new URLSearchParams(location.search).get('map') ?? 'spring')
+// Prévisions du serveur (run.mjs les charge pour les 6 premières vagues).
+const forecastAt = (wave: number) => getForecast(map.id, wave)
+const floodCellsFor = (wave: number) => (forecastAt(wave)?.flooded ? forecastAt(wave)!.affectedCells : [])
+const fogCellsFor = (wave: number) => forecastAt(wave)?.fogCells ?? []
+const mudCellsFor = (wave: number) => (forecastAt(wave)?.type === 'AUTUMN' ? forecastAt(wave)!.affectedCells : [])
 const panel = document.createElement('div')
 panel.style.cssText = 'color:#f4ead2;font:14px sans-serif;padding:12px;max-width:1000px'
 panel.innerHTML = `<strong>Aperçu saisonnier — ${map.name}</strong> · États de test synthétiques
@@ -61,7 +66,7 @@ scene.setOnCoopReady(() => {
             scene.setTerrainForecast({ type: 'SPRING', flooded: false, affectedCells: [], fogCells: [], hail: true })
             show(dry, 'Prochaine vague : grêle (quelques grêlons)')
         })
-        button('Grêle', () => show({ ...dry, hail: true }, 'Grêle (vague 4) — ennemis +25 % de dégâts'))
+        button('Grêle', () => show({ ...dry, hail: true }, `Grêle (vague 4) — ennemis +${percentOff(getSeasonalRules().hailDamageFactor)} % de dégâts`))
     }
     if (map.id === 'autumn') {
         button('Annonce vague 1', () => {
