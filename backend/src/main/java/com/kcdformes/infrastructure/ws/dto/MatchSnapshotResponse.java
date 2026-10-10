@@ -1,11 +1,14 @@
 package com.kcdformes.infrastructure.ws.dto;
 
+import com.kcdformes.domain.model.BonusType;
 import com.kcdformes.domain.model.Tower;
 import com.kcdformes.domain.model.SeasonalTerrain;
 import com.kcdformes.domain.model.match.LiveEnemy;
 import com.kcdformes.domain.model.match.Match;
 import com.kcdformes.domain.model.match.MatchGameState;
+import com.kcdformes.infrastructure.web.dto.BonusOptionResponse;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -19,6 +22,9 @@ public record MatchSnapshotResponse(
         int castleHp,
         int castleMaxHp,
         int pendingBonuses,   // bonus gagnés au nombre de kills, en attente de choix
+        // Options proposées (libellé + description du serveur, mêmes qu'en solo) ;
+        // vide tant qu'aucun bonus n'attend : les clients n'en recopient pas la liste.
+        List<BonusOptionResponse> bonusOptions,
         String status,
         List<EnemyView> enemies,
         List<TowerView> towers,
@@ -40,8 +46,11 @@ public record MatchSnapshotResponse(
         List<ShotView> shots = s.shots.stream()
                 .map(sh -> new ShotView(sh[0], sh[1], sh[2], sh[3]))
                 .toList();
+        List<BonusOptionResponse> bonusOptions = s.pendingBonuses > 0
+                ? Arrays.stream(BonusType.values()).map(BonusOptionResponse::from).toList()
+                : List.of();
         return new MatchSnapshotResponse(
-                s.tick, s.wave, s.gold, s.castleHp, s.castleMaxHp, s.pendingBonuses,
+                s.tick, s.wave, s.gold, s.castleHp, s.castleMaxHp, s.pendingBonuses, bonusOptions,
                 status, enemies, towers, shots, s.terrain.snapshot(s.map.getTowers()));
     }
 

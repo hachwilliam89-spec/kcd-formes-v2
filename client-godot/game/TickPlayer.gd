@@ -44,6 +44,15 @@ func stop() -> void:
 	_live = false
 
 
+## Arrête la lecture et oublie les ticks : plus aucun ennemi n'est affiché.
+func reset() -> void:
+	stop()
+	_ticks = []
+	_index = -1
+	previous = null
+	current = null
+
+
 ## Mode direct : la lecture attend les ticks poussés par push() (snapshots serveur).
 func play_live() -> void:
 	_live = true

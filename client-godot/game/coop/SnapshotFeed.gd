@@ -11,12 +11,16 @@ extends RefCounted
 ## Un ennemi disparu à cette distance du château (en cases), quand ses PV baissent,
 ## est compté comme arrivé (animation d'attaque) plutôt que tué.
 const CASTLE_REACH: float = 1.5
+## Au-delà de cet écart entre deux snapshots reçus (≈ 1 s), le flux a été coupé
+## (reconnexion, appli en arrière-plan) : on resynchronise sans rien déduire.
+const RESYNC_TICKS: int = 8
 
 var castle: Vector2i = Vector2i(-1, -1)
 
 var _previous: Dictionary = {} # id → EnemyStateDto du snapshot précédent
 var _castle_hp: int = -1
 var _tower_key: String = ""
+var _last_tick: int = -1
 
 
 ## Vrai si les tours posées (ids et niveaux) ont changé depuis le dernier appel :
@@ -39,6 +43,12 @@ static func towers_of(snap: MatchSnapshotDto, specs: Array[TowerSpecDto]) -> Arr
 	return out
 
 
+## Vrai si ce snapshot ne suit pas le précédent (trou dans le flux, ou nouvelle
+## partie) : l'écran repart alors de zéro au lieu d'interpoler par-dessus le trou.
+func is_gap(snap: MatchSnapshotDto) -> bool:
+	return _last_tick >= 0 and (snap.tick < _last_tick or snap.tick - _last_tick > RESYNC_TICKS)
+
+
 func to_tick(snap: MatchSnapshotDto, towers: Array[TowerDto]) -> TickDto:
 	var tick: TickDto = TickDto.new()
 	tick.tick = snap.tick
@@ -47,9 +57,12 @@ func to_tick(snap: MatchSnapshotDto, towers: Array[TowerDto]) -> TickDto:
 	var present: Dictionary = {}
 	for enemy: EnemyStateDto in snap.enemies:
 		present[enemy.id] = enemy
-	var castle_hit: bool = _castle_hp >= 0 and snap.castle_hp < _castle_hp
+	# Après un trou, les ennemis disparus entre-temps ne sont pas « morts sous nos
+	# yeux » : pas d'animation de mort ni d'attaque du château pour eux.
+	var resync: bool = is_gap(snap)
+	var castle_hit: bool = not resync and _castle_hp >= 0 and snap.castle_hp < _castle_hp
 	for enemy_id: String in _previous:
-		if present.has(enemy_id):
+		if resync or present.has(enemy_id):
 			continue
 		var gone: EnemyStateDto = _previous[enemy_id]
 		if castle_hit and gone.pos.distance_to(Vector2(castle)) <= CASTLE_REACH:
@@ -72,6 +85,7 @@ func to_tick(snap: MatchSnapshotDto, towers: Array[TowerDto]) -> TickDto:
 		tick.hits.append(hit)
 	_previous = present
 	_castle_hp = snap.castle_hp
+	_last_tick = snap.tick
 	return tick
 
 

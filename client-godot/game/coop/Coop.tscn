@@ -7,6 +7,7 @@
 [ext_resource type="Resource" path="res://visuals/visual_catalog.tres" id="5_catalog"]
 [ext_resource type="Script" path="res://game/TickPlayer.gd" id="6_ticks"]
 [ext_resource type="Script" path="res://game/TowerBar.gd" id="7_towerbar"]
+[ext_resource type="Script" path="res://game/coop/ChatBox.gd" id="8_chat"]
 
 [node name="Coop" type="Panel"]
 layout_mode = 3
@@ -52,6 +53,49 @@ layout_mode = 0
 offset_left = 4.0
 offset_top = 2.0
 theme_type_variation = &"FpsLabel"
+
+[node name="EndPanel" type="PanelContainer" parent="Layout/MapArea"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -140.0
+offset_top = -80.0
+offset_right = 140.0
+offset_bottom = 80.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="EndBox" type="VBoxContainer" parent="Layout/MapArea/EndPanel"]
+layout_mode = 2
+
+[node name="EndTitle" type="Label" parent="Layout/MapArea/EndPanel/EndBox"]
+layout_mode = 2
+theme_type_variation = &"HeadingLabel"
+text = "Le château est tombé"
+horizontal_alignment = 1
+
+[node name="EndSummary" type="Label" parent="Layout/MapArea/EndPanel/EndBox"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Replay" type="Button" parent="Layout/MapArea/EndPanel/EndBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Nouvelle partie"
+
+[node name="Home" type="Button" parent="Layout/MapArea/EndPanel/EndBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"FlatButton"
+text = "Accueil"
 
 [node name="Side" type="PanelContainer" parent="Layout"]
 custom_minimum_size = Vector2(200, 0)
@@ -145,6 +189,12 @@ script = ExtResource("7_towerbar")
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
+
+[node name="Chat" type="VBoxContainer" parent="Layout/Side/Scroll/Box"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+script = ExtResource("8_chat")
 
 [node name="Info" type="Label" parent="Layout/Side/Scroll/Box"]
 unique_name_in_owner = true
