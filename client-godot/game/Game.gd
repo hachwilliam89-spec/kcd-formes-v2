@@ -24,11 +24,9 @@ const CELL_LABELS: Dictionary = {
 
 var _layout: MapLayoutDto
 var _state: GameStateDto
-var _catalog: Array[TowerSpecDto] = []
 ## Meilleure vague du compte (GET /players/me) : déblocage des tours.
 var _best_wave: int = 0
 var _busy: bool = false
-var _tower_group: ButtonGroup = ButtonGroup.new()
 ## Tour posée sélectionnée (fiche : amélioration, priorité de tir) ; "" = aucune.
 var _selected_tower_id: String = ""
 var _upgrade_button: Button
@@ -40,7 +38,7 @@ var _targeting_buttons: Array[Button] = []
 @onready var _ticks: TickPlayer = %TickPlayer
 @onready var _title: Label = %MapTitle
 @onready var _stats: Label = %Stats
-@onready var _tower_bar: GridContainer = %TowerBar
+@onready var _tower_bar: TowerBar = %TowerBar
 @onready var _wave_button: Button = %WaveButton
 @onready var _bonus_box: VBoxContainer = %BonusBox
 @onready var _tower_card: VBoxContainer = %TowerCard
@@ -82,12 +80,13 @@ func _ready() -> void:
 	if not catalog_result.ok:
 		_info.text = catalog_result.error
 		return
-	_catalog = TowerSpecDto.list_from(catalog_result.data)
-	if _catalog.is_empty():
+	var catalog: Array[TowerSpecDto] = TowerSpecDto.list_from(catalog_result.data)
+	if catalog.is_empty():
 		_info.text = "Catalogue des tours illisible"
 		return
 	await _refresh_best_wave()
-	_build_tower_bar()
+	_tower_bar.tower_selected.connect(_on_tower_selected)
+	_tower_bar.setup(catalog)
 	await _new_game()
 
 
@@ -133,20 +132,19 @@ func _on_cell_tapped(cell: Vector2i) -> void:
 		_info.text = "Touche une case libre pour construire, ou une autre tour."
 		return
 	_select_tower("")
-	var spec: TowerSpecDto = _selected_spec()
-	if _busy or _ticks.playing or _state.is_over() or spec == null or not _fits_cell(spec, cell):
+	var spec: TowerSpecDto = _tower_bar.selected_spec()
+	if _busy or _ticks.playing or _state.is_over() or spec == null or not TowerBar.fits_cell(spec, _layout, cell):
 		_info.text = "Case (%d, %d) : %s" % [cell.x, cell.y, CELL_LABELS.get(_layout.kind_at(cell), "?")]
 		return
-	var reason: String = _unavailable_reason(spec)
+	var reason: String = _tower_bar.unavailable_reason(spec)
 	if not reason.is_empty():
 		_info.text = reason
 		return
 	await _place_tower(cell, spec)
 
 
-func _on_tower_toggled(pressed: bool, spec: TowerSpecDto) -> void:
-	if pressed:
-		_info.text = _describe(spec)
+func _on_tower_selected(spec: TowerSpecDto) -> void:
+	_info.text = _tower_bar.describe(spec)
 
 
 func _place_tower(cell: Vector2i, spec: TowerSpecDto) -> void:
@@ -196,7 +194,7 @@ func _on_wave_finished() -> void:
 		_info.text = "Palier atteint : choisis un bonus."
 	else:
 		_info.text = "Vague %d repoussée." % _state.wave_number
-	for spec: TowerSpecDto in _catalog:
+	for spec: TowerSpecDto in _tower_bar.catalog:
 		if not spec.is_unlocked(previous_best) and spec.is_unlocked(_best_wave):
 			_info.text += "\nNouvelle tour : %s !" % TowerNames.label(spec.type)
 
@@ -268,7 +266,7 @@ func _set_busy(busy: bool) -> void:
 	_busy = busy
 	var waiting_bonus: bool = _state != null and _state.awaiting_bonus_choice
 	_wave_button.disabled = busy or _state == null or waiting_bonus
-	_refresh_tower_bar()
+	_sync_tower_bar()
 	_refresh_tower_card()
 	for child: Node in _bonus_box.get_children():
 		(child as Button).disabled = busy
@@ -310,7 +308,7 @@ func _rebuild_tower_card() -> void:
 		# Tour détruite en combat ou partie relancée : la sélection tombe.
 		_selected_tower_id = ""
 		return
-	var spec: TowerSpecDto = _spec(tower.type)
+	var spec: TowerSpecDto = _tower_bar.spec_of(tower.type)
 	var max_level: int = spec.levels.size() if spec != null and not spec.levels.is_empty() else tower.level
 	var next: TowerSpecDto.Level = spec.level(tower.level + 1) if spec != null and tower.level < max_level else null
 
@@ -405,97 +403,13 @@ func _on_targeting_pressed(mode: String, label: String) -> void:
 
 # --- Barre de construction ---------------------------------------------------
 
-## Un bouton par tour du catalogue, dans l'ordre du serveur.
-func _build_tower_bar() -> void:
-	for child: Node in _tower_bar.get_children():
-		_tower_bar.remove_child(child)
-		child.queue_free()
-	for spec: TowerSpecDto in _catalog:
-		var button: Button = Button.new()
-		button.toggle_mode = true
-		button.button_group = _tower_group
-		button.theme_type_variation = &"SmallButton"
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.set_meta("tower_type", spec.type)
-		button.toggled.connect(_on_tower_toggled.bind(spec))
-		_tower_bar.add_child(button)
-	_refresh_tower_bar()
-	if _tower_bar.get_child_count() > 0:
-		(_tower_bar.get_child(0) as Button).button_pressed = true
-
-
-## Libellés et disponibilité : coût, verrou de vague, plafond (Mur), or de la partie.
-func _refresh_tower_bar() -> void:
-	for child: Node in _tower_bar.get_children():
-		var button: Button = child as Button
-		var spec: TowerSpecDto = _spec(str(button.get_meta("tower_type", "")))
-		if spec == null:
-			continue
-		if not spec.is_unlocked(_best_wave):
-			button.text = "%s\nvague %d" % [TowerNames.short(spec.type), spec.unlock_wave]
-		elif spec.max_count > 0:
-			button.text = "%s\n%d · %d/%d" % [TowerNames.short(spec.type), spec.cost, _count_of(spec.type), spec.max_count]
-		else:
-			button.text = "%s\n%d or" % [TowerNames.short(spec.type), spec.cost]
-		button.tooltip_text = _describe(spec)
-		button.disabled = _busy or _state == null or not _unavailable_reason(spec).is_empty()
-
-
-## Pourquoi la tour ne peut pas être posée maintenant ; "" si rien ne l'empêche.
-## Affichage seulement : le serveur revalide tout à la pose.
-func _unavailable_reason(spec: TowerSpecDto) -> String:
-	var label: String = TowerNames.label(spec.type)
-	if not spec.is_unlocked(_best_wave):
-		return "%s : se débloque en atteignant la vague %d." % [label, spec.unlock_wave]
-	if spec.max_count > 0 and _count_of(spec.type) >= spec.max_count:
-		return "%s : %d au maximum en même temps." % [label, spec.max_count]
-	if _state != null and _state.gold < spec.cost:
-		return "%s : %d or requis (tu en as %d)." % [label, spec.cost, _state.gold]
-	return ""
-
-
-func _describe(spec: TowerSpecDto) -> String:
-	var label: String = TowerNames.label(spec.type)
-	var stats: TowerSpecDto.Level = spec.level(1)
-	var hp: int = stats.max_hp if stats != null else 0
-	var text: String
-	if spec.on_corridor:
-		text = "%s · %d or\nPV %d · se pose sur la route, %d au maximum" % [label, spec.cost, hp, spec.max_count]
-	else:
-		var damage: int = stats.damage if stats != null else 0
-		var reach: float = stats.range_cells if stats != null else 0.0
-		text = "%s · %d or\nDégâts %d · portée %.1f · PV %d" % [label, spec.cost, damage, reach, hp]
-	var reason: String = _unavailable_reason(spec)
-	return text if reason.is_empty() else "%s\n%s" % [text, reason]
-
-
-## Zone de pose de la tour : route pour le Mur, cases constructibles sinon.
-func _fits_cell(spec: TowerSpecDto, cell: Vector2i) -> bool:
-	return _layout.is_corridor(cell) if spec.on_corridor else _layout.is_buildable(cell)
-
-
-func _selected_spec() -> TowerSpecDto:
-	var pressed: BaseButton = _tower_group.get_pressed_button()
-	if pressed == null:
-		return null
-	return _spec(str(pressed.get_meta("tower_type", "")))
-
-
-func _spec(type: String) -> TowerSpecDto:
-	for spec: TowerSpecDto in _catalog:
-		if spec.type == type:
-			return spec
-	return null
-
-
-func _count_of(type: String) -> int:
-	if _state == null:
-		return 0
-	var count: int = 0
-	for tower: TowerDto in _state.towers:
-		if tower.type == type:
-			count += 1
-	return count
+## Transmet l'état de la partie à la barre (or, tours posées, déblocages, occupation).
+func _sync_tower_bar() -> void:
+	_tower_bar.best_wave = _best_wave
+	_tower_bar.gold = _state.gold if _state != null else 0
+	_tower_bar.placed = _state.towers if _state != null else ([] as Array[TowerDto])
+	_tower_bar.busy = _busy or _state == null
+	_tower_bar.refresh()
 
 
 ## Centre la carte dans la zone disponible, à la plus grande échelle qui tient.

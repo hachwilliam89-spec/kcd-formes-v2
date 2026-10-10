@@ -1,6 +1,6 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://game/Game.gd" id="1_game"]
+[ext_resource type="Script" path="res://game/coop/Coop.gd" id="1_coop"]
 [ext_resource type="Script" path="res://game/map/MapView.gd" id="2_mapview"]
 [ext_resource type="Resource" path="res://visuals/map_palette_default.tres" id="3_palette"]
 [ext_resource type="Script" path="res://game/battle/BattleView.gd" id="4_battle"]
@@ -8,7 +8,7 @@
 [ext_resource type="Script" path="res://game/TickPlayer.gd" id="6_ticks"]
 [ext_resource type="Script" path="res://game/TowerBar.gd" id="7_towerbar"]
 
-[node name="Game" type="Panel"]
+[node name="Coop" type="Panel"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -16,7 +16,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_type_variation = &"Screen"
-script = ExtResource("1_game")
+script = ExtResource("1_coop")
 
 [node name="TickPlayer" type="Node" parent="."]
 unique_name_in_owner = true
@@ -66,36 +66,82 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="MapTitle" type="Label" parent="Layout/Side/Scroll/Box"]
+[node name="Title" type="Label" parent="Layout/Side/Scroll/Box"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"HeadingLabel"
+text = "Coop"
 autowrap_mode = 3
 
-[node name="Stats" type="Label" parent="Layout/Side/Scroll/Box"]
+[node name="Status" type="Label" parent="Layout/Side/Scroll/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SmallLabel"
+autowrap_mode = 3
+
+[node name="Lobby" type="VBoxContainer" parent="Layout/Side/Scroll/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Create" type="Button" parent="Layout/Side/Scroll/Box/Lobby"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SmallButton"
+text = "Créer une partie"
+
+[node name="JoinRow" type="HBoxContainer" parent="Layout/Side/Scroll/Box/Lobby"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Code" type="LineEdit" parent="Layout/Side/Scroll/Box/Lobby/JoinRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Code"
+max_length = 8
+
+[node name="Join" type="Button" parent="Layout/Side/Scroll/Box/Lobby/JoinRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SmallButton"
+text = "Rejoindre"
+
+[node name="Players" type="Label" parent="Layout/Side/Scroll/Box/Lobby"]
 unique_name_in_owner = true
 layout_mode = 2
 autowrap_mode = 3
 
-[node name="TowerBar" type="GridContainer" parent="Layout/Side/Scroll/Box"]
+[node name="Ready" type="Button" parent="Layout/Side/Scroll/Box/Lobby"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"SmallButton"
+toggle_mode = true
+text = "Je suis prêt"
+
+[node name="Start" type="Button" parent="Layout/Side/Scroll/Box/Lobby"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "Démarrer"
+
+[node name="Play" type="VBoxContainer" parent="Layout/Side/Scroll/Box"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="Stats" type="Label" parent="Layout/Side/Scroll/Box/Play"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="TowerBar" type="GridContainer" parent="Layout/Side/Scroll/Box/Play"]
 unique_name_in_owner = true
 layout_mode = 2
 columns = 3
 script = ExtResource("7_towerbar")
 
-[node name="WaveButton" type="Button" parent="Layout/Side/Scroll/Box"]
-unique_name_in_owner = true
-layout_mode = 2
-disabled = true
-text = "Lancer la vague"
-clip_text = true
-
-[node name="BonusBox" type="VBoxContainer" parent="Layout/Side/Scroll/Box"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-
-[node name="TowerCard" type="VBoxContainer" parent="Layout/Side/Scroll/Box"]
+[node name="BonusBox" type="VBoxContainer" parent="Layout/Side/Scroll/Box/Play"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2

@@ -6,8 +6,10 @@ const LOGIN: String = "res://ui/login/Login.tscn"
 const HOME: String = "res://ui/home/Home.tscn"
 const GAME: String = "res://game/Game.tscn"
 const BENCH: String = "res://game/bench/Bench.tscn"
+const COOP: String = "res://game/coop/Coop.tscn"
 
-## Carte à ouvrir par l'écran de jeu (posée par goto_game avant le changement de scène).
+## Carte à ouvrir par l'écran de jeu, ou à proposer à la création d'une partie coop
+## (posée par goto_game / goto_coop avant le changement de scène).
 var current_map_id: String = "desert"
 
 
@@ -26,6 +28,12 @@ func goto_home() -> void:
 func goto_game(map_id: String) -> void:
 	current_map_id = map_id
 	_goto(GAME)
+
+
+## Lobby coop ; une partie créée depuis l'écran se joue sur `map_id`.
+func goto_coop(map_id: String) -> void:
+	current_map_id = map_id
+	_goto(COOP)
 
 
 func goto_bench() -> void:
