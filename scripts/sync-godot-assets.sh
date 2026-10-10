@@ -2,7 +2,8 @@
 # Prépare les visuels du client Godot à partir du jeu web (source unique).
 #
 # 1. Copie les sprites sous licence utilisés par le combat (frontend-web/public/sprites,
-#    alimenté par le bundle kcd-assets.tgz) dans client-godot/assets/sprites/.
+#    alimenté par le bundle kcd-assets.tgz) dans client-godot/assets/sprites/, et les
+#    sons (frontend-web/public/sounds) dans client-godot/assets/sounds/.
 # 2. Exporte, depuis le VRAI GameScene web, le sol et le décor de chaque carte
 #    (scripts/visual-export) dans client-godot/assets/baked/, plus la vague du banc
 #    de charge (même générateur que scripts/perf-bench) pour l'écran « Banc de perf ».
@@ -37,6 +38,12 @@ cp "$SRC"/projectiles/*.png "$DST/projectiles/"
 # Icônes du bandeau et du classement (mêmes que le web).
 cp "$SRC"/ui/icon_gold.png "$SRC"/ui/icon_heart.png "$SRC"/ui/icon_trophy.png "$DST/ui/"
 echo "Sprites copiés dans $DST ($(find "$DST" -name '*.png' | wc -l | tr -d ' ') fichiers)."
+
+# Bruitages et musiques (mêmes fichiers que le web, voir autoload/Sound.gd).
+rm -rf client-godot/assets/sounds
+mkdir -p client-godot/assets/sounds
+cp frontend-web/public/sounds/*.mp3 client-godot/assets/sounds/
+echo "Sons copiés dans client-godot/assets/sounds ($(ls client-godot/assets/sounds | wc -l | tr -d ' ') fichiers)."
 
 if [ ! -d scripts/visual-export/node_modules ] || [ ! -d frontend-web/node_modules ]; then
   echo "Export du décor ignoré : lance d'abord 'cd frontend-web && npm ci' et 'cd scripts/visual-export && npm install'." >&2

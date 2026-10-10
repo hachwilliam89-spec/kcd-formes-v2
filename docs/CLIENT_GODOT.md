@@ -18,6 +18,7 @@ client-godot/
     Session.gd            token + joueur, stockés dans user:// (chiffré)
     Api.gd                HTTPRequest + JWT → ApiResult ; 401 = session vidée + signal `unauthorized`
     Router.gd             navigation entre écrans (seul endroit qui change de scène)
+    Sound.gd              bruitages et musique (mêmes fichiers et même mixage que frontend-web/lib/audio.ts), réglages gardés dans user://audio.cfg
   net/
     ApiResult.gd          résultat d'un appel : ok / status (0 = réseau) / data / error (message du backend)
     StompClient.gd        WebSocketPeer + trames STOMP 1.2 (CONNECT avec le JWT, abonnements renvoyés à chaque reconnexion)
@@ -55,6 +56,7 @@ client-godot/
     boot/ login/ home/    puis MapSelect, Hud, Coop, Versus, Leaderboard
   assets/                 HORS GIT, généré par scripts/sync-godot-assets.sh :
     sprites/              sprites sous licence copiés de frontend-web/public/sprites
+    sounds/               bruitages et musiques copiés de frontend-web/public/sounds
     baked/<carte>/        sol (ground.png) + décor (decor.json, textures/) exportés du vrai GameScene web
   tests/                  gdUnit4
 ```
@@ -173,7 +175,8 @@ Lecture : sur CPU, Godot consomme ≈ 2,7× plus que Phaser sur cette scène (�
 - [ ] Prérequis backend (§5).
 - [x] Saisons dans Godot (solo, coop, versus) : état de chaque tick (`terrain` des ticks et des snapshots), annonce de la vague suivante entre deux vagues (`GET /games/{id}/waves/next`), précisions « berge inondable » et « brume : −1 portée » sur les cases et la fiche de tour.
 - [x] HUD du solo, comme le web : or, PV du château en direct pendant la vague, vague, aperçu de la suivante (`GET /games/{id}/waves/next` : types, nouveautés cerclées d'or, Boss), bouton « Lancer la vague N » / « Choisis un bonus », bilan de vague (or gagné, PV perdus), classement, recommencer avec confirmation.
-- [ ] Solo complet : tutoriel, son.
+- [x] Son, comme le web : musique de menu et de partie, bruitages des tirs, impacts, morts (hauteur selon le gabarit), destructions de tours, pose, erreur, lancement de vague, victoire, défaite ; mêmes intervalles anti-rafale ; menu « Son » (couper, Musique de fond, Bruitages) à l'accueil, en solo et en multijoueur. Coupé dans le banc de perf.
+- [ ] Solo complet : tutoriel.
 - [x] Coop complète (chat, fin de partie, reconnexion en cours de vague).
 - [x] Versus (STOMP) : envois depuis `GET /api/v1/versus/sends`, revenu, aperçu de la grille adverse, victoire / défaite ; écrans coop et versus sur un socle commun (`MatchScreen`).
 - [ ] Bascule : `/jouer` sert l'export web Godot, suppression du code de jeu de `frontend-web`.

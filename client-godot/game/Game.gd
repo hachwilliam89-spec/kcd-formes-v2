@@ -101,11 +101,15 @@ func _ready() -> void:
 	await _refresh_best_wave()
 	_tower_bar.tower_selected.connect(_on_tower_selected)
 	_tower_bar.setup(catalog)
+	# Clic seulement sur un choix du joueur (pas sur la tour présélectionnée).
+	_tower_bar.tower_selected.connect(func(_spec: TowerSpecDto) -> void: Sound.play("ui_click", 0.5))
+	Sound.music("game")
 	await _new_game()
 
 
 func _new_game() -> void:
 	_selected_tower_id = ""
+	Sound.music("game")
 	_preview = null
 	_hud.show_preview(null)
 	_info.text = "Création de la partie…"
@@ -170,7 +174,9 @@ func _place_tower(cell: Vector2i, spec: TowerSpecDto) -> void:
 	if not placed.ok:
 		_set_busy(false)
 		_info.text = placed.error
+		Sound.play("error", 0.6)
 		return
+	Sound.play("tower_place")
 	# TowerResponse ne contient pas l'or restant : on relit l'état complet.
 	_apply_state_result(await Api.get_game(_state.game_id))
 	_set_busy(false)
@@ -184,6 +190,8 @@ func _on_wave_pressed() -> void:
 	_set_busy(true)
 	_info.text = "Vague %d…" % (_state.wave_number + 1)
 	_disarm_restart()
+	Sound.play("wave_start")
+	Sound.music("game")
 	var result: ApiResult = await Api.start_wave(_state.game_id)
 	if not result.ok:
 		_set_busy(false)
@@ -218,11 +226,15 @@ func _on_wave_finished() -> void:
 	var earned: int = _wave.gold_earned if _wave != null else 0
 	var lost: int = _wave.castle_damage_taken if _wave != null else 0
 	if _state.is_over():
+		Sound.music("")
+		Sound.play("defeat")
 		_info.text = "Le château est tombé à la vague %d. Partie terminée." % number
 	elif lost > 0:
 		_info.text = "Vague %d : des ennemis ont atteint le château (−%d PV). +%d or." % [number, lost, earned]
 	else:
 		_info.text = "Vague %d repoussée — +%d or !" % [number, earned]
+	if not _state.is_over() and _wave != null and _wave.status == "VICTORY":
+		Sound.play("victory")
 	if _state.awaiting_bonus_choice:
 		_info.text += "\nPalier atteint : choisis un bonus."
 	for spec: TowerSpecDto in _tower_bar.catalog:

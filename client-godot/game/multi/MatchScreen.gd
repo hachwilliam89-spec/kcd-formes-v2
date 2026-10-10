@@ -110,6 +110,7 @@ func _ready() -> void:
 		_status.text = catalog_result.error
 		return
 	_tower_bar.setup(TowerSpecDto.list_from(catalog_result.data))
+	_tower_bar.tower_selected.connect(func(_spec: TowerSpecDto) -> void: Sound.play("ui_click", 0.5))
 	var error: String = await _load_mode_catalog()
 	if not error.is_empty():
 		_status.text = error
@@ -390,6 +391,7 @@ func _start_board() -> void:
 	_play.visible = true
 	_status.text = _running_status()
 	_ticks.play_live()
+	Sound.music("game")
 	_on_board_shown(true)
 	_info.text = "Choisis une tour puis touche une case constructible (verte). Le Mur se pose sur la route."
 

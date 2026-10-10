@@ -27,6 +27,7 @@ func _ready() -> void:
 	_password.text_submitted.connect(_on_text_submitted)
 	_apply_mode()
 	_username.grab_focus()
+	Sound.music("menu")
 
 
 func _toggle_mode() -> void:
@@ -49,6 +50,7 @@ func _on_text_submitted(_text: String) -> void:
 func _on_submit() -> void:
 	if _busy:
 		return
+	Sound.play("ui_click", 0.5)
 	var missing: String = _missing_field()
 	if not missing.is_empty():
 		_show_error(missing)

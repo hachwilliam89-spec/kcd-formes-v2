@@ -72,7 +72,7 @@ docker compose up -d
 ```
 
 ```bash
-# Client Godot : visuels du web (sprites sous licence + décor exporté, hors git), import (obligatoire après un clone), lancement
+# Client Godot : visuels et sons du web (sprites et sons sous licence + décor exporté, hors git), import (obligatoire après un clone), lancement
 ./scripts/sync-godot-assets.sh
 godot --headless --path client-godot --import
 godot --path client-godot

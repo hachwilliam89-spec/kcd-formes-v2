@@ -21,9 +21,25 @@ const BAR_GAP: float = 6.0
 const BAR_OK: Color = Color("22c55e")
 const BAR_LOW: Color = Color("ef4444")
 const BAR_BACK: Color = Color(0, 0, 0, 0.5)
+## Bruitage des impacts (IMPACT_SFX du web) : [son, intervalle mini en ms, volume].
+## Pas de son pour l'éclat du Mage ni la flèche : leur tir porte déjà l'action.
+const IMPACT_SOUNDS: Dictionary = {
+	"explosion": ["catapult_impact", 60, 1.0],
+	"destroy": ["tower_destroy", 60, 1.0],
+	"bigboom": ["explosion", 40, 1.0],
+	"heavy": ["impact_hit", 70, 1.0],
+	"frost": ["frost_impact", 200, 0.9],
+}
+## Hauteur du cri de mort selon le gabarit (DEATH_PITCH du web).
+const DEATH_PITCH: Dictionary = {
+	"GOBLIN": 1.18, "SAPEUR": 1.12, "ORC": 1.0, "DARK_KNIGHT": 0.95,
+	"CHARIOT": 0.95, "TROLL": 0.82, "BOSS_WARLORD": 0.68,
+}
 
 @export var catalog: VisualCatalog
 @export var label_color: Color = Color(0.1, 0.08, 0.06)
+## Bruitages du combat (coupés par le banc de perf, comme sur le web).
+@export var play_sounds: bool = true
 
 var _player: TickPlayer
 var _decor: DecorSet
@@ -122,12 +138,19 @@ func _replay_tick(tick: TickDto) -> void:
 			_enemy_fx[enemy.id] = {"state": wanted, "since": _time}
 	# Morts : animation de mort sur place. Arrivés au château : brève attaque puis disparition.
 	for enemy_id: String in tick.deaths:
+		# Hauteur selon le gabarit, avec un léger aléa pour éviter la répétition.
+		var pitch: float = float(DEATH_PITCH.get(str(_types.get(enemy_id, "")), 1.0)) * randf_range(0.95, 1.05)
+		_sound("enemy_death", 0.7, pitch, 55)
 		_start_leaving(enemy_id, "die")
 	for enemy_id: String in tick.reached_castle:
 		_start_leaving(enemy_id, "attack")
 	for enemy: EnemyStateDto in tick.enemies:
 		_last_pos[enemy.id] = enemy.pos
 	for tower_id: String in tick.destroyed_towers:
+		# Feu de destruction à l'emplacement de la tour, avant de la retirer.
+		var destroyed: TowerDto = _towers.get(tower_id)
+		if destroyed != null:
+			_spawn_impact("destroy", Vector2(destroyed.cell), 1.8, 0.0)
 		_towers.erase(tower_id)
 	_play_effects(tick, by_id)
 
@@ -168,6 +191,7 @@ func _play_effects(tick: TickDto, enemies: Dictionary) -> void:
 					state["channeling"] = true
 					state["channel_at"] = _time
 				fired[tower.id] = true
+				_sound("shoot_mage", 0.32, 1.0, 300)
 				if _tick_index - int(_magic_tick.get(tower.id, -99)) >= MAGIC_FX_PERIOD:
 					_spawn_impact(visual.impact, enemy.pos, visual.impact_scale, 0.0)
 					_magic_tick[tower.id] = _tick_index
@@ -175,12 +199,14 @@ func _play_effects(tick: TickDto, enemies: Dictionary) -> void:
 				if fired.has(tower.id):
 					continue
 				fired[tower.id] = true
+				_sound("shoot_catapult", 0.9, 1.0, 50)
 				_spawn_impact(visual.impact, enemy.pos, maxf(tower.splash_radius * 2.0, 1.2), 0.0)
 				_aim(tower, visual, target)
 			_:
 				if fired.has(tower.id):
 					continue
 				fired[tower.id] = true
+				_sound("shoot_bolt" if tower.type == "BALLISTA" else "shoot_arrow", 0.8, 1.0, 45)
 				var projectile: EffectVisual = catalog.effect(visual.projectile)
 				if projectile != null:
 					_aim(tower, visual, target)
@@ -206,7 +232,15 @@ func _aim(tower: TowerDto, visual: TowerVisual, target: Vector2) -> void:
 	state["fired_at"] = _time
 
 
+func _sound(sound: String, level: float, rate: float, gap_ms: int) -> void:
+	if play_sounds:
+		Sound.play(sound, level, rate, gap_ms)
+
+
 func _spawn_impact(key: String, cell_pos: Vector2, scale_cells: float, angle_deg: float) -> void:
+	if IMPACT_SOUNDS.has(key):
+		var sound: Array = IMPACT_SOUNDS[key]
+		_sound(str(sound[0]), float(sound[2]), 1.0, int(sound[1]))
 	var effect: EffectVisual = catalog.effect(key)
 	if effect == null or effect.texture() == null:
 		return

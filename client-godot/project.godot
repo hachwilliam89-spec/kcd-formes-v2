@@ -22,6 +22,7 @@ Config="*res://autoload/Config.gd"
 Session="*res://autoload/Session.gd"
 Api="*res://autoload/Api.gd"
 Router="*res://autoload/Router.gd"
+Sound="*res://autoload/Sound.gd"
 
 [debug]
 

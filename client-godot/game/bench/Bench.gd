@@ -34,6 +34,7 @@ func _ready() -> void:
 	_back.pressed.connect(_on_back)
 	_map_area.resized.connect(_fit_map)
 	_battle.bind(_ticks)
+	_battle.play_sounds = false # mesure du rendu seul, comme le banc web (sans audio)
 	_ticks.finished.connect(_on_finished)
 	var path: String = "%s/%s/bench.json" % [DecorSet.ROOT, MAP_ID]
 	if not FileAccess.file_exists(path):

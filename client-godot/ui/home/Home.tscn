@@ -1,6 +1,7 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://ui/home/Home.gd" id="1_home"]
+[ext_resource type="Script" path="res://ui/AudioMenu.gd" id="30_audio"]
 
 [node name="Home" type="Panel"]
 layout_mode = 3
@@ -68,6 +69,11 @@ layout_mode = 2
 theme_type_variation = &"ErrorLabel"
 horizontal_alignment = 1
 autowrap_mode = 3
+
+[node name="Audio" type="Button" parent="Center/Card/Box"]
+layout_mode = 2
+text = "Son"
+script = ExtResource("30_audio")
 
 [node name="Logout" type="Button" parent="Center/Card/Box"]
 unique_name_in_owner = true

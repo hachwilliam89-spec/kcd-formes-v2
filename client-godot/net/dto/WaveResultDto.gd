@@ -3,6 +3,8 @@ extends RefCounted
 ## Miroir de backend/.../web/dto/WaveResponse.java : la vague entière, déjà jouée par le serveur.
 
 var number: int = 0
+## VICTORY si aucun ennemi n'a atteint le château (WaveStatus).
+var status: String = ""
 var gold_earned: int = 0
 var castle_hp: int = 0
 var castle_max_hp: int = 0
@@ -21,6 +23,7 @@ static func from_variant(value: Variant) -> WaveResultDto:
 		return null
 	var dto: WaveResultDto = WaveResultDto.new()
 	dto.number = int(body.get("number", 0))
+	dto.status = str(body.get("status", ""))
 	dto.gold_earned = int(body.get("goldEarned", 0))
 	dto.castle_hp = int(body.get("castleHp", 0))
 	dto.castle_max_hp = int(body.get("castleMaxHp", 0))

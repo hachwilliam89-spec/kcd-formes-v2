@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://game/TowerBar.gd" id="7_towerbar"]
 [ext_resource type="Script" path="res://game/multi/ChatBox.gd" id="8_chat"]
 [ext_resource type="Script" path="res://game/battle/SeasonView.gd" id="20_season"]
+[ext_resource type="Script" path="res://ui/AudioMenu.gd" id="30_audio"]
 
 [node name="Match" type="Panel"]
 layout_mode = 3
@@ -209,8 +210,18 @@ layout_mode = 2
 size_flags_vertical = 3
 autowrap_mode = 3
 
-[node name="Back" type="Button" parent="Layout/Side/Scroll/Box"]
+[node name="Footer" type="HBoxContainer" parent="Layout/Side/Scroll/Box"]
+layout_mode = 2
+
+[node name="Audio" type="Button" parent="Layout/Side/Scroll/Box/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Son"
+script = ExtResource("30_audio")
+
+[node name="Back" type="Button" parent="Layout/Side/Scroll/Box/Footer"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 theme_type_variation = &"FlatButton"
 text = "Quitter"

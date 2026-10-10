@@ -22,6 +22,7 @@ func _ready() -> void:
 	_play.pressed.connect(_on_play)
 	_coop.pressed.connect(_on_coop)
 	_versus.pressed.connect(_on_versus)
+	Sound.music("menu")
 	_load_maps()
 
 
