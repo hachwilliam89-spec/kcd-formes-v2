@@ -2,6 +2,8 @@ package com.kcdformes.domain.model.match;
 
 import com.kcdformes.domain.model.EnemyType;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -10,9 +12,8 @@ import java.util.Map;
  * MatchService.sendCreep). Cœur de la boucle rush : investir dans des envois
  * pressurise l'adversaire ET fait grossir son propre revenu (snowball).
  *
- * On se limite aux ennemis dont l'IA est gérée par le MatchEngine simplifié
- * (marche + PV) : pas de Sapeur/Chariot/Boss (capacités spéciales non simulées
- * dans la boucle live).
+ * Source de vérité unique : exposé aux clients par GetSendCatalogUseCase
+ * (GET /api/v1/versus/sends), ils ne recopient ni coûts ni revenus.
  */
 public final class SendCatalog {
 
@@ -31,6 +32,13 @@ public final class SendCatalog {
             EnemyType.BOSS_WARLORD, new Entry(850, 20));
 
     private SendCatalog() {}
+
+    /** Ennemis envoyables, du moins cher au plus cher (ordre d'affichage). */
+    public static List<EnemyType> sendableTypes() {
+        return CATALOG.keySet().stream()
+                .sorted(Comparator.comparingInt(SendCatalog::cost).thenComparingInt(EnemyType::ordinal))
+                .toList();
+    }
 
     public static boolean isSendable(EnemyType type) {
         return CATALOG.containsKey(type);

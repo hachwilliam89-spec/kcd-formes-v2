@@ -47,9 +47,10 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(authenticationEntryPoint()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**").permitAll()
-                        // Données de jeu statiques (cartes, catalogue des tours) : rien de
-                        // personnel, lues avant la connexion (menu, outils d'export, Godot).
-                        .requestMatchers(HttpMethod.GET, "/api/v1/maps", "/api/v1/maps/**", "/api/v1/towers").permitAll()
+                        // Données de jeu statiques (cartes, catalogues des tours et des envois) :
+                        // rien de personnel, lues avant la connexion (menu, outils d'export, Godot).
+                        .requestMatchers(HttpMethod.GET, "/api/v1/maps", "/api/v1/maps/**", "/api/v1/towers",
+                                "/api/v1/versus/sends").permitAll()
                         // Handshake WebSocket : ouvert au niveau HTTP ; l'authentification
                         // se fait à la trame STOMP CONNECT (voir StompAuthChannelInterceptor).
                         .requestMatchers("/ws/**").permitAll()
