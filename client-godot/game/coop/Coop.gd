@@ -1,21 +1,26 @@
 extends Control
 ## Écran coop : lobby (créer / rejoindre par code / prêt / démarrer) puis partie
-## live sur un plateau commun, or et château partagés.
+## live sur un plateau commun, or et château partagés, chat et écran de fin.
 ##
 ## Contrôleur : relaie les intentions du joueur au serveur par STOMP (StompClient)
 ## et passe l'état reçu aux vues. Le serveur simule tout (MatchEngine, un tick toutes
 ## les 120 ms) ; le plateau rejoue ses snapshots avec le même rendu qu'en solo
 ## (SnapshotFeed → TickPlayer en direct → BattleView). Destinations : voir
 ## backend MatchStompController et StompMatchBroadcaster.
+##
+## Robustesse (docs/CLIENT_GODOT.md §4) : reconnexion automatique après une coupure,
+## chien de garde si les snapshots cessent d'arriver sur une connexion restée
+## ouverte (réseau mobile, appli en arrière-plan), et reprise après un arrêt de
+## l'appli : le code de la partie en cours est gardé, rejoindre une partie dont on
+## est membre la reprend (Match.addPlayer).
 
-## Bonus de palier (BonusType côté serveur) : libellés de présentation.
-const BONUSES: Array[Dictionary] = [
-	{"type": "GOLD_INJECTION", "label": "Or"},
-	{"type": "CASTLE_REPAIR", "label": "Château"},
-	{"type": "TOWER_REPAIR", "label": "Tours"},
-]
 ## Après une coupure, nouvel essai de connexion au bout de ce délai.
 const RECONNECT_SECONDS: float = 3.0
+## Partie en cours sans snapshot depuis ce délai : connexion rouverte.
+const STALE_SECONDS: float = 4.0
+## Code de la partie en cours, gardé pour la reprendre après un arrêt de l'appli.
+const RESUME_FILE: String = "user://multi.cfg"
+const RESUME_SECTION: String = "coop"
 
 const CELL_LABELS: Dictionary = {
 	MapLayoutDto.CellKind.DEAD: "zone morte (décor)",
@@ -34,7 +39,12 @@ var _feed: SnapshotFeed = SnapshotFeed.new()
 ## Tours du dernier snapshot, au format du rendu.
 var _towers: Array[TowerDto] = []
 var _subscribed_match: String = ""
+## Abonnements propres au match courant (résiliés en le quittant).
+var _match_subs: Array[String] = []
 var _bonus_count: int = -1
+var _last_wave: int = 0
+var _since_state: float = 0.0
+var _reconnect_pending: bool = false
 var _leaving: bool = false
 var _fps_timer: float = 0.0
 
@@ -56,18 +66,26 @@ var _fps_timer: float = 0.0
 @onready var _stats: Label = %Stats
 @onready var _tower_bar: TowerBar = %TowerBar
 @onready var _bonus_box: VBoxContainer = %BonusBox
+@onready var _chat: ChatBox = %Chat
 @onready var _info: Label = %Info
 @onready var _back: Button = %Back
 @onready var _fps: Label = %Fps
+@onready var _end_panel: PanelContainer = %EndPanel
+@onready var _end_summary: Label = %EndSummary
+@onready var _replay: Button = %Replay
+@onready var _home: Button = %Home
 
 
 func _ready() -> void:
 	_back.pressed.connect(_on_quit)
+	_home.pressed.connect(_on_quit)
+	_replay.pressed.connect(_on_replay)
 	_create.pressed.connect(_on_create)
 	_join.pressed.connect(_on_join)
 	_code.text_submitted.connect(func(_text: String) -> void: _on_join())
 	_ready_button.toggled.connect(_on_ready_toggled)
 	_start.pressed.connect(_on_start)
+	_chat.message_submitted.connect(_on_chat_submitted)
 	_map_area.resized.connect(_fit_map)
 	_map_area.gui_input.connect(_on_map_input)
 	_battle.bind(_ticks)
@@ -75,7 +93,8 @@ func _ready() -> void:
 	# Le multijoueur n'applique pas les déblocages par vague (MatchService) : tout est proposé.
 	_tower_bar.check_unlocks = false
 	_tower_bar.tower_selected.connect(func(spec: TowerSpecDto) -> void: _info.text = _tower_bar.describe(spec))
-	_set_lobby_enabled(false)
+	_code.text = _load_resume_code()
+	_set_online(false)
 	_status.text = "Chargement…"
 
 	var catalog_result: ApiResult = await Api.get_tower_catalog()
@@ -96,10 +115,12 @@ func _ready() -> void:
 	_stomp.subscribe("/user/queue/errors")
 	var err: Error = _stomp.open(Config.ws_url(), Session.token)
 	_status.text = "Connexion au serveur…" if err == OK else "Connexion impossible (%s)" % error_string(err)
+	if err != OK:
+		_schedule_reconnect()
 
 
-## Compteur de perf (réglage war_seasons/debug/show_fps).
 func _process(delta: float) -> void:
+	_watch_feed(delta)
 	if not _fps.visible:
 		return
 	_fps_timer -= delta
@@ -111,9 +132,14 @@ func _process(delta: float) -> void:
 # --- Connexion -----------------------------------------------------------------
 
 func _on_connected() -> void:
-	_set_lobby_enabled(true)
+	_set_online(true)
+	_since_state = 0.0
 	if _match == null:
 		_status.text = "Connecté. Crée une partie ou rejoins celle d'un allié avec son code."
+		if not _code.text.is_empty():
+			_status.text = "Partie interrompue : son code %s est prérempli, touche Rejoindre pour la reprendre." % _code.text
+	elif _match.status == "RUNNING":
+		_status.text = _running_status()
 	else:
 		_refresh_lobby()
 
@@ -121,22 +147,59 @@ func _on_connected() -> void:
 func _on_disconnected(reason: String) -> void:
 	if _leaving:
 		return
-	_set_lobby_enabled(false)
-	_status.text = "Connexion perdue (%s). Nouvel essai…" % reason
+	_set_online(false)
+	# Code 0 ou -1 : fermeture sans motif (réseau coupé), rien d'utile à afficher.
+	var detail: String = "" if reason.is_empty() or reason.begins_with("code 0") or reason.begins_with("code -1") else " (%s)" % reason
+	_status.text = "Connexion perdue%s. Nouvel essai…" % detail
+	_schedule_reconnect()
+
+
+## Un seul essai programmé à la fois ; les abonnements (match compris) sont
+## renvoyés par StompClient à la reconnexion.
+func _schedule_reconnect() -> void:
+	if _reconnect_pending:
+		return
+	_reconnect_pending = true
 	await get_tree().create_timer(RECONNECT_SECONDS).timeout
-	if not _leaving and is_inside_tree():
-		# Les abonnements (match compris) sont renvoyés à la reconnexion.
-		_stomp.reopen()
+	_reconnect_pending = false
+	if _leaving or not is_inside_tree() or _stomp.is_open():
+		return
+	if _stomp.reopen() != OK:
+		_schedule_reconnect()
+
+
+## Chien de garde : une connexion peut rester « ouverte » sans plus rien recevoir
+## (réseau mobile coupé sans fermeture, appli suspendue). En partie, le serveur
+## diffuse un snapshot toutes les 120 ms : un silence prolongé force la reconnexion.
+func _watch_feed(delta: float) -> void:
+	if _stomp == null or _leaving or _match == null or _match.status != "RUNNING" or not _ticks.playing:
+		return
+	if _stomp.state == StompClient.State.IDLE:
+		return # coupure déjà détectée, reconnexion programmée
+	_since_state += delta
+	if _since_state < STALE_SECONDS:
+		return
+	_since_state = 0.0
+	_set_online(false)
+	_status.text = "Plus de nouvelles du serveur. Reconnexion…"
+	if _stomp.reopen() != OK:
+		_schedule_reconnect()
 
 
 func _on_message(destination: String, body: Variant) -> void:
 	if destination == "/user/queue/errors":
 		_info.text = str(DtoParse.dict(body).get("error", "Action refusée par le serveur"))
+		_set_bonus_buttons_enabled(true) # choix refusé : on peut réessayer
 		return
 	if _match != null and destination == "/topic/match/%s/state" % _match.id:
 		var snap: MatchSnapshotDto = MatchSnapshotDto.from_variant(body)
 		if snap != null:
 			_apply_snapshot(snap)
+		return
+	if _match != null and destination == "/topic/match/%s/chat" % _match.id:
+		var message: ChatMessageDto = ChatMessageDto.from_variant(body)
+		if message != null:
+			_chat.add_message(message, message.sender_id == Session.player_id)
 		return
 	if destination == "/user/queue/match" or (_match != null and destination == "/topic/match/%s" % _match.id):
 		var state: MatchStateDto = MatchStateDto.from_variant(body)
@@ -170,12 +233,23 @@ func _on_start() -> void:
 		_stomp.send("/app/match/%s/start" % _match.id)
 
 
+func _on_chat_submitted(text: String) -> void:
+	if _match != null:
+		_stomp.send("/app/match/%s/chat" % _match.id, {"text": text})
+
+
 func _apply_match(state: MatchStateDto) -> void:
 	_match = state
+	_last_wave = maxi(_last_wave, state.wave)
 	if _subscribed_match != state.id:
 		_subscribed_match = state.id
-		_stomp.subscribe("/topic/match/%s" % state.id)
-		_stomp.subscribe("/topic/match/%s/state" % state.id)
+		_match_subs.append(_stomp.subscribe("/topic/match/%s" % state.id))
+		_match_subs.append(_stomp.subscribe("/topic/match/%s/state" % state.id))
+		_match_subs.append(_stomp.subscribe("/topic/match/%s/chat" % state.id))
+	if state.status == "FINISHED":
+		_clear_resume_code()
+	else:
+		_save_resume_code(state.code)
 	if state.map_id != _layout_id:
 		await _load_layout(state.map_id)
 	_refresh_lobby()
@@ -193,6 +267,7 @@ func _refresh_lobby() -> void:
 	_join_row.visible = not in_match
 	_ready_button.visible = in_lobby
 	_start.visible = in_lobby and _match.is_host(Session.player_id)
+	_chat.visible = in_match
 	if not in_match:
 		_players.text = ""
 		return
@@ -214,11 +289,13 @@ func _refresh_lobby() -> void:
 			_status.text += "\nTu pourras démarrer quand tout le monde sera prêt."
 
 
-func _set_lobby_enabled(enabled: bool) -> void:
-	_create.disabled = not enabled
-	_join.disabled = not enabled
-	_ready_button.disabled = not enabled
-	_start.disabled = not enabled or _match == null or not _match.can_start
+## Actions réseau possibles seulement connecté.
+func _set_online(online: bool) -> void:
+	_create.disabled = not online
+	_join.disabled = not online
+	_ready_button.disabled = not online
+	_start.disabled = not online or _match == null or not _match.can_start
+	_chat.set_enabled(online)
 
 
 # --- Partie live ---------------------------------------------------------------
@@ -227,65 +304,94 @@ func _start_board() -> void:
 	_feed = SnapshotFeed.new()
 	_feed.castle = _layout.castle if _layout != null else Vector2i(-1, -1)
 	_bonus_count = -1
+	_since_state = 0.0
 	_lobby.visible = false
+	_end_panel.visible = false
 	_play.visible = true
-	_status.text = "Partie en cours · code %s" % _match.code
+	_status.text = _running_status()
 	_ticks.play_live()
 	_info.text = "Choisis une tour puis touche une case constructible (verte). Le Mur se pose sur la route."
 
 
+func _running_status() -> String:
+	return "Partie en cours · code %s" % _match.code
+
+
 func _end_board() -> void:
+	if _end_panel.visible:
+		return
 	_ticks.stop()
 	_tower_bar.busy = true
 	_tower_bar.refresh()
-	_rebuild_bonus_box(0)
+	_rebuild_bonus_box(0, [])
+	_clear_resume_code()
 	_status.text = "Partie terminée."
-	_info.text = "Le château est tombé. Quitte pour revenir à l'accueil."
+	_info.text = ""
+	_end_summary.text = "Vous avez tenu ensemble jusqu'à la vague %d." % _last_wave if _last_wave > 0 else "La partie est terminée."
+	_end_panel.visible = true
 
 
 func _apply_snapshot(snap: MatchSnapshotDto) -> void:
+	_since_state = 0.0
 	if _layout == null:
 		return
 	if snap.status == "RUNNING" and not _ticks.playing:
 		_start_board()
+	elif _feed.is_gap(snap):
+		# Retour après une coupure : on repart du snapshot reçu, sans interpoler le trou.
+		_ticks.play_live()
 	if _feed.towers_changed(snap):
 		_towers = SnapshotFeed.towers_of(snap, _tower_bar.catalog)
 		_battle.show_towers(_towers)
 	_ticks.push(_feed.to_tick(snap, _towers))
+	_last_wave = snap.wave
 	_stats.text = "Vague %d · Or %d\nChâteau %d/%d" % [snap.wave, snap.gold, snap.castle_hp, snap.castle_max_hp]
 	_tower_bar.gold = snap.gold
 	_tower_bar.placed = _towers
 	_tower_bar.busy = snap.status != "RUNNING"
 	_tower_bar.refresh()
 	if snap.pending_bonuses != _bonus_count:
-		_rebuild_bonus_box(snap.pending_bonuses)
-	if snap.status == "FINISHED" and _ticks.playing:
+		_rebuild_bonus_box(snap.pending_bonuses, snap.bonus_options)
+	if snap.status == "FINISHED":
 		_end_board()
 
 
-func _rebuild_bonus_box(count: int) -> void:
+## Bonus de palier : options et libellés fournis par le serveur dans le snapshot.
+func _rebuild_bonus_box(count: int, options: Array[BonusOptionDto]) -> void:
 	_bonus_count = count
 	for child: Node in _bonus_box.get_children():
 		_bonus_box.remove_child(child)
 		child.queue_free()
-	_bonus_box.visible = count > 0
-	if count <= 0:
+	_bonus_box.visible = count > 0 and not options.is_empty()
+	if not _bonus_box.visible:
 		return
 	var heading: Label = Label.new()
 	heading.theme_type_variation = &"SmallLabel"
 	heading.text = "Bonus à choisir : %d" % count
 	_bonus_box.add_child(heading)
-	for option: Dictionary in BONUSES:
+	for option: BonusOptionDto in options:
 		var button: Button = Button.new()
-		button.text = str(option["label"])
+		button.text = option.label
+		button.tooltip_text = option.description
 		button.theme_type_variation = &"SmallButton"
-		button.pressed.connect(_on_bonus.bind(str(option["type"])))
+		button.pressed.connect(_on_bonus.bind(option.type))
 		_bonus_box.add_child(button)
 
 
+## Un choix à la fois : les boutons se réactivent au snapshot suivant (nouveau
+## compte de bonus) ou si le serveur refuse le choix.
 func _on_bonus(bonus_type: String) -> void:
-	if _match != null:
-		_stomp.send("/app/match/%s/bonus" % _match.id, {"type": bonus_type})
+	if _match == null:
+		return
+	_set_bonus_buttons_enabled(false)
+	_stomp.send("/app/match/%s/bonus" % _match.id, {"type": bonus_type})
+
+
+func _set_bonus_buttons_enabled(enabled: bool) -> void:
+	for child: Node in _bonus_box.get_children():
+		var button: Button = child as Button
+		if button != null:
+			button.disabled = not enabled
 
 
 func _on_map_input(event: InputEvent) -> void:
@@ -315,6 +421,39 @@ func _on_map_input(event: InputEvent) -> void:
 	_info.text = "%s demandé en (%d, %d)." % [TowerNames.label(spec.type), cell.x, cell.y]
 
 
+# --- Sortie --------------------------------------------------------------------
+
+## Fin de partie → retour au lobby pour en créer ou rejoindre une autre.
+func _on_replay() -> void:
+	_leave_match()
+	_refresh_lobby()
+	_set_online(_stomp.is_open())
+	_status.text = "Crée une nouvelle partie ou rejoins celle d'un allié avec son code."
+
+
+## Quitte le match courant (côté serveur aussi) et vide le plateau.
+func _leave_match() -> void:
+	if _match != null and _stomp != null:
+		_stomp.send("/app/match/%s/leave" % _match.id)
+		for id: String in _match_subs:
+			_stomp.unsubscribe(id)
+	_match_subs.clear()
+	_match = null
+	_subscribed_match = ""
+	_last_wave = 0
+	_clear_resume_code()
+	_code.text = ""
+	_ticks.reset()
+	_towers = []
+	_battle.show_towers(_towers)
+	_feed = SnapshotFeed.new()
+	_rebuild_bonus_box(0, [])
+	_chat.clear_messages()
+	_play.visible = false
+	_end_panel.visible = false
+	_info.text = ""
+
+
 func _on_quit() -> void:
 	_leaving = true
 	_ticks.stop()
@@ -322,7 +461,33 @@ func _on_quit() -> void:
 		if _match != null:
 			_stomp.send("/app/match/%s/leave" % _match.id)
 		_stomp.close()
+	_clear_resume_code()
 	Router.goto_home()
+
+
+# --- Reprise après un arrêt de l'appli -----------------------------------------
+
+func _load_resume_code() -> String:
+	var cfg: ConfigFile = ConfigFile.new()
+	if cfg.load(RESUME_FILE) != OK:
+		return ""
+	return str(cfg.get_value(RESUME_SECTION, "match_code", ""))
+
+
+func _save_resume_code(code: String) -> void:
+	var cfg: ConfigFile = ConfigFile.new()
+	cfg.load(RESUME_FILE) # absent la première fois : on part d'un fichier vide
+	cfg.set_value(RESUME_SECTION, "match_code", code)
+	cfg.save(RESUME_FILE)
+
+
+func _clear_resume_code() -> void:
+	var cfg: ConfigFile = ConfigFile.new()
+	if cfg.load(RESUME_FILE) != OK:
+		return
+	if cfg.has_section_key(RESUME_SECTION, "match_code"):
+		cfg.erase_section_key(RESUME_SECTION, "match_code")
+		cfg.save(RESUME_FILE)
 
 
 # --- Carte -----------------------------------------------------------------------

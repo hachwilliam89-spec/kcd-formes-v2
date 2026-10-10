@@ -27,6 +27,8 @@ var castle_hp: int = 0
 var castle_max_hp: int = 0
 ## Bonus gagnés en attente de choix (or partagé en coop).
 var pending_bonuses: int = 0
+## Options proposées (libellés du serveur), vide tant qu'aucun bonus n'attend.
+var bonus_options: Array[BonusOptionDto] = []
 var status: String = ""
 var enemies: Array[EnemyStateDto] = []
 var towers: Array[TowerView] = []
@@ -44,6 +46,7 @@ static func from_variant(value: Variant) -> MatchSnapshotDto:
 	dto.castle_hp = int(body.get("castleHp", 0))
 	dto.castle_max_hp = int(body.get("castleMaxHp", 0))
 	dto.pending_bonuses = int(body.get("pendingBonuses", 0))
+	dto.bonus_options = BonusOptionDto.list_from(body.get("bonusOptions"))
 	dto.status = str(body.get("status", ""))
 	for item: Variant in DtoParse.array(body.get("enemies")):
 		var enemy: EnemyStateDto = EnemyStateDto.from_variant(item)

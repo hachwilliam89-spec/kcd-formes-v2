@@ -143,6 +143,7 @@ tick():
 
 - **Interpolation** client (buffer 100 ms) : masque le jitter, rendu fluide même à 15 Hz.
 - **Reconnexion** : l'état vit en mémoire ; au retour, le client se réabonne et reçoit un **snapshot complet**. Fenêtre de grâce (ex. 30 s) avant de considérer le joueur parti.
+  - Implémenté côté clients : reconnexion STOMP automatique (3 s) avec réabonnement, chien de garde si les snapshots cessent d'arriver (web : `useCoop` / `useVersus` ; Godot : `Coop.gd`, 4 s), et reprise par le code de la partie (`/app/match/join` d'un membre = réactivation, `Match.addPlayer`). Pas encore côté serveur : ni marquage « déconnecté », ni fenêtre de grâce.
 - **Déconnexion définitive** en coop : la partie continue en solo (l'autre joueur garde la main) ou passe en pause selon le choix produit.
 
 ---

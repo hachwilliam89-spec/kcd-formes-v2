@@ -23,6 +23,8 @@ var max_players: int = 0
 ## Vrai quand tous les joueurs sont prêts : l'hôte peut démarrer.
 var can_start: bool = false
 var map_id: String = ""
+## Vague atteinte, 0 avant le départ (bilan d'une partie rejointe une fois terminée).
+var wave: int = 0
 var players: Array[Player] = []
 
 
@@ -39,6 +41,7 @@ static func from_variant(value: Variant) -> MatchStateDto:
 	dto.can_start = bool(body.get("canStart", false))
 	var map_value: Variant = body.get("mapId")
 	dto.map_id = "desert" if map_value == null else str(map_value)
+	dto.wave = int(body.get("wave", 0))
 	for item: Variant in DtoParse.array(body.get("players")):
 		var raw: Dictionary = DtoParse.dict(item)
 		var player: Player = Player.new()
