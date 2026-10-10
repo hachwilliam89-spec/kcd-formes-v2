@@ -38,6 +38,9 @@ var _dying: Array[Dictionary] = []   # {visual, pos, since, frames, fps}
 var _projectiles: Array[Dictionary] = []
 var _impacts: Array[Dictionary] = []
 var _tick_index: int = 0
+## Tours suspendues par la crue (id → true) : dessinées estompées.
+var _dimmed: Dictionary = {}
+var _dim_color: Color = Color.WHITE
 var _time: float = 0.0
 ## Temps CPU passé dans cette vue (rejeu + animation + dessin), en µs, cumulé
 ## depuis la dernière lecture (banc de perf : take_cpu_usec).
@@ -67,6 +70,21 @@ func show_towers(towers: Array[TowerDto]) -> void:
 		if not _tower_fx.has(tower.id):
 			_tower_fx[tower.id] = {"aim": 0.0, "fired_at": -INF, "channeling": false, "channel_at": 0.0}
 	queue_redraw()
+
+
+## Tours suspendues par la crue (SeasonView) : estompées tant qu'elles le restent.
+func set_dimmed_towers(ids: Array[String], alpha: float) -> void:
+	_dimmed.clear()
+	for id: String in ids:
+		_dimmed[id] = true
+	_dim_color = Color(1, 1, 1, alpha)
+	queue_redraw()
+
+
+## Case d'une tour affichée, (-1, -1) si elle n'y est pas.
+func tower_cell(tower_id: String) -> Vector2i:
+	var tower: TowerDto = _towers.get(tower_id)
+	return tower.cell if tower != null else Vector2i(-1, -1)
 
 
 ## Renvoie le temps CPU cumulé de la vue depuis le dernier appel, puis le remet à zéro.
@@ -303,13 +321,15 @@ func _draw_tower(tower: TowerDto) -> float:
 	var center_x: float = origin.x + Grid.CELL_SIZE * 0.5
 	var foot_y: float = origin.y + Grid.CELL_SIZE - 1.0
 	var state: Dictionary = _tower_fx.get(tower.id, {})
+	var tint: Color = _dim_color if _dimmed.has(tower.id) else Color.WHITE
 
 	if visual.centered_on_road and visual.base_texture() != null:
 		var tex: Texture2D = visual.base_texture()
 		var size: Vector2 = Vector2(width, width * tex.get_height() / tex.get_width())
 		var dir: Vector2i = _road_dir_at(tower.cell)
 		var angle: float = -90.0 if dir.x > 0 else 90.0 if dir.x < 0 else 180.0 if dir.y < 0 else 0.0
-		_draw_region(tex, Rect2(Vector2.ZERO, tex.get_size()), Grid.cell_center(tower.cell), size, Vector2(0.5, 0.5), deg_to_rad(angle))
+		_draw_region(tex, Rect2(Vector2.ZERO, tex.get_size()), Grid.cell_center(tower.cell), size, Vector2(0.5, 0.5), deg_to_rad(angle),
+			false, false, tint)
 		return origin.y
 
 	if visual.anim_texture() != null:
@@ -318,7 +338,8 @@ func _draw_tower(tower: TowerDto) -> float:
 		if bool(state.get("channeling", false)):
 			frame = int((_time - float(state["channel_at"])) * visual.anim_fps) % TextureCache.frame_count(sheet, visual.anim_frame_size)
 		var size: Vector2 = Vector2(width, width * visual.anim_frame_size.y / visual.anim_frame_size.x)
-		_draw_region(sheet, TextureCache.frame_rect(sheet, visual.anim_frame_size, frame), Vector2(center_x, foot_y), size, Vector2(0.5, 1.0))
+		_draw_region(sheet, TextureCache.frame_rect(sheet, visual.anim_frame_size, frame), Vector2(center_x, foot_y), size, Vector2(0.5, 1.0),
+			0.0, false, false, tint)
 		return foot_y - size.y
 
 	var base: Texture2D = visual.base_texture()
@@ -326,14 +347,15 @@ func _draw_tower(tower: TowerDto) -> float:
 		return _draw_tower_fallback(tower, visual)
 	var scale: float = width / base.get_width()
 	var base_size: Vector2 = base.get_size() * scale
-	_draw_region(base, Rect2(Vector2.ZERO, base.get_size()), Vector2(center_x, foot_y), base_size, Vector2(0.5, 1.0))
+	_draw_region(base, Rect2(Vector2.ZERO, base.get_size()), Vector2(center_x, foot_y), base_size, Vector2(0.5, 1.0),
+		0.0, false, false, tint)
 	var weapon: Texture2D = visual.weapon_texture()
 	if weapon != null:
 		var count: int = TextureCache.frame_count(weapon, visual.weapon_frame_size)
 		var fired_at: float = float(state.get("fired_at", -INF))
 		var frame: int = 0 if fired_at == -INF else mini(int((_time - fired_at) * visual.weapon_fps), count - 1)
 		_draw_region(weapon, TextureCache.frame_rect(weapon, visual.weapon_frame_size, frame), _weapon_pivot(tower, visual),
-			Vector2(visual.weapon_frame_size) * scale, visual.weapon_pivot, float(state.get("aim", 0.0)))
+			Vector2(visual.weapon_frame_size) * scale, visual.weapon_pivot, float(state.get("aim", 0.0)), false, false, tint)
 	return foot_y - base_size.y
 
 
@@ -362,7 +384,8 @@ func _road_dir_at(cell: Vector2i) -> Vector2i:
 func _draw_tower_fallback(tower: TowerDto, visual: TowerVisual) -> float:
 	var side: float = Grid.CELL_SIZE * 0.7
 	var center: Vector2 = Grid.cell_center(tower.cell)
-	draw_rect(Rect2(center - Vector2(side, side) * 0.5, Vector2(side, side)), visual.color)
+	var tint: Color = _dim_color if _dimmed.has(tower.id) else Color.WHITE
+	draw_rect(Rect2(center - Vector2(side, side) * 0.5, Vector2(side, side)), visual.color * tint)
 	if not visual.short_label.is_empty():
 		var font: Font = ThemeDB.fallback_font
 		var text_size: Vector2 = font.get_string_size(visual.short_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 20)

@@ -19,6 +19,23 @@ var lane_paths: Array[Array] = []
 var corridor_cells: Array[Vector2i] = []
 var buildable_cells: Array[Vector2i] = []
 var water_cells: Array[Vector2i] = []
+## Berges que la crue peut noyer (printemps), vide ailleurs.
+var bank_cells: Array[Vector2i] = []
+var seasonal_rules: SeasonalRules = SeasonalRules.new()
+
+
+## Effets chiffrés des saisons (GetMapLayoutUseCase.SeasonalRules) : affichage
+## seulement, le serveur les applique.
+class SeasonalRules:
+	extends RefCounted
+	## Une crue toutes les N vagues (printemps).
+	var flood_interval: int = 0
+	var mud_speed_factor: float = 1.0
+	## Portée perdue par une tour dans la brume (automne).
+	var fog_range_penalty: float = 0.0
+	var hail_damage_factor: float = 1.0
+	var fertile_gold_factor: float = 1.0
+	var fog_damage_taken_factor: float = 1.0
 
 # Index pour des lectures en O(1) : Vector2i → true.
 var _road: Dictionary = {}
@@ -42,6 +59,14 @@ static func from_variant(value: Variant) -> MapLayoutDto:
 	dto.corridor_cells = _to_cells(body.get("corridorCells"))
 	dto.buildable_cells = _to_cells(body.get("buildableCells"))
 	dto.water_cells = _to_cells(body.get("waterCells"))
+	dto.bank_cells = _to_cells(body.get("bankCells"))
+	var rules: Dictionary = DtoParse.dict(body.get("seasonalRules"))
+	dto.seasonal_rules.flood_interval = int(rules.get("floodInterval", 0))
+	dto.seasonal_rules.mud_speed_factor = float(rules.get("mudSpeedFactor", 1.0))
+	dto.seasonal_rules.fog_range_penalty = float(rules.get("fogRangePenalty", 0.0))
+	dto.seasonal_rules.hail_damage_factor = float(rules.get("hailDamageFactor", 1.0))
+	dto.seasonal_rules.fertile_gold_factor = float(rules.get("fertileGoldFactor", 1.0))
+	dto.seasonal_rules.fog_damage_taken_factor = float(rules.get("fogDamageTakenFactor", 1.0))
 	var lanes: Variant = body.get("lanePaths")
 	if lanes is Array:
 		for lane: Variant in lanes:
@@ -85,6 +110,36 @@ func size() -> Vector2i:
 	return Vector2i(width, height)
 
 
+## Berge inondable (printemps).
+func is_bank(cell: Vector2i) -> bool:
+	return bank_cells.has(cell)
+
+
+## Rectangle du lac (cases d'eau), vide sans eau.
+func lake_rect() -> Rect2i:
+	if water_cells.is_empty():
+		return Rect2i()
+	var box: Rect2i = Rect2i(water_cells[0], Vector2i.ONE)
+	for cell: Vector2i in water_cells:
+		box = box.expand(cell).expand(cell + Vector2i.ONE)
+	return box
+
+
+## Entrées des voies (départ de chaque chemin).
+func lane_starts() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for lane: Array in lane_paths:
+		if not lane.is_empty():
+			out.append(lane[0])
+	return out
+
+
+## Crues annoncées : « 3, 6, 9… » (floodWavesLabel du web).
+func flood_waves_label() -> String:
+	var n: int = seasonal_rules.flood_interval
+	return "%d, %d, %d…" % [n, 2 * n, 3 * n] if n > 0 else "—"
+
+
 func _index() -> void:
 	for cell: Vector2i in corridor_cells:
 		_road[cell] = true
@@ -104,6 +159,7 @@ static func _to_cell(value: Variant) -> Vector2i:
 	return Vector2i(-1, -1)
 
 
+## Liste de positions {x, y} du serveur ; les entrées illisibles sont ignorées.
 static func _to_cells(value: Variant) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
 	if value is Array:

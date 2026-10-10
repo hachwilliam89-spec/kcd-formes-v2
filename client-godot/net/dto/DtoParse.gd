@@ -11,6 +11,11 @@ static func array(value: Variant) -> Array:
 	return value if value is Array else []
 
 
+## Positions {x, y} (cases) du serveur.
+static func cells(value: Variant) -> Array[Vector2i]:
+	return MapLayoutDto._to_cells(value)
+
+
 static func strings(value: Variant) -> Array[String]:
 	var out: Array[String] = []
 	for item: Variant in array(value):

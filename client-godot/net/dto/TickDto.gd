@@ -1,8 +1,8 @@
 class_name TickDto
 extends RefCounted
 ## Un tick de vague tel que simulé par le serveur (WaveResponse.TickResponse).
-## Champs pas encore exploités par le client (siège, boss, terrain…) : à ajouter
-## ici quand une vue en aura besoin.
+## Champs pas encore exploités par le client (siège, boss…) : à ajouter ici quand
+## une vue en aura besoin.
 
 var tick: int = 0
 var enemies: Array[EnemyStateDto] = []
@@ -13,6 +13,8 @@ var deaths: Array[String] = []
 var reached_castle: Array[String] = []
 var destroyed_towers: Array[String] = []
 var castle_hp: int = 0
+## État saisonnier du tick (null hors printemps / automne).
+var terrain: TerrainSnapshotDto
 
 
 static func from_variant(value: Variant) -> TickDto:
@@ -32,4 +34,5 @@ static func from_variant(value: Variant) -> TickDto:
 	dto.reached_castle = DtoParse.strings(body.get("reachedCastle"))
 	dto.destroyed_towers = DtoParse.strings(body.get("destroyedTowers"))
 	dto.castle_hp = int(body.get("castleHp", 0))
+	dto.terrain = TerrainSnapshotDto.from_variant(body.get("terrain"))
 	return dto
