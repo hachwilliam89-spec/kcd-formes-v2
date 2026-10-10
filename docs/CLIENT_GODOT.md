@@ -23,7 +23,9 @@ client-godot/
     StompClient.gd        WebSocketPeer + trames STOMP 1.2 (CONNECT avec le JWT, abonnements renvoyés à chaque reconnexion)
     dto/                  classes typées des DTO, miroir des records Java (AuthResponseDto…)
   game/
-    Game.tscn / Game.gd   écran de jeu (contrôleur) : carte, création de partie, pose au tap, vagues, bonus
+    Game.tscn / Game.gd   écran de jeu (contrôleur) : carte, création de partie, pose au tap, vagues, bonus, recommencer
+    hud/Hud.gd            bandeau au-dessus du plateau : or, PV du château (en direct), vague, aperçu de la suivante (ennemis, nouveautés, Boss)
+    hud/LeaderboardPanel.gd classement (Global + une carte par onglet, top 5, ta ligne)
     Grid.gd               seule conversion case ↔ espace local (CELL_SIZE = 16 ; ennemis : entier = centre de case)
     TickPlayer.gd         rejoue les ticks à 120 ms, interpole les ennemis, signaux tick_played / finished ; mode direct (play_live / push) pour le multijoueur
     TowerBar.gd           barre de construction depuis le catalogue serveur, partagée solo / coop
@@ -170,7 +172,8 @@ client-godot/
 Lecture : sur CPU, Godot consomme ≈ 2,7× plus que Phaser sur cette scène (≈ 5,4 ms contre 1,97 ms), tout en restant loin du budget de 16,7 ms. Si le téléphone ne tient pas 60 FPS, piste connue : passer `BattleView` du dessin immédiat en GDScript à des nœuds `Sprite2D` triés par le moteur (y-sort en C++).
 - [ ] Prérequis backend (§5).
 - [x] Saisons dans Godot (solo, coop, versus) : état de chaque tick (`terrain` des ticks et des snapshots), annonce de la vague suivante entre deux vagues (`GET /games/{id}/waves/next`), précisions « berge inondable » et « brume : −1 portée » sur les cases et la fiche de tour.
-- [ ] Solo complet : HUD, tutoriel, son.
+- [x] HUD du solo, comme le web : or, PV du château en direct pendant la vague, vague, aperçu de la suivante (`GET /games/{id}/waves/next` : types, nouveautés cerclées d'or, Boss), bouton « Lancer la vague N » / « Choisis un bonus », bilan de vague (or gagné, PV perdus), classement, recommencer avec confirmation.
+- [ ] Solo complet : tutoriel, son.
 - [x] Coop complète (chat, fin de partie, reconnexion en cours de vague).
 - [x] Versus (STOMP) : envois depuis `GET /api/v1/versus/sends`, revenu, aperçu de la grille adverse, victoire / défaite ; écrans coop et versus sur un socle commun (`MatchScreen`).
 - [ ] Bascule : `/jouer` sert l'export web Godot, suppression du code de jeu de `frontend-web`.

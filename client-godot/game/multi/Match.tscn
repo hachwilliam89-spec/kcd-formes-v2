@@ -62,6 +62,7 @@ theme_type_variation = &"FpsLabel"
 [node name="EndPanel" type="PanelContainer" parent="Layout/MapArea"]
 unique_name_in_owner = true
 visible = false
+z_index = 10
 custom_minimum_size = Vector2(280, 0)
 layout_mode = 1
 anchors_preset = 8

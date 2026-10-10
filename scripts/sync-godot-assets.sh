@@ -26,7 +26,7 @@ if [ ! -d "$SRC" ]; then
 fi
 
 rm -rf "$DST"
-mkdir -p "$DST/enemies" "$DST/towers" "$DST/effects" "$DST/projectiles"
+mkdir -p "$DST/enemies" "$DST/towers" "$DST/effects" "$DST/projectiles" "$DST/ui"
 cp "$SRC"/enemies/*.png "$DST/enemies/"
 for t in ARCHER BALLISTA CATAPULT; do
   cp "$SRC/towers/${t}_base.png" "$SRC/towers/${t}_weapon.png" "$DST/towers/"
@@ -34,6 +34,8 @@ done
 cp "$SRC/towers/MAGE_sheet.png" "$SRC/towers/WALL.png" "$DST/towers/"
 cp "$SRC"/effects/*.png "$DST/effects/"
 cp "$SRC"/projectiles/*.png "$DST/projectiles/"
+# Icônes du bandeau et du classement (mêmes que le web).
+cp "$SRC"/ui/icon_gold.png "$SRC"/ui/icon_heart.png "$SRC"/ui/icon_trophy.png "$DST/ui/"
 echo "Sprites copiés dans $DST ($(find "$DST" -name '*.png' | wc -l | tr -d ' ') fichiers)."
 
 if [ ! -d scripts/visual-export/node_modules ] || [ ! -d frontend-web/node_modules ]; then

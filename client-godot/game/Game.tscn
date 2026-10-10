@@ -8,6 +8,8 @@
 [ext_resource type="Script" path="res://game/TickPlayer.gd" id="6_ticks"]
 [ext_resource type="Script" path="res://game/TowerBar.gd" id="7_towerbar"]
 [ext_resource type="Script" path="res://game/battle/SeasonView.gd" id="20_season"]
+[ext_resource type="Script" path="res://game/hud/Hud.gd" id="21_hud"]
+[ext_resource type="Script" path="res://game/hud/LeaderboardPanel.gd" id="22_board"]
 
 [node name="Game" type="Panel"]
 layout_mode = 3
@@ -31,27 +33,37 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="MapArea" type="Control" parent="Layout"]
+[node name="Main" type="VBoxContainer" parent="Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 2
+
+[node name="Hud" type="PanelContainer" parent="Layout/Main"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("21_hud")
+
+[node name="MapArea" type="Control" parent="Layout/Main"]
 unique_name_in_owner = true
 clip_contents = true
 layout_mode = 2
-size_flags_horizontal = 3
+size_flags_vertical = 3
 
-[node name="MapView" type="Node2D" parent="Layout/MapArea"]
+[node name="MapView" type="Node2D" parent="Layout/Main/MapArea"]
 unique_name_in_owner = true
 script = ExtResource("2_mapview")
 palette = ExtResource("3_palette")
 
-[node name="SeasonView" type="Node2D" parent="Layout/MapArea/MapView"]
+[node name="SeasonView" type="Node2D" parent="Layout/Main/MapArea/MapView"]
 unique_name_in_owner = true
 script = ExtResource("20_season")
 
-[node name="BattleView" type="Node2D" parent="Layout/MapArea/MapView"]
+[node name="BattleView" type="Node2D" parent="Layout/Main/MapArea/MapView"]
 unique_name_in_owner = true
 script = ExtResource("4_battle")
 catalog = ExtResource("5_catalog")
 
-[node name="Fps" type="Label" parent="Layout/MapArea"]
+[node name="Fps" type="Label" parent="Layout/Main/MapArea"]
 unique_name_in_owner = true
 layout_mode = 0
 offset_left = 4.0
@@ -75,11 +87,6 @@ size_flags_vertical = 3
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"HeadingLabel"
-autowrap_mode = 3
-
-[node name="Stats" type="Label" parent="Layout/Side/Scroll/Box"]
-unique_name_in_owner = true
-layout_mode = 2
 autowrap_mode = 3
 
 [node name="TowerBar" type="GridContainer" parent="Layout/Side/Scroll/Box"]
@@ -111,8 +118,36 @@ layout_mode = 2
 size_flags_vertical = 3
 autowrap_mode = 3
 
+[node name="Actions" type="HBoxContainer" parent="Layout/Side/Scroll/Box"]
+layout_mode = 2
+
+[node name="Board" type="Button" parent="Layout/Side/Scroll/Box/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SmallButton"
+text = "Classement"
+
+[node name="Restart" type="Button" parent="Layout/Side/Scroll/Box/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"SmallButton"
+text = "Recommencer"
+
 [node name="Back" type="Button" parent="Layout/Side/Scroll/Box"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"FlatButton"
 text = "Quitter"
+
+[node name="Leaderboard" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("22_board")
