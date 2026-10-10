@@ -18,14 +18,17 @@ client-godot/
     Session.gd            token + joueur, stockés dans user:// (chiffré)
     Api.gd                HTTPRequest + JWT → ApiResult ; 401 = session vidée + signal `unauthorized`
     Router.gd             navigation entre écrans (seul endroit qui change de scène)
-    Stomp.gd              WebSocketPeer + trames STOMP 1.2 (à venir)
   net/
     ApiResult.gd          résultat d'un appel : ok / status (0 = réseau) / data / error (message du backend)
+    StompClient.gd        WebSocketPeer + trames STOMP 1.2 (CONNECT avec le JWT, abonnements renvoyés à chaque reconnexion)
     dto/                  classes typées des DTO, miroir des records Java (AuthResponseDto…)
   game/
     Game.tscn / Game.gd   écran de jeu (contrôleur) : carte, création de partie, pose au tap, vagues, bonus
     Grid.gd               seule conversion case ↔ espace local (CELL_SIZE = 16 ; ennemis : entier = centre de case)
-    TickPlayer.gd         rejoue les ticks à 120 ms, interpole les ennemis, signaux tick_played / finished
+    TickPlayer.gd         rejoue les ticks à 120 ms, interpole les ennemis, signaux tick_played / finished ; mode direct (play_live / push) pour le multijoueur
+    TowerBar.gd           barre de construction depuis le catalogue serveur, partagée solo / coop
+    coop/Coop.tscn        écran coop : lobby (créer, rejoindre par code, prêt, démarrer) + plateau live, pose, bonus
+    coop/SnapshotFeed.gd  snapshots live → ticks rejouables par TickPlayer / BattleView (même rendu qu'en solo)
     map/MapView.gd        vue provisoire de la carte (cases colorées) — remplaçable par une vue à tuiles
     battle/BattleView.gd  vue du combat, reproduction de GameScene.ts : décor, tours, ennemis, tirs, impacts, triés par profondeur
     battle/DecorSet.gd    sol + décor exportés du web (assets/baked/<carte>/)
@@ -71,7 +74,9 @@ client-godot/
 **STOMP** sur WebSocket brut `/ws` (pas de SockJS) :
 - Trame `CONNECT` avec l'en-tête `Authorization: Bearer <token>` (comme `frontend-web/hooks/useCoop.ts`).
 - Abonnements : `/user/queue/match`, `/user/queue/errors`, `/topic/match/{id}`, `/topic/match/{id}/state`, `/topic/match/{id}/chat`.
-- Chaque trame se termine par un octet NULL ; gérer les heartbeats et la reconnexion (réabonnement idempotent, comme côté web).
+- Chaque trame se termine par un octet NULL (découpe en octets : une String Godot ne contient pas de caractère nul) ; heart-beat `0,0` (le broker simple de Spring n'en émet pas) ; reconnexion au bout de 3 s avec renvoi de tous les abonnements.
+- `Origin` : le WebSocket natif de Godot (desktop, Android, iOS) n'envoie pas d'en-tête `Origin`, ce que Spring accepte (seules les origines présentes sont filtrées par `setAllowedOrigins`) ; l'export web est servi par le même domaine que l'API.
+- Snapshots live (`/topic/match/{id}/state`, un par tick de 120 ms) : `SnapshotFeed` en fait des ticks pour `TickPlayer` en mode direct (retard borné à 3 ticks). Le snapshot ne dit ni pourquoi un ennemi disparaît ni qui vise qui : déduit pour le choix de l'animation seulement (présentation).
 - Détails du protocole de match : `docs/MULTIPLAYER.md`.
 
 **URL du backend** : configurable (dev : IP du Mac sur le réseau local ou `10.0.2.2` depuis l'émulateur Android ; prod : `https://kcd-formes.fr`). En export web servi sur le même domaine, utiliser l'origine courante.
@@ -84,7 +89,7 @@ client-godot/
 - [x] Client Godot : barre de construction construite depuis le catalogue (coût, verrou « vague N », compteur de murs, grisée si l'or manque), Mur posé sur la route, Baliste proposée une fois débloquée, annonce des déblocages en fin de vague.
 - [x] `frontend-web` branché sur `/api/v1/towers` et `/api/v1/maps` (`store/catalogStore.ts`, chargé une fois) : solo, coop, versus et `GameScene` ne recopient plus ni coûts, ni stats, ni portées, ni limite de murs, ni tracés, couloirs ou cases constructibles. `maps.ts` ne garde que la présentation (nom, biome, image). Les outils `scripts/visual-export` et `scripts/perf-bench` lisent le même catalogue (backend lancé, ou `--catalog`).
 - [ ] Reste dupliqué côté web : mécaniques saisonnières (`components/game/seasons.ts` : crues, boue, brume) et catalogue des envois du versus (`app/versus/page.tsx` `SENDS`, miroir de `SendCatalog`).
-- [ ] Vérifier l'acceptation des connexions WebSocket des clients natifs (en-tête `Origin`) dans `WebSocketConfig`, et ajouter les origines de dev nécessaires.
+- [ ] Vérifier sur le vrai backend la connexion STOMP du client natif (sans `Origin`) : validé contre un serveur STOMP simulé, à confirmer par une partie coop Godot + web.
 
 ## 6. Assets et rendu
 
@@ -135,6 +140,8 @@ client-godot/
   - [x] Visuels identiques au web : sol et décor exportés du vrai GameScene, tours (socle + arme qui vise, Mage animé), ennemis, tirs et impacts, vérifiés par comparaison d'images ; compteur FPS en jeu (`war_seasons/debug/show_fps`) (2026-10-09)
   - [x] Exports Android + web configurés, banc de perf identique au banc web (2026-10-09)
   - [x] Barre de construction depuis le catalogue serveur (Mur, Baliste, coûts, déblocages) ; fiche de la tour touchée : stats → niveau suivant, amélioration, priorité de tir (2026-10-10)
+  - [x] STOMP : `StompClient` (WebSocketPeer, STOMP 1.2) + écran coop (lobby, partie live, pose, bonus), testés contre un serveur STOMP simulé (2026-10-10)
+  - [ ] STOMP contre le vrai backend : partie coop Godot + web → critère d'arrêt n° 3 de l'ADR 0001
   - [ ] Mesures sur téléphone → conclusion dans l'ADR 0001
 
 ### Mesures du banc (même vague : 200 ennemis, 32 tours, graine 1)
@@ -151,7 +158,7 @@ client-godot/
 Lecture : sur CPU, Godot consomme ≈ 2,7× plus que Phaser sur cette scène (≈ 5,4 ms contre 1,97 ms), tout en restant loin du budget de 16,7 ms. Si le téléphone ne tient pas 60 FPS, piste connue : passer `BattleView` du dessin immédiat en GDScript à des nœuds `Sprite2D` triés par le moteur (y-sort en C++).
 - [ ] Prérequis backend (§5).
 - [ ] Solo complet : HUD, tutoriel, son, quatre saisons.
-- [ ] Coop puis versus (STOMP).
+- [ ] Coop complète (chat, fin de partie, reconnexion en cours de vague) puis versus (STOMP).
 - [ ] Bascule : `/jouer` sert l'export web Godot, suppression du code de jeu de `frontend-web`.
 - [ ] Distribution : APK, puis stores.
 
