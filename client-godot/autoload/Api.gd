@@ -40,6 +40,11 @@ func get_tower_catalog() -> ApiResult:
 	return await _request(HTTPClient.METHOD_GET, "/api/v1/towers")
 
 
+## Catalogue des envois du versus : ennemis envoyables, coût, revenu passif.
+func get_send_catalog() -> ApiResult:
+	return await _request(HTTPClient.METHOD_GET, "/api/v1/versus/sends")
+
+
 ## Nouvelle partie solo sur la carte donnée → GameResponse.
 func create_game(castle_name: String, map_id: String) -> ApiResult:
 	return await _request(HTTPClient.METHOD_POST, "/api/v1/games",

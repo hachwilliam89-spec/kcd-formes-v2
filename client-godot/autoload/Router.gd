@@ -6,10 +6,11 @@ const LOGIN: String = "res://ui/login/Login.tscn"
 const HOME: String = "res://ui/home/Home.tscn"
 const GAME: String = "res://game/Game.tscn"
 const BENCH: String = "res://game/bench/Bench.tscn"
-const COOP: String = "res://game/coop/Coop.tscn"
+const COOP: String = "res://game/multi/Coop.tscn"
+const VERSUS: String = "res://game/multi/Versus.tscn"
 
-## Carte à ouvrir par l'écran de jeu, ou à proposer à la création d'une partie coop
-## (posée par goto_game / goto_coop avant le changement de scène).
+## Carte à ouvrir par l'écran de jeu, ou à proposer à la création d'une partie
+## multijoueur (posée par goto_game / goto_coop / goto_versus avant le changement de scène).
 var current_map_id: String = "desert"
 
 
@@ -34,6 +35,12 @@ func goto_game(map_id: String) -> void:
 func goto_coop(map_id: String) -> void:
 	current_map_id = map_id
 	_goto(COOP)
+
+
+## Lobby versus ; un duel créé depuis l'écran se joue sur `map_id`.
+func goto_versus(map_id: String) -> void:
+	current_map_id = map_id
+	_goto(VERSUS)
 
 
 func goto_bench() -> void:

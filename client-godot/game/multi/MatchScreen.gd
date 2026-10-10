@@ -1,6 +1,7 @@
+class_name MatchScreen
 extends Control
-## Écran coop : lobby (créer / rejoindre par code / prêt / démarrer) puis partie
-## live sur un plateau commun, or et château partagés, chat et écran de fin.
+## Socle des écrans multijoueur (coop, versus) : lobby (créer / rejoindre par code /
+## prêt / démarrer), partie live, pose de tours, bonus, chat et écran de fin.
 ##
 ## Contrôleur : relaie les intentions du joueur au serveur par STOMP (StompClient)
 ## et passe l'état reçu aux vues. Le serveur simule tout (MatchEngine, un tick toutes
@@ -13,14 +14,17 @@ extends Control
 ## ouverte (réseau mobile, appli en arrière-plan), et reprise après un arrêt de
 ## l'appli : le code de la partie en cours est gardé, rejoindre une partie dont on
 ## est membre la reprend (Match.addPlayer).
+##
+## Chaque mode (Coop.gd, Versus.gd) précise ce qui lui est propre en redéfinissant
+## les méthodes de la section « Propre au mode ».
 
 ## Après une coupure, nouvel essai de connexion au bout de ce délai.
 const RECONNECT_SECONDS: float = 3.0
 ## Partie en cours sans snapshot depuis ce délai : connexion rouverte.
 const STALE_SECONDS: float = 4.0
-## Code de la partie en cours, gardé pour la reprendre après un arrêt de l'appli.
+## Code de la partie en cours, gardé pour la reprendre après un arrêt de l'appli
+## (une clé par mode : la reprise d'un duel ne s'affiche pas dans la coop).
 const RESUME_FILE: String = "user://multi.cfg"
-const RESUME_SECTION: String = "coop"
 
 const CELL_LABELS: Dictionary = {
 	MapLayoutDto.CellKind.DEAD: "zone morte (décor)",
@@ -71,6 +75,7 @@ var _fps_timer: float = 0.0
 @onready var _back: Button = %Back
 @onready var _fps: Label = %Fps
 @onready var _end_panel: PanelContainer = %EndPanel
+@onready var _end_title: Label = %EndTitle
 @onready var _end_summary: Label = %EndSummary
 @onready var _replay: Button = %Replay
 @onready var _home: Button = %Home
@@ -93,6 +98,8 @@ func _ready() -> void:
 	# Le multijoueur n'applique pas les déblocages par vague (MatchService) : tout est proposé.
 	_tower_bar.check_unlocks = false
 	_tower_bar.tower_selected.connect(func(spec: TowerSpecDto) -> void: _info.text = _tower_bar.describe(spec))
+	_title.text = _mode_label()
+	_create.text = _create_label()
 	_code.text = _load_resume_code()
 	_set_online(false)
 	_status.text = "Chargement…"
@@ -102,6 +109,10 @@ func _ready() -> void:
 		_status.text = catalog_result.error
 		return
 	_tower_bar.setup(TowerSpecDto.list_from(catalog_result.data))
+	var error: String = await _load_mode_catalog()
+	if not error.is_empty():
+		_status.text = error
+		return
 	# Aperçu de la carte choisie à l'accueil (celle d'une partie créée ici).
 	await _load_layout(Router.current_map_id)
 
@@ -129,13 +140,72 @@ func _process(delta: float) -> void:
 		_fps.text = "%d fps · %d ennemis" % [Engine.get_frames_per_second(), _battle.enemy_count()]
 
 
+# --- Propre au mode (redéfini par Coop.gd et Versus.gd) -------------------------
+
+## Mode envoyé à la création du match (MatchMode côté serveur).
+func _mode() -> String:
+	return "COOP"
+
+
+## Nom de l'écran, en tête du panneau.
+func _mode_label() -> String:
+	return "Coop"
+
+
+func _create_label() -> String:
+	return "Créer une partie"
+
+
+## L'autre joueur, dans les messages (« ton allié », « ton adversaire »).
+func _partner() -> String:
+	return "allié"
+
+
+## Données de jeu propres au mode à charger avant de se connecter ; renvoie
+## un message d'erreur, vide si tout va bien.
+func _load_mode_catalog() -> String:
+	return ""
+
+
+## Destination des états de jeu destinés à ce joueur.
+func _game_topic(match_id: String) -> String:
+	return "/topic/match/%s/state" % match_id
+
+
+## Décode un état de jeu reçu sur _game_topic : renvoie le plateau à afficher
+## (null s'il n'y en a pas) et met à jour ce que le mode affiche en plus.
+func _read_game(body: Variant) -> MatchSnapshotDto:
+	return MatchSnapshotDto.from_variant(body)
+
+
+## Lignes ajoutées sous « Vague · Or · Château ».
+func _extra_stats() -> String:
+	return ""
+
+
+## Appelé après chaque snapshot appliqué (or, état de partie à jour).
+func _after_snapshot(_snap: MatchSnapshotDto) -> void:
+	pass
+
+
+## Titre et bilan de l'écran de fin.
+func _end_texts() -> PackedStringArray:
+	var summary: String = "Vous avez tenu ensemble jusqu'à la vague %d." % _last_wave if _last_wave > 0 else "La partie est terminée."
+	return PackedStringArray(["Le château est tombé", summary])
+
+
+## Le plateau démarre (true) ou le joueur quitte le match (false).
+func _on_board_shown(_shown: bool) -> void:
+	pass
+
+
 # --- Connexion -----------------------------------------------------------------
 
 func _on_connected() -> void:
 	_set_online(true)
 	_since_state = 0.0
 	if _match == null:
-		_status.text = "Connecté. Crée une partie ou rejoins celle d'un allié avec son code."
+		_status.text = "Connecté. Crée une partie ou rejoins celle de ton %s avec son code." % _partner()
 		if not _code.text.is_empty():
 			_status.text = "Partie interrompue : son code %s est prérempli, touche Rejoindre pour la reprendre." % _code.text
 	elif _match.status == "RUNNING":
@@ -170,7 +240,7 @@ func _schedule_reconnect() -> void:
 
 ## Chien de garde : une connexion peut rester « ouverte » sans plus rien recevoir
 ## (réseau mobile coupé sans fermeture, appli suspendue). En partie, le serveur
-## diffuse un snapshot toutes les 120 ms : un silence prolongé force la reconnexion.
+## diffuse un état toutes les 120 ms : un silence prolongé force la reconnexion.
 func _watch_feed(delta: float) -> void:
 	if _stomp == null or _leaving or _match == null or _match.status != "RUNNING" or not _ticks.playing:
 		return
@@ -191,8 +261,9 @@ func _on_message(destination: String, body: Variant) -> void:
 		_info.text = str(DtoParse.dict(body).get("error", "Action refusée par le serveur"))
 		_set_bonus_buttons_enabled(true) # choix refusé : on peut réessayer
 		return
-	if _match != null and destination == "/topic/match/%s/state" % _match.id:
-		var snap: MatchSnapshotDto = MatchSnapshotDto.from_variant(body)
+	if _match != null and destination == _game_topic(_match.id):
+		_since_state = 0.0
+		var snap: MatchSnapshotDto = _read_game(body)
 		if snap != null:
 			_apply_snapshot(snap)
 		return
@@ -211,13 +282,13 @@ func _on_message(destination: String, body: Variant) -> void:
 
 func _on_create() -> void:
 	_info.text = ""
-	_stomp.send("/app/match/create", {"mode": "COOP", "mapId": Router.current_map_id})
+	_stomp.send("/app/match/create", {"mode": _mode(), "mapId": Router.current_map_id})
 
 
 func _on_join() -> void:
 	var code: String = _code.text.strip_edges().to_upper()
 	if code.length() < 4:
-		_info.text = "Entre le code donné par ton allié."
+		_info.text = "Entre le code donné par ton %s." % _partner()
 		return
 	_info.text = ""
 	_stomp.send("/app/match/join", {"code": code})
@@ -239,12 +310,20 @@ func _on_chat_submitted(text: String) -> void:
 
 
 func _apply_match(state: MatchStateDto) -> void:
+	if state.mode != _mode():
+		# Code d'une partie de l'autre mode : on ne la rejoint pas depuis cet écran.
+		_info.text = "Ce code est celui d'une partie %s : rejoins-la depuis son écran." % ("coop" if state.mode == "COOP" else "versus")
+		# Le serveur vient de nous ajouter à son lobby : on en ressort. (Une partie
+		# en cours dont on est déjà membre n'est pas quittée pour autant.)
+		if state.status == "LOBBY":
+			_stomp.send("/app/match/%s/leave" % state.id)
+		return
 	_match = state
 	_last_wave = maxi(_last_wave, state.wave)
 	if _subscribed_match != state.id:
 		_subscribed_match = state.id
 		_match_subs.append(_stomp.subscribe("/topic/match/%s" % state.id))
-		_match_subs.append(_stomp.subscribe("/topic/match/%s/state" % state.id))
+		_match_subs.append(_stomp.subscribe(_game_topic(state.id)))
 		_match_subs.append(_stomp.subscribe("/topic/match/%s/chat" % state.id))
 	if state.status == "FINISHED":
 		_clear_resume_code()
@@ -271,7 +350,7 @@ func _refresh_lobby() -> void:
 	if not in_match:
 		_players.text = ""
 		return
-	_title.text = "Coop · %s" % MapNames.label(_match.map_id)
+	_title.text = "%s · %s" % [_mode_label(), MapNames.label(_match.map_id)]
 	var lines: PackedStringArray = []
 	for player: MatchStateDto.Player in _match.players:
 		var state: String = "prêt" if player.ready else "en attente"
@@ -284,7 +363,7 @@ func _refresh_lobby() -> void:
 	_ready_button.text = "✓ Prêt" if _ready_button.button_pressed else "Je suis prêt"
 	_start.disabled = not _match.can_start
 	if in_lobby:
-		_status.text = "Code de la partie : %s\nDonne-le à ton allié, puis indiquez que vous êtes prêts." % _match.code
+		_status.text = "Code de la partie : %s\nDonne-le à ton %s, puis indiquez que vous êtes prêts." % [_match.code, _partner()]
 		if _match.is_host(Session.player_id) and not _match.can_start:
 			_status.text += "\nTu pourras démarrer quand tout le monde sera prêt."
 
@@ -310,6 +389,7 @@ func _start_board() -> void:
 	_play.visible = true
 	_status.text = _running_status()
 	_ticks.play_live()
+	_on_board_shown(true)
 	_info.text = "Choisis une tour puis touche une case constructible (verte). Le Mur se pose sur la route."
 
 
@@ -327,12 +407,13 @@ func _end_board() -> void:
 	_clear_resume_code()
 	_status.text = "Partie terminée."
 	_info.text = ""
-	_end_summary.text = "Vous avez tenu ensemble jusqu'à la vague %d." % _last_wave if _last_wave > 0 else "La partie est terminée."
+	var texts: PackedStringArray = _end_texts()
+	_end_title.text = texts[0]
+	_end_summary.text = texts[1]
 	_end_panel.visible = true
 
 
 func _apply_snapshot(snap: MatchSnapshotDto) -> void:
-	_since_state = 0.0
 	if _layout == null:
 		return
 	if snap.status == "RUNNING" and not _ticks.playing:
@@ -344,14 +425,18 @@ func _apply_snapshot(snap: MatchSnapshotDto) -> void:
 		_towers = SnapshotFeed.towers_of(snap, _tower_bar.catalog)
 		_battle.show_towers(_towers)
 	_ticks.push(_feed.to_tick(snap, _towers))
-	_last_wave = snap.wave
+	_last_wave = maxi(_last_wave, snap.wave)
 	_stats.text = "Vague %d · Or %d\nChâteau %d/%d" % [snap.wave, snap.gold, snap.castle_hp, snap.castle_max_hp]
+	var extra: String = _extra_stats()
+	if not extra.is_empty():
+		_stats.text += "\n" + extra
 	_tower_bar.gold = snap.gold
 	_tower_bar.placed = _towers
 	_tower_bar.busy = snap.status != "RUNNING"
 	_tower_bar.refresh()
 	if snap.pending_bonuses != _bonus_count:
 		_rebuild_bonus_box(snap.pending_bonuses, snap.bonus_options)
+	_after_snapshot(snap)
 	if snap.status == "FINISHED":
 		_end_board()
 
@@ -428,7 +513,7 @@ func _on_replay() -> void:
 	_leave_match()
 	_refresh_lobby()
 	_set_online(_stomp.is_open())
-	_status.text = "Crée une nouvelle partie ou rejoins celle d'un allié avec son code."
+	_status.text = "Crée une nouvelle partie ou rejoins celle de ton %s avec son code." % _partner()
 
 
 ## Quitte le match courant (côté serveur aussi) et vide le plateau.
@@ -452,6 +537,8 @@ func _leave_match() -> void:
 	_play.visible = false
 	_end_panel.visible = false
 	_info.text = ""
+	_title.text = _mode_label()
+	_on_board_shown(false)
 
 
 func _on_quit() -> void:
@@ -467,17 +554,21 @@ func _on_quit() -> void:
 
 # --- Reprise après un arrêt de l'appli -----------------------------------------
 
+func _resume_section() -> String:
+	return _mode().to_lower()
+
+
 func _load_resume_code() -> String:
 	var cfg: ConfigFile = ConfigFile.new()
 	if cfg.load(RESUME_FILE) != OK:
 		return ""
-	return str(cfg.get_value(RESUME_SECTION, "match_code", ""))
+	return str(cfg.get_value(_resume_section(), "match_code", ""))
 
 
 func _save_resume_code(code: String) -> void:
 	var cfg: ConfigFile = ConfigFile.new()
 	cfg.load(RESUME_FILE) # absent la première fois : on part d'un fichier vide
-	cfg.set_value(RESUME_SECTION, "match_code", code)
+	cfg.set_value(_resume_section(), "match_code", code)
 	cfg.save(RESUME_FILE)
 
 
@@ -485,8 +576,8 @@ func _clear_resume_code() -> void:
 	var cfg: ConfigFile = ConfigFile.new()
 	if cfg.load(RESUME_FILE) != OK:
 		return
-	if cfg.has_section_key(RESUME_SECTION, "match_code"):
-		cfg.erase_section_key(RESUME_SECTION, "match_code")
+	if cfg.has_section_key(_resume_section(), "match_code"):
+		cfg.erase_section_key(_resume_section(), "match_code")
 		cfg.save(RESUME_FILE)
 
 
@@ -508,7 +599,7 @@ func _load_layout(map_id: String) -> void:
 	_map_view.show_layout(layout, decor.ground if decor != null else null)
 	_battle.setup(layout, decor)
 	_feed.castle = layout.castle
-	_title.text = "Coop · %s" % MapNames.label(map_id)
+	_title.text = "%s · %s" % [_mode_label(), MapNames.label(map_id)]
 	_fit_map()
 
 
