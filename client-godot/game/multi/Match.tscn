@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://game/TickPlayer.gd" id="6_ticks"]
 [ext_resource type="Script" path="res://game/TowerBar.gd" id="7_towerbar"]
 [ext_resource type="Script" path="res://game/multi/ChatBox.gd" id="8_chat"]
+[ext_resource type="Script" path="res://game/battle/SeasonView.gd" id="20_season"]
 
 [node name="Match" type="Panel"]
 layout_mode = 3
@@ -41,6 +42,10 @@ size_flags_horizontal = 3
 unique_name_in_owner = true
 script = ExtResource("2_mapview")
 palette = ExtResource("3_palette")
+
+[node name="SeasonView" type="Node2D" parent="Layout/MapArea/MapView"]
+unique_name_in_owner = true
+script = ExtResource("20_season")
 
 [node name="BattleView" type="Node2D" parent="Layout/MapArea/MapView"]
 unique_name_in_owner = true

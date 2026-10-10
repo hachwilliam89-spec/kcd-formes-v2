@@ -54,6 +54,7 @@ func to_tick(snap: MatchSnapshotDto, towers: Array[TowerDto]) -> TickDto:
 	tick.tick = snap.tick
 	tick.enemies = snap.enemies
 	tick.castle_hp = snap.castle_hp
+	tick.terrain = snap.terrain
 	var present: Dictionary = {}
 	for enemy: EnemyStateDto in snap.enemies:
 		present[enemy.id] = enemy

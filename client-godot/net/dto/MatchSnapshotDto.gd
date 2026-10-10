@@ -33,6 +33,8 @@ var status: String = ""
 var enemies: Array[EnemyStateDto] = []
 var towers: Array[TowerView] = []
 var shots: Array[Shot] = []
+## État saisonnier du plateau (null hors printemps / automne).
+var terrain: TerrainSnapshotDto
 
 
 static func from_variant(value: Variant) -> MatchSnapshotDto:
@@ -48,6 +50,7 @@ static func from_variant(value: Variant) -> MatchSnapshotDto:
 	dto.pending_bonuses = int(body.get("pendingBonuses", 0))
 	dto.bonus_options = BonusOptionDto.list_from(body.get("bonusOptions"))
 	dto.status = str(body.get("status", ""))
+	dto.terrain = TerrainSnapshotDto.from_variant(body.get("terrain"))
 	for item: Variant in DtoParse.array(body.get("enemies")):
 		var enemy: EnemyStateDto = EnemyStateDto.from_variant(item)
 		if enemy != null:

@@ -35,6 +35,7 @@ var _targeting_buttons: Array[Button] = []
 @onready var _map_area: Control = %MapArea
 @onready var _map_view: MapView = %MapView
 @onready var _battle: BattleView = %BattleView
+@onready var _season: SeasonView = %SeasonView
 @onready var _ticks: TickPlayer = %TickPlayer
 @onready var _title: Label = %MapTitle
 @onready var _stats: Label = %Stats
@@ -74,6 +75,7 @@ func _ready() -> void:
 	var decor: DecorSet = DecorSet.load_for(_layout.id)
 	_map_view.show_layout(_layout, decor.ground if decor != null else null)
 	_battle.setup(_layout, decor)
+	_season.setup(_layout, _battle)
 	_fit_map()
 
 	var catalog_result: ApiResult = await Api.get_tower_catalog()
@@ -97,6 +99,7 @@ func _new_game() -> void:
 	if not _apply_state_result(result):
 		return
 	_info.text = "Choisis une tour puis touche une case constructible (verte). Le Mur se pose sur la route."
+	await _show_forecast()
 
 
 ## Compteur de perf du spike (réglage war_seasons/debug/show_fps).
@@ -134,7 +137,7 @@ func _on_cell_tapped(cell: Vector2i) -> void:
 	_select_tower("")
 	var spec: TowerSpecDto = _tower_bar.selected_spec()
 	if _busy or _ticks.playing or _state.is_over() or spec == null or not TowerBar.fits_cell(spec, _layout, cell):
-		_info.text = "Case (%d, %d) : %s" % [cell.x, cell.y, CELL_LABELS.get(_layout.kind_at(cell), "?")]
+		_info.text = "Case (%d, %d) : %s%s" % [cell.x, cell.y, CELL_LABELS.get(_layout.kind_at(cell), "?"), _season.cell_note(cell)]
 		return
 	var reason: String = _tower_bar.unavailable_reason(spec)
 	if not reason.is_empty():
@@ -157,7 +160,7 @@ func _place_tower(cell: Vector2i, spec: TowerSpecDto) -> void:
 	# TowerResponse ne contient pas l'or restant : on relit l'état complet.
 	_apply_state_result(await Api.get_game(_state.game_id))
 	_set_busy(false)
-	_info.text = "%s posé en (%d, %d)." % [TowerNames.label(spec.type), cell.x, cell.y]
+	_info.text = "%s posé en (%d, %d)%s." % [TowerNames.label(spec.type), cell.x, cell.y, _season.cell_note(cell)]
 
 
 func _on_wave_pressed() -> void:
@@ -180,6 +183,7 @@ func _on_wave_pressed() -> void:
 
 
 func _on_tick(tick: TickDto) -> void:
+	_season.render(tick.terrain)
 	_stats.text = "Vague %d · Or %d\nChâteau %d/%d" % [_state.wave_number + 1, _state.gold, tick.castle_hp, _state.castle_max_hp]
 
 
@@ -197,6 +201,18 @@ func _on_wave_finished() -> void:
 	for spec: TowerSpecDto in _tower_bar.catalog:
 		if not spec.is_unlocked(previous_best) and spec.is_unlocked(_best_wave):
 			_info.text += "\nNouvelle tour : %s !" % TowerNames.label(spec.type)
+	await _show_forecast()
+
+
+## Entre deux vagues : le plateau montre l'annonce saisonnière de la suivante
+## (berges qui clignotent, bruine, grêlons, boue et brume à venir).
+func _show_forecast() -> void:
+	if _state == null or _state.is_over():
+		return
+	var result: ApiResult = await Api.get_next_wave(_state.game_id)
+	if not result.ok or _ticks.playing:
+		return
+	_season.render(null, TerrainForecastDto.from_variant(DtoParse.dict(result.data).get("terrain")))
 
 
 func _on_bonus_chosen(bonus_type: String) -> void:
@@ -324,6 +340,11 @@ func _rebuild_tower_card() -> void:
 		lines.append("Dégâts %d%s · portée %.1f%s" % [tower.damage, " → %d" % next.damage if next != null else "",
 			tower.range_cells, " → %.1f" % next.range_cells if next != null else ""])
 	lines.append("PV %d/%d%s" % [tower.hp, tower.max_hp, " → %d" % next.max_hp if next != null else ""])
+	var fog: float = _season.fog_penalty_at(tower.cell)
+	if fog > 0.0 and tower.range_cells > 0.0:
+		lines.append("Dans la brume : portée −%s." % SeasonView.format_cells(fog))
+	if _layout.is_bank(tower.cell):
+		lines.append("Berge inondable : hors service pendant les crues (v. %s)." % _layout.flood_waves_label())
 	stats.text = "\n".join(lines)
 	_tower_card.add_child(stats)
 

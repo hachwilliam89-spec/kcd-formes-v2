@@ -55,6 +55,7 @@ var _fps_timer: float = 0.0
 @onready var _map_area: Control = %MapArea
 @onready var _map_view: MapView = %MapView
 @onready var _battle: BattleView = %BattleView
+@onready var _season: SeasonView = %SeasonView
 @onready var _ticks: TickPlayer = %TickPlayer
 @onready var _title: Label = %Title
 @onready var _status: Label = %Status
@@ -425,6 +426,7 @@ func _apply_snapshot(snap: MatchSnapshotDto) -> void:
 		_towers = SnapshotFeed.towers_of(snap, _tower_bar.catalog)
 		_battle.show_towers(_towers)
 	_ticks.push(_feed.to_tick(snap, _towers))
+	_season.render(snap.terrain)
 	_last_wave = maxi(_last_wave, snap.wave)
 	_stats.text = "Vague %d · Or %d\nChâteau %d/%d" % [snap.wave, snap.gold, snap.castle_hp, snap.castle_max_hp]
 	var extra: String = _extra_stats()
@@ -494,7 +496,7 @@ func _on_map_input(event: InputEvent) -> void:
 	var spec: TowerSpecDto = _tower_bar.selected_spec()
 	var running: bool = _match != null and _match.status == "RUNNING" and _ticks.playing
 	if not running or spec == null or not TowerBar.fits_cell(spec, _layout, cell):
-		_info.text = "Case (%d, %d) : %s" % [cell.x, cell.y, CELL_LABELS.get(_layout.kind_at(cell), "?")]
+		_info.text = "Case (%d, %d) : %s%s" % [cell.x, cell.y, CELL_LABELS.get(_layout.kind_at(cell), "?"), _season.cell_note(cell)]
 		return
 	var reason: String = _tower_bar.unavailable_reason(spec)
 	if not reason.is_empty():
@@ -598,6 +600,7 @@ func _load_layout(map_id: String) -> void:
 	var decor: DecorSet = DecorSet.load_for(layout.id)
 	_map_view.show_layout(layout, decor.ground if decor != null else null)
 	_battle.setup(layout, decor)
+	_season.setup(layout, _battle)
 	_feed.castle = layout.castle
 	_title.text = "%s · %s" % [_mode_label(), MapNames.label(map_id)]
 	_fit_map()

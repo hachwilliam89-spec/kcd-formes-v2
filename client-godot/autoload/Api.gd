@@ -77,6 +77,11 @@ func start_wave(game_id: String) -> ApiResult:
 	return await _request(HTTPClient.METHOD_POST, "/api/v1/games/%s/waves/start" % game_id, {})
 
 
+## Aperçu de la prochaine vague (types d'ennemis, Boss, annonce saisonnière).
+func get_next_wave(game_id: String) -> ApiResult:
+	return await _request(HTTPClient.METHOD_GET, "/api/v1/games/%s/waves/next" % game_id)
+
+
 func choose_bonus(game_id: String, bonus_type: String) -> ApiResult:
 	return await _request(HTTPClient.METHOD_POST, "/api/v1/games/%s/bonus/choose" % game_id,
 		{"bonusType": bonus_type})

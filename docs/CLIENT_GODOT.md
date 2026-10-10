@@ -38,6 +38,7 @@ client-godot/
     map/MapView.gd        vue provisoire de la carte (cases colorées) — remplaçable par une vue à tuiles
     battle/BattleView.gd  vue du combat, reproduction de GameScene.ts : décor, tours, ennemis, tirs, impacts, triés par profondeur
     battle/DecorSet.gd    sol + décor exportés du web (assets/baked/<carte>/)
+    battle/SeasonView.gd  terrain saisonnier, reproduction de GameScene.renderTerrainState : crue, berges annoncées, pluie, flaques, grêle (printemps) ; boue, averse, brume (automne) ; tours suspendues estompées
     entities/             scènes Tower, Enemy, Projectile, Castle avec sprites — à venir
   visuals/
     MapPalette.gd + map_palette_default.tres   couleurs de la vue de carte provisoire
@@ -95,7 +96,7 @@ client-godot/
 - [x] Catalogue des tours exposé par l'API : `GET /api/v1/towers` (`GetTowerCatalogUseCase` → `TowerCatalogService` → `TowerController`) : coût, profil de dégâts, déblocage (`unlockWave`, comparé au `bestWave` de `/players/me`), règle de pose (`OFF_CORRIDOR` / `ON_CORRIDOR`), plafond (`maxCount`, 6 murs) et stats par niveau calculées par une vraie `Tower`. La règle « sur le couloir » vit dans `TowerType.placedOnCorridor()`, lue par `PlaceTowerService` et par le catalogue.
 - [x] Client Godot : barre de construction construite depuis le catalogue (coût, verrou « vague N », compteur de murs, grisée si l'or manque), Mur posé sur la route, Baliste proposée une fois débloquée, annonce des déblocages en fin de vague.
 - [x] `frontend-web` branché sur `/api/v1/towers` et `/api/v1/maps` (`store/catalogStore.ts`, chargé une fois) : solo, coop, versus et `GameScene` ne recopient plus ni coûts, ni stats, ni portées, ni limite de murs, ni tracés, couloirs ou cases constructibles. `maps.ts` ne garde que la présentation (nom, biome, image). Les outils `scripts/visual-export` et `scripts/perf-bench` lisent le même catalogue (backend lancé, ou `--catalog`).
-- [x] Mécaniques saisonnières exposées : la disposition d'une carte porte `bankCells` (berges inondables) et `seasonalRules` (intervalle des crues, pénalité de portée de la brume, multiplicateurs de grêle, d'or au printemps, de protection dans la brume) ; `GET /api/v1/maps/{id}/forecast?wave=N` donne la prévision d'une vague (crue, boue, brume, grêle). Le web ne recopie plus aucune zone ni constante (`seasons.ts` ne garde que les types et les thèmes) ; le client Godot s'en servira pour le printemps et l'automne.
+- [x] Mécaniques saisonnières exposées : la disposition d'une carte porte `bankCells` (berges inondables) et `seasonalRules` (intervalle des crues, pénalité de portée de la brume, multiplicateurs de grêle, d'or au printemps, de protection dans la brume) ; `GET /api/v1/maps/{id}/forecast?wave=N` donne la prévision d'une vague (crue, boue, brume, grêle). Le web ne recopie plus aucune zone ni constante (`seasons.ts` ne garde que les types et les thèmes) ; le client Godot l'affiche (`SeasonView`, solo et multijoueur).
 - [x] Catalogue des envois du versus exposé : `GET /api/v1/versus/sends` (`GetSendCatalogUseCase` → `SendCatalogService` → `SendController`), lu dans `SendCatalog` comme `MatchService.sendCreep`. Le web ne recopie plus ni la liste, ni les coûts, ni les revenus (`app/versus/page.tsx` ne garde que les libellés). Plus aucune règle dupliquée côté client.
 - [x] Connexion STOMP du client natif (sans `Origin`) acceptée par le vrai backend : partie coop Godot + web validée dans les deux sens (2026-10-10).
 
@@ -146,6 +147,7 @@ client-godot/
   - [x] Carte : disposition chargée depuis `GET /api/v1/maps/{id}`, affichée à l'échelle de l'écran, tap → nature de la case, choix parmi les 4 cartes (2026-10-09)
   - [x] Partie : création, pose de tours au tap (Archer, Mage, Catapulte), replay des vagues à 120 ms avec interpolation, tirs et morts, palier de bonus, défaite et nouvelle partie (2026-10-09)
   - [x] Visuels identiques au web : sol et décor exportés du vrai GameScene, tours (socle + arme qui vise, Mage animé), ennemis, tirs et impacts, vérifiés par comparaison d'images ; compteur FPS en jeu (`war_seasons/debug/show_fps`) (2026-10-09)
+  - [x] Calques saisonniers comparés image par image au vrai GameScene (même cadrage 800 × 640, mêmes états du domaine : annonce de crue v3, crue v3, boue et brume v1) : mêmes graines pseudo-aléatoires, donc mêmes flaques, même boue, mêmes nappes ; écart de teinte de quelques unités. Seule adaptation : le web pose les flaques sous les calques de route et de parcelles, le sol exporté est d'une pièce, d'où des flaques atténuées (`PUDDLE_VEIL`) pour le même rendu (2026-10-10)
   - [x] Exports Android + web configurés, banc de perf identique au banc web (2026-10-09)
   - [x] Barre de construction depuis le catalogue serveur (Mur, Baliste, coûts, déblocages) ; fiche de la tour touchée : stats → niveau suivant, amélioration, priorité de tir (2026-10-10)
   - [x] STOMP : `StompClient` (WebSocketPeer, STOMP 1.2) + écran coop (lobby, partie live, pose, bonus), testés contre un serveur STOMP simulé (2026-10-10)
@@ -167,7 +169,8 @@ client-godot/
 
 Lecture : sur CPU, Godot consomme ≈ 2,7× plus que Phaser sur cette scène (≈ 5,4 ms contre 1,97 ms), tout en restant loin du budget de 16,7 ms. Si le téléphone ne tient pas 60 FPS, piste connue : passer `BattleView` du dessin immédiat en GDScript à des nœuds `Sprite2D` triés par le moteur (y-sort en C++).
 - [ ] Prérequis backend (§5).
-- [ ] Solo complet : HUD, tutoriel, son, quatre saisons.
+- [x] Saisons dans Godot (solo, coop, versus) : état de chaque tick (`terrain` des ticks et des snapshots), annonce de la vague suivante entre deux vagues (`GET /games/{id}/waves/next`), précisions « berge inondable » et « brume : −1 portée » sur les cases et la fiche de tour.
+- [ ] Solo complet : HUD, tutoriel, son.
 - [x] Coop complète (chat, fin de partie, reconnexion en cours de vague).
 - [x] Versus (STOMP) : envois depuis `GET /api/v1/versus/sends`, revenu, aperçu de la grille adverse, victoire / défaite ; écrans coop et versus sur un socle commun (`MatchScreen`).
 - [ ] Bascule : `/jouer` sert l'export web Godot, suppression du code de jeu de `frontend-web`.
