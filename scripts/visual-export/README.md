@@ -29,5 +29,8 @@ npm run export -- --reference --out /tmp/ref   # captures du web pendant une vag
 ```
 
 Prérequis : `frontend-web/node_modules` installé, assets présents
-(`frontend-web/public/sprites`), Google Chrome (ou `BENCH_CHROME=/chemin/vers/chrome`).
+(`frontend-web/public/sprites`), Google Chrome (ou `BENCH_CHROME=/chemin/vers/chrome`),
+et le **backend lancé** (`docker compose up -d`) : la disposition des cartes et le
+catalogue des tours viennent de l'API, comme en jeu. Autre adresse : `--api <url>`
+(ou `API_URL=…`) ; sans backend : `--catalog <fichier.json>` (format `{ towers, maps }`).
 Sans GPU (CI) : `--software`.

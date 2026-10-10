@@ -7,8 +7,11 @@
 // mode (wave | idle), perf (affiche le compteur ?perf=1 du jeu).
 import Phaser from 'phaser'
 import { GameScene } from '@/components/game/GameScene'
-import { getMapDef } from '@/components/game/maps'
+import { getMapDef, useCatalogStore, type CatalogData } from '@/store/catalogStore'
 import { buildBenchWave } from './wave'
+
+// Catalogue servi par run.mjs / export.mjs (backend ou --catalog) : chargé avant toute lecture.
+useCatalogStore.getState().seed((window as unknown as { __CATALOG__: CatalogData }).__CATALOG__)
 
 const params = new URLSearchParams(location.search)
 const ENEMIES = Number(params.get('enemies') ?? 200)

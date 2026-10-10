@@ -84,6 +84,35 @@ class MapLayoutServiceTest {
         }
     }
 
+    @ParameterizedTest(name = "{0} : tracé du catalogue exposé (points de passage repris par le chemin)")
+    @ValueSource(strings = {"desert", "fourche", "spring", "autumn"})
+    void lanes_matchCatalogAndPaths(String mapId) {
+        MapLayout layout = service.getLayout(mapId);
+
+        assertThat(layout.lanes()).isEqualTo(MapCatalog.buildMap(mapId).getLanes());
+        assertThat(layout.lanes()).hasSameSizeAs(layout.lanePaths());
+        for (int i = 0; i < layout.lanes().size(); i++) {
+            List<Position> waypoints = layout.lanes().get(i);
+            List<Position> path = layout.lanePaths().get(i);
+            assertThat(path).containsAll(waypoints);
+            assertThat(path.get(0)).isEqualTo(waypoints.get(0));
+            assertThat(path.get(path.size() - 1)).isEqualTo(waypoints.get(waypoints.size() - 1));
+        }
+    }
+
+    @Test
+    @DisplayName("Forme de la route : demi-largeur du couloir et aires élargies du catalogue")
+    void roadShape_matchesCatalog() {
+        MapLayout desert = service.getLayout("desert");
+        assertThat(desert.corridorHalfWidth()).isEqualTo(1);
+        assertThat(desert.wideSpots()).isEmpty();
+
+        MapLayout fourche = service.getLayout("fourche");
+        assertThat(fourche.corridorHalfWidth()).isZero();
+        assertThat(fourche.wideSpots()).isNotEmpty();
+        assertThat(fourche.corridorCells()).containsAll(fourche.wideSpots());
+    }
+
     @ParameterizedTest(name = "{0} : constructible = calcul du domaine, jamais sur la route ni l'eau")
     @ValueSource(strings = {"desert", "fourche", "spring", "autumn"})
     void buildableCells_matchDomainAndAvoidRoadAndWater(String mapId) {

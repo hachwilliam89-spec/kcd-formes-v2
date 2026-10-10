@@ -3,8 +3,8 @@
 // Miniature (aperçu) d'un plateau : chemin, château (coloré selon ses PV), tours
 // (couleur par type) et ennemis (taille/couleur par type). Utilisé pour l'aperçu
 // de la grille adverse en versus. Léger : re-render à chaque snapshot serveur.
-import { GRID_W, GRID_H } from './constants'
-import { getMapDef, mapCastle } from './maps'
+import { mapCastle } from './maps'
+import { getMapDef } from '@/store/catalogStore'
 import { MAP_THEMES } from './seasons'
 import type { Blip, TowerBlip } from '@/hooks/useVersus'
 
@@ -39,13 +39,14 @@ export function MiniBoard({ enemies = [], towers = [], castleRatio = 1, classNam
 }) {
     const map = getMapDef(mapId)
     const end = mapCastle(map)
+    const theme = MAP_THEMES[map.id] ?? MAP_THEMES.desert
     const castleColor = castleRatio > 0.5 ? '#5bbd3a' : castleRatio > 0.25 ? '#eab308' : '#d64545'
     return (
-        <svg viewBox={`0 0 ${GRID_W} ${GRID_H}`} preserveAspectRatio="xMidYMid meet"
-             className={className} style={{ background: MAP_THEMES[map.id].ground, borderRadius: 6, border: '1px solid #120a06' }}>
+        <svg viewBox={`0 0 ${map.width} ${map.height}`} preserveAspectRatio="xMidYMid meet"
+             className={className} style={{ background: theme.ground, borderRadius: 6, border: '1px solid #120a06' }}>
             {/* Couloir (route des ennemis) — plus contrasté */}
             {map.path.corridorCells.map((c, i) => (
-                <rect key={i} x={c.x} y={c.y} width={1} height={1} fill={MAP_THEMES[map.id].road} />
+                <rect key={i} x={c.x} y={c.y} width={1} height={1} fill={theme.road} />
             ))}
             {/* Entrée (spawn) : petit triangle vert */}
             {map.lanes.map((lane, i) => <circle key={`entry${i}`} cx={lane[0].x + 0.5} cy={lane[0].y + 0.5} r={0.5} fill="#3a7a12" stroke="#dff0c8" strokeWidth={0.12} />)}

@@ -61,7 +61,7 @@ client-godot/
 
 **REST** (même API que le web, JWT en `Authorization: Bearer …`) :
 - `POST /api/v1/auth/register`, `POST /api/v1/auth/login`
-- `GET /api/v1/maps` (ids) · `GET /api/v1/maps/{mapId}` (disposition : château, entrées, voies case par case, couloir, cases constructibles, eau) — **source de vérité de la carte**, ne rien recopier de `maps.ts` / `constants.ts`
+- `GET /api/v1/maps` (ids) · `GET /api/v1/maps/{mapId}` (disposition : château, entrées, points de passage et chemin case par case de chaque voie, demi-largeur du couloir, aires élargies, couloir, cases constructibles, eau) · `GET /api/v1/towers` (catalogue des tours) — **sources de vérité**, publiques en lecture (aucun token), partagées avec le web
 - `POST /api/v1/games` · `GET /api/v1/games/{id}`
 - `POST /api/v1/games/{id}/towers` · `…/towers/{towerId}/upgrade` · `…/towers/{towerId}/targeting`
 - `POST /api/v1/games/{id}/waves/start` · `GET /api/v1/games/{id}/waves/next`
@@ -82,8 +82,8 @@ client-godot/
 - [ ] Verdict de pose propre à une partie (tours posées, crue, limite de murs) si l'aperçu client en a besoin au-delà de « constructible + case libre ».
 - [x] Catalogue des tours exposé par l'API : `GET /api/v1/towers` (`GetTowerCatalogUseCase` → `TowerCatalogService` → `TowerController`) : coût, profil de dégâts, déblocage (`unlockWave`, comparé au `bestWave` de `/players/me`), règle de pose (`OFF_CORRIDOR` / `ON_CORRIDOR`), plafond (`maxCount`, 6 murs) et stats par niveau calculées par une vraie `Tower`. La règle « sur le couloir » vit dans `TowerType.placedOnCorridor()`, lue par `PlaceTowerService` et par le catalogue.
 - [x] Client Godot : barre de construction construite depuis le catalogue (coût, verrou « vague N », compteur de murs, grisée si l'or manque), Mur posé sur la route, Baliste proposée une fois débloquée, annonce des déblocages en fin de vague.
-- [ ] Brancher `frontend-web` sur `/api/v1/towers` et supprimer `TOWER_INFO` / `TOWER_STATS` / `upgradeCost` dupliqués dans `app/game/page.tsx`.
-- [ ] Brancher `frontend-web` sur `/api/v1/maps` et supprimer `maps.ts` / les constantes dupliquées de `constants.ts`.
+- [x] `frontend-web` branché sur `/api/v1/towers` et `/api/v1/maps` (`store/catalogStore.ts`, chargé une fois) : solo, coop, versus et `GameScene` ne recopient plus ni coûts, ni stats, ni portées, ni limite de murs, ni tracés, couloirs ou cases constructibles. `maps.ts` ne garde que la présentation (nom, biome, image). Les outils `scripts/visual-export` et `scripts/perf-bench` lisent le même catalogue (backend lancé, ou `--catalog`).
+- [ ] Reste dupliqué côté web : mécaniques saisonnières (`components/game/seasons.ts` : crues, boue, brume) et catalogue des envois du versus (`app/versus/page.tsx` `SENDS`, miroir de `SendCatalog`).
 - [ ] Vérifier l'acceptation des connexions WebSocket des clients natifs (en-tête `Origin`) dans `WebSocketConfig`, et ajouter les origines de dev nécessaires.
 
 ## 6. Assets et rendu
@@ -110,7 +110,7 @@ client-godot/
   - Export web → fichiers statiques servis par Caddy sous `/jouer`.
   - Export Android → APK signé (keystore en secret CI), servi en téléchargement comme celui d'Equilibre.
   - iOS : Xcode sur le Mac, compte Apple Developer seulement au moment de publier.
-- **Visuels réels** : `./scripts/sync-godot-assets.sh` (prérequis une fois : `cd frontend-web && npm ci`, `cd scripts/visual-export && npm install`, Google Chrome) puis l'import ci-dessous. Sans ça : formes colorées.
+- **Visuels réels** : `./scripts/sync-godot-assets.sh` (prérequis une fois : `cd frontend-web && npm ci`, `cd scripts/visual-export && npm install`, Google Chrome ; à chaque fois : backend lancé, `docker compose up -d`, qui sert la disposition des cartes — autre adresse : `API_URL=…`) puis l'import ci-dessous. Sans ça : formes colorées.
 - **Après un clone (ou si `.godot/` a été supprimé)** : `godot --headless --path client-godot --import` une fois, sinon les `class_name` (ApiResult, DTO…) ne sont pas encore enregistrés et les autoloads échouent au parsing. Ouvrir le projet dans l'éditeur a le même effet.
 - Lancer en local (backend sur `localhost:8080`) : `godot --path client-godot` (ou ouvrir `client-godot/project.godot` dans l'éditeur, F5).
 - Vérifier que tout compile sans erreur : `godot --headless --path client-godot --import`.

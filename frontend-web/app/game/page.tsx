@@ -8,8 +8,9 @@ import { useAuthStore } from '@/store/authStore'
 import { useGame, type WavePreview } from '@/hooks/useGame'
 import { useAuth } from '@/hooks/useAuth'
 import type { TowerData, PlacementVerdict } from '@/components/game/GameScene'
-import { TOP_RESERVED_ROWS, TOWER_BASE_RANGE, MAX_WALLS, towerRangeAt } from '@/components/game/constants'
-import { getMapDef, mapIsCorridor, mapIsBuildable, GAME_MAPS } from '@/components/game/maps'
+import { TOP_RESERVED_ROWS } from '@/components/game/constants'
+import { mapIsCorridor, mapIsBuildable } from '@/components/game/maps'
+import { useCatalog, getMapDef, towerLevel, towerRangeAt, type TowerSpec, type TowerType } from '@/store/catalogStore'
 import type { GameCanvasHandle } from '@/components/game/GameCanvas'
 import MapSelector from '@/components/game/MapSelector'
 import ConfirmDialog from '@/components/game/ConfirmDialog'
@@ -34,25 +35,19 @@ const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
     ),
 })
 
-type TowerType = 'ARCHER' | 'MAGE' | 'CATAPULT' | 'BALLISTA' | 'WALL'
+// Pastilles de niveau (repère de palier) : ✦ pleins = niveau atteint sur le max.
+const levelStars = (level: number, max: number) => '✦'.repeat(level) + '·'.repeat(Math.max(0, max - level))
 
-// Cap d'amélioration (miroir de Tower.MAX_LEVEL côté backend) et coût du prochain
-// niveau (miroir de Tower.getUpgradeCost = baseCost × level × 2).
-const MAX_TOWER_LEVEL = 3
-const upgradeCost = (type: TowerType, level: number) => TOWER_INFO[type].cost * level * 2
-// Pastilles de niveau (repère de palier) : ✦ pleins = niveau atteint sur MAX.
-const levelStars = (level: number) => '✦'.repeat(level) + '·'.repeat(Math.max(0, MAX_TOWER_LEVEL - level))
-
-const TOWER_INFO: Record<TowerType, { label: string; cost: number; color: string; unlockWave: number }> = {
-    ARCHER:   { label: 'Archer',    cost: 50,  color: 'bg-green-600',  unlockWave: 0 },
-    MAGE:     { label: 'Mage',      cost: 100, color: 'bg-purple-600', unlockWave: 0 },
-    CATAPULT: { label: 'Catapulte', cost: 150, color: 'bg-orange-600', unlockWave: 0 },
-    // Débloquée par la progression de compte (meilleure vague atteinte), pas par l'or.
-    BALLISTA: { label: 'Baliste',   cost: 200, color: 'bg-slate-400',  unlockWave: 10 },
-    // Mur-barrage : seule structure posable SUR le couloir (règle inverse des
-    // tours, voir handleCellClick) — bloque les ennemis qui doivent le casser.
-    WALL:     { label: 'Mur',       cost: 35,  color: 'bg-stone-500',  unlockWave: 6 },
+// Présentation propre au web. Coûts, déblocages, stats par niveau, règle de pose
+// et limite de murs viennent du catalogue du serveur (store/catalogStore.ts).
+const TOWER_LABEL: Record<TowerType, string> = {
+    ARCHER: 'Archer',
+    MAGE: 'Mage',
+    CATAPULT: 'Catapulte',
+    BALLISTA: 'Baliste',
+    WALL: 'Mur',
 }
+const towerLabel = (type: TowerType) => TOWER_LABEL[type] ?? type
 
 // Rôle de chaque tour (panneau d'évolution) : phrase courte de présentation.
 const TOWER_ROLE: Record<TowerType, string> = {
@@ -63,24 +58,14 @@ const TOWER_ROLE: Record<TowerType, string> = {
     WALL: 'Barrage sur le couloir : bloque les ennemis.',
 }
 
-// Stats de base des tours (miroir de TowerType côté backend : baseDamage ; la
-// portée vient de constants.ts, partagée avec les cercles de portée du plateau).
-// cadence = descripteur de vitesse de tir (miroir qualitatif de attackSpeed :
-// ARCHER 0.6, CATAPULT 0.1, BALLISTA 0.12 ; MAGE applique ses dégâts en continu).
-// hp = PV de structure au niveau 1 (miroir de Tower.getMaxHp : structureHp sinon baseCost×3).
-const TOWER_STATS: Record<TowerType, { damage: number; range: number; kind: string; cadence: string; hp: number }> = {
-    ARCHER:   { damage: 12,  range: TOWER_BASE_RANGE.ARCHER, kind: 'Monocible',            cadence: 'Rapide',   hp: 150 },
-    MAGE:     { damage: 11,  range: TOWER_BASE_RANGE.MAGE, kind: 'Continu · magique',    cadence: 'Continue', hp: 300 },
-    CATAPULT: { damage: 40,  range: TOWER_BASE_RANGE.CATAPULT, kind: 'Zone (AoE)',           cadence: 'Lente',    hp: 450 },
-    BALLISTA: { damage: 110, range: TOWER_BASE_RANGE.BALLISTA, kind: 'Monocible · anti-gros', cadence: 'Lente',   hp: 600 },
-    WALL:     { damage: 0,   range: TOWER_BASE_RANGE.WALL, kind: 'Barrage',              cadence: '—',        hp: 450 },
+// Descripteurs affichés (texte de présentation) : profil de tir et rythme.
+const TOWER_TRAITS: Record<TowerType, { kind: string; cadence: string }> = {
+    ARCHER:   { kind: 'Monocible',             cadence: 'Rapide' },
+    MAGE:     { kind: 'Continu · magique',     cadence: 'Continue' },
+    CATAPULT: { kind: 'Zone (AoE)',            cadence: 'Lente' },
+    BALLISTA: { kind: 'Monocible · anti-gros', cadence: 'Lente' },
+    WALL:     { kind: 'Barrage',               cadence: '—' },
 }
-// Montée en puissance par niveau (miroir de Tower.getDamage/getRange/getMaxHp).
-const dmgMult = (lvl: number) => (lvl >= 3 ? 2.6 : 1 + (lvl - 1) * 0.6)   // 1.0 / 1.6 / 2.6
-const hpMult = (lvl: number) => (lvl >= 3 ? 2.2 : 1 + (lvl - 1) * 0.5)    // 1.0 / 1.5 / 2.2
-const towerDamage = (type: TowerType, lvl: number) => Math.floor(TOWER_STATS[type].damage * dmgMult(lvl))
-const towerRange = (type: TowerType, lvl: number) => Math.round(towerRangeAt(type, lvl) * 10) / 10
-const towerHp = (type: TowerType, lvl: number) => Math.round(TOWER_STATS[type].hp * hpMult(lvl))
 
 // Modes de ciblage (voir backend TargetingMode) : libellés courts + explication.
 const TARGETING_MODES: { mode: 'CLOSEST' | 'FIRST' | 'STRONGEST'; label: string; hint: string }[] = [
@@ -115,6 +100,23 @@ export default function GamePage() {
     } = useGame()
 
     const canvasRef = useRef<GameCanvasHandle>(null)
+
+    // Catalogue du serveur (tours + cartes) : chargé une fois, le jeu attend `ready`.
+    const { status: catalogStatus, towers: towerSpecs, maps: catalogMaps, load: loadCatalog } = useCatalog()
+    useEffect(() => { void loadCatalog() }, [loadCatalog])
+    const specOf = (type: TowerType): TowerSpec | undefined => towerSpecs.find((s) => s.type === type)
+    const statsAt = (type: TowerType, level: number) => {
+        const spec = specOf(type)
+        return spec ? towerLevel(spec, level) : undefined
+    }
+    const maxLevelOf = (type: TowerType) => specOf(type)?.levels.length ?? 1
+    const unlockWaveOf = (type: TowerType) => specOf(type)?.unlockWave ?? 0
+    const upgradeCost = (type: TowerType, level: number) => statsAt(type, level)?.upgradeCost ?? 0
+    const towerDamage = (type: TowerType, level: number) => statsAt(type, level)?.damage ?? 0
+    const towerRange = (type: TowerType, level: number) => Math.round(towerRangeAt(type, level) * 10) / 10
+    const towerHp = (type: TowerType, level: number) => statsAt(type, level)?.maxHp ?? 0
+    // Structure posée sur le couloir (Mur) : sa limite simultanée vient du catalogue.
+    const maxWalls = towerSpecs.find((s) => s.placement === 'ON_CORRIDOR')?.maxCount ?? 0
 
     // Type de tour à poser. null = hors mode de pose (Échap) : un clic sur le
     // terrain ne construit rien.
@@ -336,31 +338,32 @@ export default function GamePage() {
      */
     function checkPlacement(type: TowerType, x: number, y: number):
         { ok: true; cost: number } | { ok: false; cost: number; short: string; long: string } {
-        const cost = TOWER_INFO[type].cost
+        const spec = specOf(type)
+        const cost = spec?.cost ?? 0
         const fail = (short: string, long: string) => ({ ok: false as const, cost, short, long })
         const placed = map?.towers ?? []
         if (placed.some((t) => t.x === x && t.y === y)) return fail('Case occupée', 'Cette case est déjà occupée.')
         // Rangée du haut réservée (tampon d'affichage des tours) : non constructible.
         if (y < TOP_RESERVED_ROWS) return fail('Rangée réservée', 'Rangée du haut réservée (affichage).')
-        // Règle du couloir, INVERSÉE selon le type : le mur-barrage se pose
-        // uniquement SUR le couloir des ennemis, les tours uniquement en dehors.
+        // Règle de pose du catalogue serveur, INVERSÉE selon le type : le mur-barrage
+        // se pose uniquement SUR le couloir des ennemis, les tours uniquement en dehors.
         const mapDef = getMapDef(mapId)
         const inCorridor = mapIsCorridor(mapDef, x, y)
-        if (type === 'WALL' && !inCorridor) {
+        const onCorridor = spec?.placement === 'ON_CORRIDOR'
+        if (onCorridor && !inCorridor) {
             return fail('Mur : sur le couloir', 'Le mur se pose sur le couloir des ennemis (pour leur barrer la route)')
         }
-        // MAX_WALLS = PlaceTowerService.MAX_WALLS côté backend (anti-donjon : paver
-        // le couloir de murs entassait toute la vague sous le feu de la défense
-        // entière, victoire garantie).
-        if (type === 'WALL' && placed.filter((t) => t.type === 'WALL').length >= MAX_WALLS) {
-            return fail(`Limite de ${MAX_WALLS} murs`, `Limite de ${MAX_WALLS} murs atteinte — le mur est un point de blocage, pas une forteresse`)
+        // Limite simultanée (anti-donjon : paver le couloir de murs entassait toute
+        // la vague sous le feu de la défense entière, victoire garantie).
+        if (onCorridor && spec.maxCount > 0 && placed.filter((t) => t.type === type).length >= spec.maxCount) {
+            return fail(`Limite de ${spec.maxCount} murs`, `Limite de ${spec.maxCount} murs atteinte — le mur est un point de blocage, pas une forteresse`)
         }
-        if (type !== 'WALL' && inCorridor) {
+        if (!onCorridor && inCorridor) {
             return fail('Pas sur le couloir', 'Impossible de construire une tour sur le couloir des ennemis')
         }
         // Bande constructible : les tours ne se posent qu'au bord des routes. Le reste
         // (décor, arbres, eau…) : « Impossible », qui couvre tous les cas.
-        if (type !== 'WALL' && !mapIsBuildable(mapDef, x, y)) {
+        if (!onCorridor && !mapIsBuildable(mapDef, x, y)) {
             return fail('Impossible', 'Impossible de construire ici')
         }
         if (gold < cost) return fail(`Or insuffisant (${cost})`, `Or insuffisant : il faut ${cost} or (tu en as ${gold}).`)
@@ -401,7 +404,7 @@ export default function GamePage() {
         try {
             await placeTower(selectedTower, x, y, cost)
             audio.play('tower_place')
-            setMessage(`${TOWER_INFO[selectedTower].label} placé(e) en (${x}, ${y})`)
+            setMessage(`${towerLabel(selectedTower)} placé(e) en (${x}, ${y})`)
             maybeShowTutorial('tip', 'inspect')
         } catch {
             audio.play('error', { volume: 0.6 })
@@ -435,11 +438,11 @@ export default function GamePage() {
             const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code)
             // (pas canAct : déclaré plus bas dans le rendu)
             if (!digit || isGameOver || combatRunning || tutorial || confirmNewGame || showLeaderboard) return
-            const type = (Object.keys(TOWER_INFO) as TowerType[])[Number(digit[1]) - 1]
+            const type = towerSpecs[Number(digit[1]) - 1]?.type
             if (!type) return
             e.preventDefault()
-            if (bestWave < TOWER_INFO[type].unlockWave) {
-                setMessage(`${TOWER_INFO[type].label} — débloquée à la vague ${TOWER_INFO[type].unlockWave}`)
+            if (bestWave < unlockWaveOf(type)) {
+                setMessage(`${towerLabel(type)} — débloquée à la vague ${unlockWaveOf(type)}`)
                 return
             }
             selectTowerType(type)
@@ -450,14 +453,15 @@ export default function GamePage() {
 
     async function handleUpgradeSelected(tower: TowerData) {
         const level = tower.level ?? 1
-        if (level >= MAX_TOWER_LEVEL) { setMessage('Cette tour est déjà au niveau maximum (3).'); return }
+        const max = maxLevelOf(tower.type)
+        if (level >= max) { setMessage(`Cette tour est déjà au niveau maximum (${max}).`); return }
         const cost = upgradeCost(tower.type, level)
         try {
             await upgradeTower(tower.id, cost)
             const next = level + 1
-            setMessage(next >= MAX_TOWER_LEVEL
-                ? `${TOWER_INFO[tower.type].label} portée au niveau MAX — un vrai pilier ! (-${cost} or)`
-                : `${TOWER_INFO[tower.type].label} améliorée au niveau ${next} (-${cost} or)`)
+            setMessage(next >= max
+                ? `${towerLabel(tower.type)} portée au niveau MAX — un vrai pilier ! (-${cost} or)`
+                : `${towerLabel(tower.type)} améliorée au niveau ${next} (-${cost} or)`)
         } catch {
             setMessage("Impossible d'améliorer cette tour (or insuffisant ou niveau max)")
         }
@@ -630,6 +634,20 @@ export default function GamePage() {
         )
     }
 
+    // Le plateau lit le catalogue dès sa création : rien n'est affiché avant.
+    if (catalogStatus !== 'ready') {
+        return (
+            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center gap-3">
+                <p className="text-white text-xl">
+                    {catalogStatus === 'error' ? 'Impossible de charger les données du jeu (serveur injoignable).' : 'Chargement du jeu...'}
+                </p>
+                {catalogStatus === 'error' && (
+                    <button onClick={() => void loadCatalog()} className="kcd-btn text-sm py-1 px-4">Réessayer</button>
+                )}
+            </div>
+        )
+    }
+
     return (
         <div
             className="relative h-screen flex flex-col overflow-hidden text-[#f0e2c4] font-pixel p-1.5 md:p-2"
@@ -703,21 +721,23 @@ export default function GamePage() {
                     <div className="kcd-panel-wood shrink-0 flex items-center gap-x-3 gap-y-1.5 flex-wrap py-1">
                         <span className="font-med text-sm text-[#e9d9b0] shrink-0 hidden 2xl:inline">Tours</span>
                         <div className="flex flex-wrap gap-1">
-                            {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][]).map(([type, info], i) => {
-                                const locked = bestWave < info.unlockWave
+                            {towerSpecs.map((spec, i) => {
+                                const type = spec.type
+                                const label = towerLabel(type)
+                                const locked = bestWave < spec.unlockWave
                                 return (
                                     <UnitChip
                                         key={type}
                                         hotkey={String(i + 1)}
                                         icon={<TowerIcon type={type} size={32} />}
-                                        label={info.label}
-                                        cost={info.cost}
-                                        badge={locked ? `🔒V${info.unlockWave}` : undefined}
+                                        label={label}
+                                        cost={spec.cost}
+                                        badge={locked ? `🔒V${spec.unlockWave}` : undefined}
                                         selected={selectedTower === type}
-                                        affordable={gold >= info.cost}
+                                        affordable={gold >= spec.cost}
                                         disabled={!canAct || locked}
                                         onClick={() => selectTowerType(type)}
-                                        title={locked ? `${info.label} — débloquée vague ${info.unlockWave}` : `${info.label} — ${info.cost} or (touche ${i + 1})`}
+                                        title={locked ? `${label} — débloquée vague ${spec.unlockWave}` : `${label} — ${spec.cost} or (touche ${i + 1})`}
                                     />
                                 )
                             })}
@@ -815,7 +835,7 @@ export default function GamePage() {
                                             <TowerIcon type={selectedTowerObj.type} size={22} />
                                             <SelectionCorners />
                                         </span>
-                                        {TOWER_INFO[selectedTowerObj.type].label}
+                                        {towerLabel(selectedTowerObj.type)}
                                     </span>
                                     <button onClick={() => setSelectedTowerId(null)} aria-label="Fermer">
                                         <img src="/sprites/ui/icon_close.png" alt="Fermer" className="kcd-icon" style={{ height: 16 }} />
@@ -823,8 +843,8 @@ export default function GamePage() {
                                 </div>
 
                                 <div className="flex items-center gap-2 -mt-1">
-                                    <span className="text-yellow-600 tracking-widest text-sm" title={`Niveau ${selectedTowerObj.level ?? 1} / ${MAX_TOWER_LEVEL}`}>{levelStars(selectedTowerObj.level ?? 1)}</span>
-                                    <span className="font-read text-xs text-[#8a6a2c]">niv. {selectedTowerObj.level ?? 1}/{MAX_TOWER_LEVEL}</span>
+                                    <span className="text-yellow-600 tracking-widest text-sm" title={`Niveau ${selectedTowerObj.level ?? 1} / ${maxLevelOf(selectedTowerObj.type)}`}>{levelStars(selectedTowerObj.level ?? 1, maxLevelOf(selectedTowerObj.type))}</span>
+                                    <span className="font-read text-xs text-[#8a6a2c]">niv. {selectedTowerObj.level ?? 1}/{maxLevelOf(selectedTowerObj.type)}</span>
                                 </div>
 
                                 {combatRunning && (
@@ -840,33 +860,33 @@ export default function GamePage() {
                                     <span className="text-[#8a6a2c]">Dégâts</span>
                                     <span className="text-right font-semibold text-[#43310f]">
                                         {towerDamage(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
-                                        {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerDamage(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
+                                        {(selectedTowerObj.level ?? 1) < maxLevelOf(selectedTowerObj.type) && <span className="text-[#3a7a12]"> → {towerDamage(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
                                     </span>
                                     <span className="text-[#8a6a2c]">Portée</span>
                                     <span className="text-right font-semibold text-[#43310f]">
                                         {towerRange(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
-                                        {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerRange(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
+                                        {(selectedTowerObj.level ?? 1) < maxLevelOf(selectedTowerObj.type) && <span className="text-[#3a7a12]"> → {towerRange(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
                                     </span>
                                     <span className="text-[#8a6a2c]">PV (solidité)</span>
                                     <span className="text-right font-semibold text-[#43310f]">
                                         {selectedTowerObj.hp ?? towerHp(selectedTowerObj.type, selectedTowerObj.level ?? 1)}/{selectedTowerObj.maxHp ?? towerHp(selectedTowerObj.type, selectedTowerObj.level ?? 1)}
-                                        {(selectedTowerObj.level ?? 1) < MAX_TOWER_LEVEL && <span className="text-[#3a7a12]"> → {towerHp(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
+                                        {(selectedTowerObj.level ?? 1) < maxLevelOf(selectedTowerObj.type) && <span className="text-[#3a7a12]"> → {towerHp(selectedTowerObj.type, (selectedTowerObj.level ?? 1) + 1)}</span>}
                                     </span>
                                     <span className="text-[#8a6a2c]">Cadence</span>
-                                    <span className="text-right text-[#43310f]">{TOWER_STATS[selectedTowerObj.type].cadence}</span>
+                                    <span className="text-right text-[#43310f]">{TOWER_TRAITS[selectedTowerObj.type].cadence}</span>
                                     <span className="text-[#8a6a2c]">Type</span>
-                                    <span className="text-right text-[#43310f]">{TOWER_STATS[selectedTowerObj.type].kind}</span>
+                                    <span className="text-right text-[#43310f]">{TOWER_TRAITS[selectedTowerObj.type].kind}</span>
                                 </div>
 
-                                {(selectedTowerObj.level ?? 1) >= MAX_TOWER_LEVEL ? (
+                                {(selectedTowerObj.level ?? 1) >= maxLevelOf(selectedTowerObj.type) ? (
                                     <div className="rounded px-2 py-1.5 font-read text-xs text-[#3a6a12] text-center font-semibold" style={{ background: 'rgba(120, 190, 80, .14)', border: '1px solid #6f9e46' }}>
                                         ✦ Niveau maximum atteint
                                     </div>
                                 ) : (
                                     <>
                                         <div className="rounded px-2 py-1.5 font-read text-xs text-[#5a3d16]" style={{ background: 'rgba(255, 236, 200, .08)', borderLeft: '3px solid #b08a3c' }}>
-                                            {(selectedTowerObj.level ?? 1) + 1 >= MAX_TOWER_LEVEL
-                                                ? `Niveau ${selectedTowerObj.level ?? 1} → ${MAX_TOWER_LEVEL} : bond décisif de dégâts, portée et solidité.`
+                                            {(selectedTowerObj.level ?? 1) + 1 >= maxLevelOf(selectedTowerObj.type)
+                                                ? `Niveau ${selectedTowerObj.level ?? 1} → ${maxLevelOf(selectedTowerObj.type)} : bond décisif de dégâts, portée et solidité.`
                                                 : `Niveau ${selectedTowerObj.level ?? 1} → ${(selectedTowerObj.level ?? 1) + 1} : dégâts, portée et solidité renforcés.`}
                                         </div>
                                         <button onClick={() => handleUpgradeSelected(selectedTowerObj)}
@@ -912,7 +932,7 @@ export default function GamePage() {
                                     <div className="flex flex-col gap-1 text-sm text-[#43310f]">
                                         <div className="flex justify-between"><span className="text-[#8a6a2c]">Meilleure vague</span><span className="font-read font-semibold">{bestWave}</span></div>
                                         <div className="flex justify-between"><span className="text-[#8a6a2c]">Tours posées</span><span className="font-read font-semibold">{totalTowers}</span></div>
-                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Murs</span><span className="font-read font-semibold">{wallCount}/{MAX_WALLS}</span></div>
+                                        <div className="flex justify-between"><span className="text-[#8a6a2c]">Murs</span><span className="font-read font-semibold">{wallCount}/{maxWalls}</span></div>
                                     </div>
                                 </div>
 
@@ -921,21 +941,21 @@ export default function GamePage() {
                                     <h3 className="kcd-title font-med text-center text-base mb-2">Évolution des tours</h3>
                                     <p className="font-read text-xs text-[#8a6a2c] mb-2 text-center">Clique une tour posée pour l’améliorer (niveau ↑ = dégâts et portée ↑). Touches 1–5 : choisir une tour, Échap : annuler.</p>
                                     <div className="flex flex-col gap-2">
-                                        {(Object.entries(TOWER_INFO) as [TowerType, typeof TOWER_INFO[TowerType]][])
-                                            .filter(([type]) => type !== 'WALL')
-                                            .map(([type]) => {
-                                                const locked = bestWave < TOWER_INFO[type].unlockWave
+                                        {towerSpecs
+                                            .filter((spec) => spec.placement !== 'ON_CORRIDOR')
+                                            .map(({ type, unlockWave }) => {
+                                                const locked = bestWave < unlockWave
                                                 return (
                                                     <div key={type} className={`flex items-center gap-2 ${locked ? 'opacity-50' : ''}`}>
                                                         <TowerIcon type={type} size={26} />
                                                         <div className="min-w-0 flex-1">
                                                             <div className="flex items-center justify-between">
-                                                                <span className="text-sm font-med text-[#43310f]">{locked ? `🔒 ${TOWER_INFO[type].label}` : TOWER_INFO[type].label}</span>
+                                                                <span className="text-sm font-med text-[#43310f]">{locked ? `🔒 ${towerLabel(type)}` : towerLabel(type)}</span>
                                                                 <span className="font-read text-xs text-[#7a5320]">×{towerCounts[type] ?? 0}</span>
                                                             </div>
-                                                            <p className="font-read text-xs text-[#8a6a2c] leading-snug">{locked ? `Débloquée vague ${TOWER_INFO[type].unlockWave}` : TOWER_ROLE[type]}</p>
+                                                            <p className="font-read text-xs text-[#8a6a2c] leading-snug">{locked ? `Débloquée vague ${unlockWave}` : TOWER_ROLE[type]}</p>
                                                             {!locked && (
-                                                                <p className="font-read text-[11px] text-[#7a5320] leading-snug">Dégâts {TOWER_STATS[type].damage} · Portée {TOWER_STATS[type].range} · {TOWER_STATS[type].hp} PV · Cadence {TOWER_STATS[type].cadence}</p>
+                                                                <p className="font-read text-[11px] text-[#7a5320] leading-snug">Dégâts {towerDamage(type, 1)} · Portée {towerRange(type, 1)} · {towerHp(type, 1)} PV · Cadence {TOWER_TRAITS[type].cadence}</p>
                                                             )}
                                                         </div>
                                                     </div>
@@ -970,7 +990,7 @@ export default function GamePage() {
 
                         {/* Onglets : Global (toutes cartes) + un par carte. */}
                         <div className="flex flex-wrap gap-1 mb-2">
-                            {[{ id: 'global', name: 'Global' }, ...GAME_MAPS.map((m) => ({ id: m.id, name: m.name }))].map((t) => (
+                            {[{ id: 'global', name: 'Global' }, ...catalogMaps.map((m) => ({ id: m.id, name: m.name }))].map((t) => (
                                 <button
                                     key={t.id}
                                     onClick={() => selectLeaderboardTab(t.id)}

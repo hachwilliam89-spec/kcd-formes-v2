@@ -13,7 +13,10 @@ public record MapLayoutResponse(
         String terrain,
         Position castle,
         List<Position> spawns,
+        List<List<Position>> lanes,
         List<List<Position>> lanePaths,
+        int corridorHalfWidth,
+        List<Position> wideSpots,
         List<Position> corridorCells,
         List<Position> buildableCells,
         List<Position> waterCells
@@ -26,7 +29,10 @@ public record MapLayoutResponse(
                 layout.terrain().name(),
                 layout.castle(),
                 layout.spawns(),
+                layout.lanes(),
                 layout.lanePaths(),
+                layout.corridorHalfWidth(),
+                layout.wideSpots(),
                 layout.corridorCells(),
                 layout.buildableCells(),
                 layout.waterCells());
