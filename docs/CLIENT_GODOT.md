@@ -64,7 +64,7 @@ client-godot/
 
 **REST** (même API que le web, JWT en `Authorization: Bearer …`) :
 - `POST /api/v1/auth/register`, `POST /api/v1/auth/login`
-- `GET /api/v1/maps` (ids) · `GET /api/v1/maps/{mapId}` (disposition : château, entrées, points de passage et chemin case par case de chaque voie, demi-largeur du couloir, aires élargies, couloir, cases constructibles, eau) · `GET /api/v1/maps/{mapId}/forecast?wave=N` (prévision saisonnière d'une vague) · `GET /api/v1/towers` (catalogue des tours) — **sources de vérité**, publiques en lecture (aucun token), partagées avec le web
+- `GET /api/v1/maps` (ids) · `GET /api/v1/maps/{mapId}` (disposition : château, entrées, points de passage et chemin case par case de chaque voie, demi-largeur du couloir, aires élargies, couloir, cases constructibles, eau) · `GET /api/v1/maps/{mapId}/forecast?wave=N` (prévision saisonnière d'une vague) · `GET /api/v1/towers` (catalogue des tours) · `GET /api/v1/versus/sends` (envois du versus : coût, revenu passif) — **sources de vérité**, publiques en lecture (aucun token), partagées avec le web
 - `POST /api/v1/games` · `GET /api/v1/games/{id}`
 - `POST /api/v1/games/{id}/towers` · `…/towers/{towerId}/upgrade` · `…/towers/{towerId}/targeting`
 - `POST /api/v1/games/{id}/waves/start` · `GET /api/v1/games/{id}/waves/next`
@@ -89,7 +89,7 @@ client-godot/
 - [x] Client Godot : barre de construction construite depuis le catalogue (coût, verrou « vague N », compteur de murs, grisée si l'or manque), Mur posé sur la route, Baliste proposée une fois débloquée, annonce des déblocages en fin de vague.
 - [x] `frontend-web` branché sur `/api/v1/towers` et `/api/v1/maps` (`store/catalogStore.ts`, chargé une fois) : solo, coop, versus et `GameScene` ne recopient plus ni coûts, ni stats, ni portées, ni limite de murs, ni tracés, couloirs ou cases constructibles. `maps.ts` ne garde que la présentation (nom, biome, image). Les outils `scripts/visual-export` et `scripts/perf-bench` lisent le même catalogue (backend lancé, ou `--catalog`).
 - [x] Mécaniques saisonnières exposées : la disposition d'une carte porte `bankCells` (berges inondables) et `seasonalRules` (intervalle des crues, pénalité de portée de la brume, multiplicateurs de grêle, d'or au printemps, de protection dans la brume) ; `GET /api/v1/maps/{id}/forecast?wave=N` donne la prévision d'une vague (crue, boue, brume, grêle). Le web ne recopie plus aucune zone ni constante (`seasons.ts` ne garde que les types et les thèmes) ; le client Godot s'en servira pour le printemps et l'automne.
-- [ ] Reste dupliqué côté web : catalogue des envois du versus (`app/versus/page.tsx` `SENDS`, miroir de `SendCatalog`).
+- [x] Catalogue des envois du versus exposé : `GET /api/v1/versus/sends` (`GetSendCatalogUseCase` → `SendCatalogService` → `SendController`), lu dans `SendCatalog` comme `MatchService.sendCreep`. Le web ne recopie plus ni la liste, ni les coûts, ni les revenus (`app/versus/page.tsx` ne garde que les libellés). Plus aucune règle dupliquée côté client.
 - [x] Connexion STOMP du client natif (sans `Origin`) acceptée par le vrai backend : partie coop Godot + web validée dans les deux sens (2026-10-10).
 
 ## 6. Assets et rendu

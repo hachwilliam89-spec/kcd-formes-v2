@@ -60,16 +60,17 @@ const TUTO_STEPS: { target: string; text: string }[] = [
     { target: 'opponent', text: "Garde un œil sur l'adversaire ici. Le dernier château debout l'emporte !" },
 ]
 
-// Catalogue d'envois (miroir de SendCatalog côté backend) : coût / revenu / couleur.
-const SENDS: { type: string; label: string; cost: number; income: number; color: string }[] = [
-    { type: 'GOBLIN', label: 'Gobelin', cost: 70, income: 2, color: '#84cc16' },
-    { type: 'ORC', label: 'Orc', cost: 150, income: 4, color: '#c2792e' },
-    { type: 'TROLL', label: 'Troll', cost: 280, income: 7, color: '#9aa3b0' },
-    { type: 'SAPEUR', label: 'Sapeur', cost: 320, income: 8, color: '#e0483f' },
-    { type: 'DARK_KNIGHT', label: 'Chevalier noir', cost: 360, income: 9, color: '#6b5bd8' },
-    { type: 'CHARIOT', label: 'Démon de givre', cost: 460, income: 11, color: '#3bb0e0' },
-    { type: 'BOSS_WARLORD', label: 'Seigneur de guerre', cost: 850, income: 20, color: '#eab308' },
-]
+// Libellés des envois (présentation) ; liste, coûts et revenus : catalogue du
+// serveur (GET /api/v1/versus/sends, miroir de SendCatalog).
+const SEND_LABEL: Record<string, string> = {
+    GOBLIN: 'Gobelin',
+    ORC: 'Orc',
+    TROLL: 'Troll',
+    SAPEUR: 'Sapeur',
+    DARK_KNIGHT: 'Chevalier noir',
+    CHARIOT: 'Démon de givre',
+    BOSS_WARLORD: 'Seigneur de guerre',
+}
 
 export default function VersusPage() {
     const router = useRouter()
@@ -80,7 +81,7 @@ export default function VersusPage() {
     const [pendingMapId, setPendingMapId] = useState<string>('desert')
     const [selectedTower, setSelectedTower] = useState<TowerType>('ARCHER')
     // Catalogue du serveur (tours + cartes) : chargé une fois, le plateau attend `ready`.
-    const { status: catalogStatus, towers: towerSpecs, load: loadCatalog } = useCatalog()
+    const { status: catalogStatus, towers: towerSpecs, sends, load: loadCatalog } = useCatalog()
     useEffect(() => { void loadCatalog() }, [loadCatalog])
     const costOf = (type: string) => towerSpecs.find((s) => s.type === type)?.cost ?? 0
     const onCorridorOf = (type: string) => towerSpecs.find((s) => s.type === type)?.placement === 'ON_CORRIDOR'
@@ -430,19 +431,22 @@ export default function VersusPage() {
                         <div className={`flex items-center gap-3 flex-wrap rounded-md ${hlTarget === 'sends' ? 'ring-2 ring-yellow-400' : ''}`}>
                             <span className="font-med text-sm text-[#e9d9b0] w-20 shrink-0">Envoyer</span>
                             <div className="flex flex-wrap gap-1.5">
-                                {SENDS.map((s) => (
-                                    <UnitChip
-                                        key={s.type}
-                                        icon={<EnemyIcon type={s.type} size={32} />}
-                                        label={s.label}
-                                        cost={s.cost}
-                                        income={s.income}
-                                        affordable={gold >= s.cost}
-                                        disabled={gold < s.cost}
-                                        onClick={() => actions.sendCreep(s.type)}
-                                        title={`${s.label} — ${s.cost} or · revenu +${s.income}/vague`}
-                                    />
-                                ))}
+                                {sends.map((s) => {
+                                    const label = SEND_LABEL[s.type] ?? s.type
+                                    return (
+                                        <UnitChip
+                                            key={s.type}
+                                            icon={<EnemyIcon type={s.type} size={32} />}
+                                            label={label}
+                                            cost={s.cost}
+                                            income={s.income}
+                                            affordable={gold >= s.cost}
+                                            disabled={gold < s.cost}
+                                            onClick={() => actions.sendCreep(s.type)}
+                                            title={`${label} — ${s.cost} or · revenu +${s.income}/vague`}
+                                        />
+                                    )
+                                })}
                             </div>
                         </div>
                     </div>

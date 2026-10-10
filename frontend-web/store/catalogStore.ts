@@ -76,6 +76,14 @@ export interface SeasonalRules {
     fogDamageTakenFactor: number
 }
 
+/** Miroir de SendSpecResponse (backend GetSendCatalogUseCase) : un envoi du versus. */
+export interface SendSpec {
+    type: string
+    cost: number
+    /** Revenu passif ajouté à l'envoyeur, par vague. */
+    income: number
+}
+
 /** Contenu brut des deux endpoints : aussi le format injecté par les outils hors ligne. */
 export interface CatalogData {
     towers: TowerSpec[]
@@ -85,6 +93,8 @@ export interface CatalogData {
      * Le jeu charge la vague 1 (aperçu du choix de carte) ; les outils peuvent en fournir plus.
      */
     forecasts?: Record<string, TerrainForecast[]>
+    /** Envois du versus (GET /api/v1/versus/sends), du moins cher au plus cher. */
+    sends?: SendSpec[]
 }
 
 type Status = 'idle' | 'loading' | 'ready' | 'error'
@@ -95,6 +105,7 @@ interface CatalogState {
     maps: MapDef[]
     seasonalRules: SeasonalRules | null
     forecasts: Record<string, TerrainForecast[]>
+    sends: SendSpec[]
     status: Status
     /** Charge le catalogue s'il ne l'est pas déjà (idempotent, relance après une erreur). */
     load: () => Promise<void>
@@ -109,6 +120,7 @@ export const useCatalogStore = create<CatalogState>()((set, get) => ({
     maps: [],
     seasonalRules: null,
     forecasts: {},
+    sends: [],
     status: 'idle',
 
     load: () => {
@@ -117,9 +129,10 @@ export const useCatalogStore = create<CatalogState>()((set, get) => ({
         set({ status: 'loading' })
         pending = (async () => {
             try {
-                const [towers, ids] = await Promise.all([
+                const [towers, ids, sends] = await Promise.all([
                     api.get<TowerSpec[]>('/api/v1/towers'),
                     api.get<string[]>('/api/v1/maps'),
+                    api.get<SendSpec[]>('/api/v1/versus/sends'),
                 ])
                 const [layouts, firstWaves] = await Promise.all([
                     Promise.all(ids.data.map((id) => api.get<MapLayout>(`/api/v1/maps/${encodeURIComponent(id)}`))),
@@ -127,7 +140,7 @@ export const useCatalogStore = create<CatalogState>()((set, get) => ({
                 ])
                 const forecasts: Record<string, TerrainForecast[]> = {}
                 ids.data.forEach((id, i) => { forecasts[id] = [firstWaves[i].data] })
-                get().seed({ towers: towers.data, maps: layouts.map((r) => r.data), forecasts })
+                get().seed({ towers: towers.data, maps: layouts.map((r) => r.data), forecasts, sends: sends.data })
             } catch {
                 set({ status: 'error' })
             } finally {
@@ -142,6 +155,7 @@ export const useCatalogStore = create<CatalogState>()((set, get) => ({
         maps: data.maps.map(buildMapDef),
         seasonalRules: data.maps[0]?.seasonalRules ?? null,
         forecasts: data.forecasts ?? {},
+        sends: data.sends ?? [],
         status: 'ready',
     }),
 }))
@@ -154,8 +168,9 @@ export function useCatalog() {
     const status = useCatalogStore((s) => s.status)
     const towers = useCatalogStore((s) => s.towers)
     const maps = useCatalogStore((s) => s.maps)
+    const sends = useCatalogStore((s) => s.sends)
     const load = useCatalogStore((s) => s.load)
-    return { status, towers, maps, load }
+    return { status, towers, maps, sends, load }
 }
 
 // ── Accès hors React (GameScene, règles d'aperçu) ────────────────────────────
