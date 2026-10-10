@@ -77,6 +77,14 @@ func start_wave(game_id: String) -> ApiResult:
 	return await _request(HTTPClient.METHOD_POST, "/api/v1/games/%s/waves/start" % game_id, {})
 
 
+## Classement par meilleure vague (toutes cartes, ou une carte) + rang du joueur.
+func get_leaderboard(limit: int, map_id: String = "") -> ApiResult:
+	var query: String = "?limit=%d" % limit
+	if not map_id.is_empty():
+		query += "&mapId=%s" % map_id.uri_encode()
+	return await _request(HTTPClient.METHOD_GET, "/api/v1/leaderboard" + query)
+
+
 ## Aperçu de la prochaine vague (types d'ennemis, Boss, annonce saisonnière).
 func get_next_wave(game_id: String) -> ApiResult:
 	return await _request(HTTPClient.METHOD_GET, "/api/v1/games/%s/waves/next" % game_id)

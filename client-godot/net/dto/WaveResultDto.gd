@@ -6,6 +6,8 @@ var number: int = 0
 var gold_earned: int = 0
 var castle_hp: int = 0
 var castle_max_hp: int = 0
+## PV perdus par le château pendant la vague.
+var castle_damage_taken: int = 0
 var castle_destroyed: bool = false
 var game_status: String = ""
 var ticks: Array[TickDto] = []
@@ -22,6 +24,7 @@ static func from_variant(value: Variant) -> WaveResultDto:
 	dto.gold_earned = int(body.get("goldEarned", 0))
 	dto.castle_hp = int(body.get("castleHp", 0))
 	dto.castle_max_hp = int(body.get("castleMaxHp", 0))
+	dto.castle_damage_taken = int(body.get("castleDamageTaken", 0))
 	dto.castle_destroyed = bool(body.get("castleDestroyed", false))
 	dto.game_status = str(body.get("gameStatus", ""))
 	for item: Variant in DtoParse.array(body["ticks"]):

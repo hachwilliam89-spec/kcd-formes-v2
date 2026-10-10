@@ -1,5 +1,6 @@
 extends Control
-## Écran de jeu solo (spike) : carte, pose de tours au tap, replay des vagues.
+## Écran de jeu solo : bandeau (or, château, vague, aperçu de la suivante), carte,
+## pose de tours au tap, replay des vagues, classement.
 ##
 ## Contrôleur : il relaie les intentions du joueur à l'API et transmet les
 ## réponses aux vues. Le serveur décide de tout (pose, combat, or, bonus,
@@ -31,6 +32,12 @@ var _busy: bool = false
 var _selected_tower_id: String = ""
 var _upgrade_button: Button
 var _targeting_buttons: Array[Button] = []
+## Aperçu de la prochaine vague (null : indisponible, en combat ou partie finie).
+var _preview: WavePreviewDto
+## Vague en cours de rejeu (bilan affiché à la fin).
+var _wave: WaveResultDto
+## « Recommencer » demande une seconde touche pour confirmer.
+var _restart_armed: bool = false
 
 @onready var _map_area: Control = %MapArea
 @onready var _map_view: MapView = %MapView
@@ -38,13 +45,16 @@ var _targeting_buttons: Array[Button] = []
 @onready var _season: SeasonView = %SeasonView
 @onready var _ticks: TickPlayer = %TickPlayer
 @onready var _title: Label = %MapTitle
-@onready var _stats: Label = %Stats
+@onready var _hud: Hud = %Hud
 @onready var _tower_bar: TowerBar = %TowerBar
 @onready var _wave_button: Button = %WaveButton
 @onready var _bonus_box: VBoxContainer = %BonusBox
 @onready var _tower_card: VBoxContainer = %TowerCard
 @onready var _info: Label = %Info
 @onready var _back: Button = %Back
+@onready var _board_button: Button = %Board
+@onready var _restart: Button = %Restart
+@onready var _leaderboard: LeaderboardPanel = %Leaderboard
 @onready var _fps: Label = %Fps
 
 var _fps_timer: float = 0.0
@@ -52,6 +62,9 @@ var _fps_timer: float = 0.0
 
 func _ready() -> void:
 	_back.pressed.connect(_on_quit)
+	_board_button.pressed.connect(func() -> void: _leaderboard.open(Router.current_map_id))
+	_restart.pressed.connect(_on_restart_pressed)
+	_hud.setup(_battle.catalog)
 	_wave_button.pressed.connect(_on_wave_pressed)
 	_map_area.resized.connect(_fit_map)
 	_map_area.gui_input.connect(_on_map_input)
@@ -60,7 +73,6 @@ func _ready() -> void:
 	_ticks.finished.connect(_on_wave_finished)
 	_fps.visible = bool(ProjectSettings.get_setting("war_seasons/debug/show_fps", false))
 	_title.text = MapNames.label(Router.current_map_id)
-	_stats.text = ""
 	_info.text = "Chargement de la carte…"
 
 	var layout_result: ApiResult = await Api.get_map_layout(Router.current_map_id)
@@ -94,12 +106,14 @@ func _ready() -> void:
 
 func _new_game() -> void:
 	_selected_tower_id = ""
+	_preview = null
+	_hud.show_preview(null)
 	_info.text = "Création de la partie…"
 	var result: ApiResult = await Api.create_game("Château de %s" % Session.username, _layout.id)
 	if not _apply_state_result(result):
 		return
 	_info.text = "Choisis une tour puis touche une case constructible (verte). Le Mur se pose sur la route."
-	await _show_forecast()
+	await _refresh_preview()
 
 
 ## Compteur de perf du spike (réglage war_seasons/debug/show_fps).
@@ -169,6 +183,7 @@ func _on_wave_pressed() -> void:
 		return
 	_set_busy(true)
 	_info.text = "Vague %d…" % (_state.wave_number + 1)
+	_disarm_restart()
 	var result: ApiResult = await Api.start_wave(_state.game_id)
 	if not result.ok:
 		_set_busy(false)
@@ -179,12 +194,18 @@ func _on_wave_pressed() -> void:
 		_set_busy(false)
 		_info.text = "Réponse du serveur illisible"
 		return
+	_wave = wave
+	_info.text = "Vague %d en cours…" % wave.number
+	_hud.set_wave(wave.number)
+	_preview = null
+	_hud.show_preview(null)
 	_ticks.play(wave.ticks)
 
 
 func _on_tick(tick: TickDto) -> void:
 	_season.render(tick.terrain)
-	_stats.text = "Vague %d · Or %d\nChâteau %d/%d" % [_state.wave_number + 1, _state.gold, tick.castle_hp, _state.castle_max_hp]
+	# PV du château en direct (siège) ; le reste du bandeau ne bouge qu'en fin de vague.
+	_hud.set_castle(tick.castle_hp, _state.castle_max_hp)
 
 
 func _on_wave_finished() -> void:
@@ -192,27 +213,54 @@ func _on_wave_finished() -> void:
 	var previous_best: int = _best_wave
 	await _refresh_best_wave()
 	_set_busy(false)
+	# Bilan de la vague (mêmes messages que le web).
+	var number: int = _wave.number if _wave != null else _state.wave_number
+	var earned: int = _wave.gold_earned if _wave != null else 0
+	var lost: int = _wave.castle_damage_taken if _wave != null else 0
 	if _state.is_over():
-		_info.text = "Le château est tombé à la vague %d." % _state.wave_number
-	elif _state.awaiting_bonus_choice:
-		_info.text = "Palier atteint : choisis un bonus."
+		_info.text = "Le château est tombé à la vague %d. Partie terminée." % number
+	elif lost > 0:
+		_info.text = "Vague %d : des ennemis ont atteint le château (−%d PV). +%d or." % [number, lost, earned]
 	else:
-		_info.text = "Vague %d repoussée." % _state.wave_number
+		_info.text = "Vague %d repoussée — +%d or !" % [number, earned]
+	if _state.awaiting_bonus_choice:
+		_info.text += "\nPalier atteint : choisis un bonus."
 	for spec: TowerSpecDto in _tower_bar.catalog:
 		if not spec.is_unlocked(previous_best) and spec.is_unlocked(_best_wave):
 			_info.text += "\nNouvelle tour : %s !" % TowerNames.label(spec.type)
-	await _show_forecast()
+	_wave = null
+	await _refresh_preview()
 
 
-## Entre deux vagues : le plateau montre l'annonce saisonnière de la suivante
-## (berges qui clignotent, bruine, grêlons, boue et brume à venir).
-func _show_forecast() -> void:
+## Entre deux vagues : aperçu de la suivante (bandeau : ennemis, nouveautés, Boss ;
+## bouton de lancement) et son annonce saisonnière sur le plateau (berges qui
+## clignotent, bruine, grêlons, boue et brume à venir).
+func _refresh_preview() -> void:
 	if _state == null or _state.is_over():
 		return
 	var result: ApiResult = await Api.get_next_wave(_state.game_id)
 	if not result.ok or _ticks.playing:
 		return
-	_season.render(null, TerrainForecastDto.from_variant(DtoParse.dict(result.data).get("terrain")))
+	_preview = WavePreviewDto.from_variant(result.data)
+	_hud.show_preview(_preview)
+	_season.render(null, _preview.terrain if _preview != null else null)
+	_refresh_hud()
+
+
+## Première touche : demande confirmation ; seconde : abandonne et relance une partie.
+func _on_restart_pressed() -> void:
+	if not _restart_armed:
+		_restart_armed = true
+		_restart.text = "Confirmer ?"
+		get_tree().create_timer(3.0).timeout.connect(_disarm_restart)
+		return
+	_disarm_restart()
+	await _new_game()
+
+
+func _disarm_restart() -> void:
+	_restart_armed = false
+	_restart.text = "Recommencer"
 
 
 func _on_bonus_chosen(bonus_type: String) -> void:
@@ -258,8 +306,14 @@ func _refresh_best_wave() -> void:
 
 
 func _refresh_hud() -> void:
-	_stats.text = "Vague %d · Or %d\nChâteau %d/%d" % [_state.wave_number, _state.gold, _state.castle_hp, _state.castle_max_hp]
-	_wave_button.text = "Nouvelle partie" if _state.is_over() else "Lancer vague %d" % (_state.wave_number + 1)
+	_hud.show_state(_state.gold, _state.castle_hp, _state.castle_max_hp, _state.wave_number)
+	var next: int = _preview.wave_number if _preview != null else _state.wave_number + 1
+	if _state.is_over():
+		_wave_button.text = "Nouvelle partie"
+	elif _state.awaiting_bonus_choice:
+		_wave_button.text = "★ Choisis un bonus"
+	else:
+		_wave_button.text = "⚔ Lancer la vague %d" % next
 	_rebuild_bonus_box()
 	_set_busy(_busy)
 
@@ -282,6 +336,9 @@ func _set_busy(busy: bool) -> void:
 	_busy = busy
 	var waiting_bonus: bool = _state != null and _state.awaiting_bonus_choice
 	_wave_button.disabled = busy or _state == null or waiting_bonus
+	# Recommencer : pas pendant une vague ni un appel, inutile une fois la partie finie
+	# (le bouton de vague propose alors une nouvelle partie).
+	_restart.disabled = busy or _ticks.playing or _state == null or _state.is_over()
 	_sync_tower_bar()
 	_refresh_tower_card()
 	for child: Node in _bonus_box.get_children():
