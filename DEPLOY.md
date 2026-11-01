@@ -1,6 +1,6 @@
 # Déploiement — KCD Formes v2 (VPS + Docker)
 
-Stack de prod : **nginx** (entrée 80/443) → **frontend** Next.js (standalone) + **backend** Spring Boot → **PostgreSQL**. Tout est orchestré par `docker-compose.prod.yml`.
+Stack de prod : **Traefik mutualisé du VPS** (entrée 80/443, HTTPS automatique, stack `/opt/edge`) → **frontend** Next.js (standalone) + **backend** Spring Boot → **PostgreSQL**. Ce projet est orchestré par `docker-compose.prod.yml`. Le proxy est partagé avec les autres projets du VPS et vit dans le dépôt `vps-edge` (voir `docs/adr/0002-proxy-mutualise-traefik.md`).
 
 ## 1. Les assets (important)
 
@@ -34,11 +34,11 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 ```
 
-Le site est servi sur le port **80**. Flyway applique les migrations au démarrage du backend. Postgres et le backend ne sont **pas** exposés publiquement (seul nginx l'est).
+Prérequis : la stack `/opt/edge` tourne (elle crée le réseau `edge`). Le site est servi en HTTPS sur `kcd-formes.fr` via Traefik. Flyway applique les migrations au démarrage du backend. Aucun conteneur de ce projet ne publie de port : seul Traefik est exposé.
 
-## 4. HTTPS (recommandé)
+## 4. HTTPS
 
-Le plus simple : un reverse-proxy TLS devant nginx (ex. **Caddy** ou **Traefik**), ou **certbot** sur l'hôte. Ensuite décommenter le port `443` dans `docker-compose.prod.yml` et ajouter le bloc `ssl` dans `docker/nginx/nginx.conf`.
+Géré par le proxy mutualisé (Traefik + Let's Encrypt) : rien à configurer dans ce dépôt. Les routes du projet sont les labels `traefik.*` de `docker-compose.prod.yml` : `/api` et `/ws` vers le backend, tout le reste vers le front.
 
 ## 5. CI/CD (GitHub Actions)
 
