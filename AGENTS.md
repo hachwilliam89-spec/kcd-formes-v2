@@ -39,6 +39,7 @@ Tower defense médiéval-fantasy, quatre cartes saisonnières. Solo en survie in
 | ADR | Décision | Statut |
 |---|---|---|
 | [0001](docs/adr/0001-client-de-jeu-godot.md) | Client de jeu unique Godot 4 (GDScript) pour mobile + web ; Next.js gardé comme site vitrine | Accepté, sous réserve du spike |
+| [0002](docs/adr/0002-proxy-mutualise-traefik.md) | Proxy HTTP(S) mutualisé du VPS (Traefik, dépôt `vps-edge`) ; KCD déclare ses routes par labels | Accepté |
 
 Nouvelle décision structurante → nouvel ADR `docs/adr/NNNN-titre.md` (même format) + ligne dans ce tableau.
 

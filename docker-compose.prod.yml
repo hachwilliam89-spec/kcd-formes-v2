@@ -1,4 +1,7 @@
 # Fichier de PRODUCTION autonome (ne dépend pas de docker-compose.yml).
+# Prérequis : le proxy mutualisé du VPS (Traefik, stack /opt/edge, dépôt vps-edge)
+# doit tourner. Il crée le réseau externe `edge`, tient seul les ports 80/443 et gère
+# le HTTPS. Ce projet n'y déclare que ses routes, via les labels ci-dessous (ADR 0002).
 # Lancer : docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 # Prérequis : les assets du jeu doivent être présents dans
 # frontend-web/public/sprites/ AVANT le build (voir scripts/unpack-assets.sh
@@ -38,7 +41,19 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Pas de port publié : nginx proxifie /api → backend:8080 en interne.
+    # Pas de port publié : Traefik (réseau edge) route /api et /ws vers backend:8080.
+    networks:
+      - default
+      - edge
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=edge
+      # API REST (/api/v1/...) et WebSocket STOMP du multijoueur (/ws). Le préfixe /api
+      # n'est pas retiré : les contrôleurs sont mappés sur /api/v1/...
+      - traefik.http.routers.kcd-api.rule=(Host(`kcd-formes.fr`) || Host(`www.kcd-formes.fr`)) && (PathPrefix(`/api/`) || PathPrefix(`/ws`))
+      - traefik.http.routers.kcd-api.entrypoints=websecure
+      - traefik.http.routers.kcd-api.priority=20
+      - traefik.http.services.kcd-api.loadbalancer.server.port=8080
 
   frontend:
     build:
@@ -50,23 +65,23 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    # Pas de port publié : nginx proxifie / → frontend:3000 en interne.
-
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data      # certificats Let's Encrypt (persistés = pas de re-émission à chaque redéploiement)
-      - caddy_config:/config
-    depends_on:
-      - frontend
-      - backend
+    # Pas de port publié : Traefik (réseau edge) route tout le reste vers frontend:3000.
+    networks:
+      - default
+      - edge
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=edge
+      - traefik.http.routers.kcd-web.rule=Host(`kcd-formes.fr`) || Host(`www.kcd-formes.fr`)
+      - traefik.http.routers.kcd-web.entrypoints=websecure
+      - traefik.http.routers.kcd-web.priority=10
+      - traefik.http.services.kcd-web.loadbalancer.server.port=3000
 
 volumes:
   postgres_data:
-  caddy_data:
-  caddy_config:
+
+networks:
+  default:
+  # Réseau du proxy mutualisé, créé par la stack /opt/edge.
+  edge:
+    external: true
